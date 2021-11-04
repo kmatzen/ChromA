@@ -1,0 +1,62 @@
+LICENSING NOTES — DO NOT COMMIT
+================================
+
+Migration plan: jagoombacolor → ChromA (new repo kmatzen/chroma)
+
+PROVENANCE CHAIN
+----------------
+Goomba (FluBBa/Fredrik Olsson) → no explicit license, website has no statement
+Goomba Color (Dwedit/Dan Weiss, 2019-05-04) → ©1998-2015 Dan Weiss, no license file
+  GbdevWiki says "Public Domain/GPL" but this is unverified third-party wiki
+Jagoomba Color (EvilJagaGenius/Jaga, 2021-11-04) → no license file
+Your fork (kmatzen, 2024-present) → no license declared except miniLZO
+
+CONFIRMED GPL COMPONENT
+------------------------
+src/minilzo.107/ — miniLZO 1.07 by Markus Oberhumer, GPLv2
+src/minilzo.c — wrapper that #includes minilzo.107/minilzo.c
+Used by: src/sram.c for savestate compression (lzo1x_1_compress, lzo1x_decompress)
+Also: src/main.c:171 calls lzo_init()
+
+This is the ONLY file with an explicit license in the entire codebase.
+Removing it eliminates the only confirmed GPL obligation.
+
+ACTION ITEMS
+------------
+[x] Draft email to Dwedit asking for license clarification (done, user to send)
+[x] Remove miniLZO from codebase (PR #54 — replaced with FastLZ, MIT license)
+[ ] Apply ChromA rename (PR #51)
+[ ] git filter-repo to strip src/minilzo.107/ and src/minilzo.c from all history
+[ ] Create kmatzen/chroma repo, push filtered history
+[ ] Add LICENSE based on Dwedit's response (or GPL as fallback)
+[ ] Archive kmatzen/jagoombacolor with pointer to new repo
+
+DWEDIT EMAIL
+------------
+To: Dan Weiss (Dwedit)
+Subject: Goomba Color licensing clarification
+Status: Drafted, awaiting user to send
+
+Asking: What license for Goomba Color source (aside from miniLZO)?
+        What did FluBBa intend for original Goomba?
+
+WHAT MINIZZO REMOVAL REQUIRES
+------------------------------
+1. Remove src/minilzo.107/ directory
+2. Remove src/minilzo.c wrapper
+3. Replace lzo1x_1_compress/lzo1x_decompress in src/sram.c
+   Options:
+   a) Store savestates uncompressed (simplest, uses more SRAM space)
+   b) Use a public-domain compressor (e.g., heatshrink, fastlz)
+4. Remove lzo_init() call from src/main.c
+5. Remove #include "minilzo.107/minilzo.h" from src/includes.h
+6. Test savestate save/load still works
+
+REPO STRUCTURE AFTER MIGRATION
+------------------------------
+- Repo: kmatzen/chroma
+- No fork relationship to Dwedit/goombacolor or EvilJagaGenius/jagoombacolor
+- Full commit history preserved (minus miniLZO files)
+- ROM header: CHROMA / CHRM
+- Binary output: chroma.gba
+- UI credits: BunBunnBunny, Jaga, Dwedit, FluBBa
