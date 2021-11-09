@@ -785,32 +785,34 @@ FF55_W:	@HDMA5
 	bic r0,r0,#0x80
 	
 	@immediately steal cycles if it's not HDMA
-	beq general_dma
+	bne start_hdma
+    @ General DMA code below
+    @ Write HDMA cancel block here
     
-    @ HDMA code goes below
-    mov r1,#0xFF
-    ldr r2,=_doing_hdma
-    strb r1,[r2]
-    
+    @ Steal cycles
+	ldr_ r1,cyclesperscanline
+	cmp r1,#DOUBLE_SPEED
 	add r1,r0,#1
-    ldr r2,=_dma_blocks_remaining
-    strb r1,[r2]
+	moveq r1,r1,lsl#1
+	mov r1,r1,lsl#(3 + CYC_SHIFT)
+	sub cycles,cycles,r1
     
-    @ If we're doing HDMA code, I don't think we want to fall through here
-    bx lr
-    
-general_dma:
-    @ Assuming this is the general DMA section here...
-    @ Set _doing_hdma to false
-    ldr r2,=_doing_hdma
-    mov r1,#0x00
-    strb r1,[r2]
-    
-	stmfd sp!,{r3,lr}
+    @ Immediately call DoDma
+    stmfd sp!,{r3,lr}
 	add r0,r0,#1
 	mov r0,r0,lsl#4
 	blx_long DoDma
 	ldmfd sp!,{r3,pc}
+    
+start_hdma:
+    @ HDMA code below
+    add r0,r0,#1
+    ldr r1,=_dma_blocks_remaining
+    ldr r2,=_dma_blocks_total
+    strb r0,[r1]
+    strb r0,[r2]
+    
+	bx lr
 	
 @r0 = dest, r1 = src, r2 = byteCount, r3 = dirtyMapBits
 	global_func copy_map_and_compare
@@ -1275,9 +1277,10 @@ FF54_R:	@HDMA4
 	mov pc,lr
 FF55_R:	@HDMA5
     ldrb_ r0,dma_blocks_remaining
-    ldrb_ r1,doing_hdma
-    cmp r1,#0xFF
-    subne r0,r0,#1  @ If not mid-hdma, subtract 1
+    sub r0,r0,#1
+    ldrb_ r1,dma_blocks_total
+    cmp r1,#0
+    moveq r0,#0xFF
 	mov pc,lr
 
 
