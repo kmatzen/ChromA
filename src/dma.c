@@ -182,6 +182,7 @@ void VRAM_CODE DoDma(int byteCountRemaining)
 		_dma_dest &= ~0xE000;
 		_dma_dest |= 0x8000;
 	}
+    // Out of the while loop
 }
 
 

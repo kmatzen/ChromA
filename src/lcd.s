@@ -1850,10 +1850,6 @@ mode2_update_scroll:
 	
 @nowindow
 entermode0:
-@	ldrb r0,rendermode
-@	cmp r0,#0
-@	moveq r1,pc
-@	bxeq lr
 entermode0_:
 	mov r0,#0
 	strb_ r0,rendermode
@@ -5010,6 +5006,7 @@ sgb_palette_number: .byte 0 @_sgb_palette_number
 gammavalue:	.byte 0 @_gammavalue
 darkness:	.byte 0 @_darkness
 _dma_blocks_remaining:	.byte 0
+
 
 _ui_border_cnt_bic:
 	.word 0 @ui_border_cnt_bic
