@@ -4269,7 +4269,15 @@ FF44_R:@      LCD Scanline
 @----------------------------------------------------------------------------
 	ands r0,cycles,#CYC_LCD_ENABLED
 	ldrneb_ r0,scanline
-#if !LCD_HACKS
+#if 1
+	cmp cycles,#CYCLE
+	addle r0,r0,#1
+
+	cmp r0,#153
+	ldrgt r0,=#0
+
+	bx lr
+#elif !LCD_HACKS
 	bx lr
 #else //LCD_HACKS
 
@@ -5055,7 +5063,8 @@ hack_cycle_subtractions:
 	sub cycles,cycles,#32*CYCLE
 	sub cycles,cycles,#240*CYCLE
 lcdhacks:
-	.word FF44_R,FF44_R_hack
+	@ .word FF44_R,FF44_R_hack
+	.word FF44_R,FF44_R
 FF41_R_functions:
 	.word FF41_R,FF41_R_hack
 	.word FF41_R_vblank,FF41_R_vblank_hack
