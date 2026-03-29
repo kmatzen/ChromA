@@ -1,0 +1,38 @@
+{
+    "cpu_instrs": {
+        "description": "Blargg's CPU instruction tests - all 11 should pass",
+        "frames": 7200,
+        "inputs": [],
+        "screenshots": [
+            {"frame": 300, "name": "early"}
+        ]
+    },
+    "cgb-acid2": {
+        "description": "cgb-acid2 PPU accuracy test (known eye artifacts from BG/OBJ priority)",
+        "frames": 600,
+        "inputs": [],
+        "screenshots": [],
+        "expected_fail": false
+    },
+    "instr_timing": {
+        "description": "Blargg's instruction timing test (known failure: RST 38h timing)",
+        "frames": 7200,
+        "inputs": [],
+        "screenshots": [],
+        "expected_fail": true
+    },
+    "mem_timing": {
+        "description": "Blargg's memory timing test (known fundamental limitation)",
+        "frames": 7200,
+        "inputs": [],
+        "screenshots": [],
+        "expected_fail": true
+    },
+    "mem_timing2": {
+        "description": "Blargg's memory timing 2 test (known fundamental limitation)",
+        "frames": 7200,
+        "inputs": [],
+        "screenshots": [],
+        "expected_fail": true
+    }
+}
