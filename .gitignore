@@ -1,5 +1,7 @@
 Notes.txt
 SymbolTable.txt
 *.gba
+*.gb
+*.gbc
 *.elf
 build
