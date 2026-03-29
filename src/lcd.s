@@ -2702,6 +2702,7 @@ gammaconvert:@	takes value in r0(0-0xFF), gamma in r1(0-4),returns new value in 
 	mov r0,r0,lsr#13
 	bx lr
 
+	.pushsection .text
 @----------------------------------------------------------------------------
 FF46_W:@		sprite DMA transfer
 @----------------------------------------------------------------------------
@@ -2710,7 +2711,7 @@ FF46_W:@		sprite DMA transfer
 	adr_ r2,memmap_tbl
 	ldr r1,[r2,r1,lsr#2]	@in: addy,r1=addy&0xE000 (for rom_R)
 	add r1,r1,r0,lsl#8	@r1=DMA source
-	
+
 	@new code: check for 3E 28 3D 20 FD C9
 	ldrb r0,[gb_pc,#0]
 	cmp r0,#0x3E
@@ -2731,14 +2732,15 @@ FF46_W:@		sprite DMA transfer
 	cmp r0,#144
 	movge r0,#0
 	cmp r0,#100
-	bge_long upload_sprites_early
+	bge upload_sprites_early
 2:
 	mov r0,#1
 	strb_ r0,gboamdirty
 	ldr_ r0,gb_oam_buffer_writing
 after_upload_sprites_early:
 	mov r2,#160		@number of sprites on the GB
-	b memcpy32
+	b_long memcpy32
+	.popsection
 
 .pushsection .text
 upload_sprites_early:
