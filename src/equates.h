@@ -466,7 +466,7 @@ RECENT_TILENUM_SIZE = 128
 @	_m_ dmamode,1
 
  _m_ sound_shadow,12
- _m_ ,1
+ _m_ spr_disable_end,1  @scanline where sprites get re-enabled mid-frame
  _m_ bg_cache_updateok,1
 	_m_ lcdhack,1
 	_m_ dmamode,1

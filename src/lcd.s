@@ -1638,6 +1638,8 @@ canary_value_doesnt_match:
 	strb_ r0,sprsize_8x16_start
 	mov r0,#144		@end=144 (will be updated if bit 2 changes)
 	strb_ r0,sprsize_8x16_end
+	strb_ r0,spr_disable_start	@144 = no mid-frame disable
+	strb_ r0,spr_disable_end	@144 = no mid-frame re-enable
 
 	bl consume_recent_tiles
 	bl consume_dirty_tiles
@@ -2900,9 +2902,8 @@ dm13:
 dm_perSprite:
 	ldrb_ r6,sprsize_8x16_start	@r6=first scanline of 8x16 mode
 	ldrb_ r7,sprsize_8x16_end	@r7=first scanline after 8x16 mode
-	@if start >= end, 8x16 was never active (or tracking was off) - use 8x8 for all
-	cmp r6,r7
-	bhs dm11			@fallback to all-8x8
+	ldrb_ r4,spr_disable_start	@r4=scanline where sprites disabled
+	ldrb_ r8,spr_disable_end	@r8=scanline where sprites re-enabled
 
 dm_ps_loop:
 	ldr r3,[addy],#4
@@ -2911,6 +2912,17 @@ dm_ps_loop:
 	cmp r0,#159
 	bhi dm_ps_skip		@skip if sprite Y>159
 
+	@check sprite disable range: skip if sprite top scanline is in [disable_start, disable_end)
+	sub r1,r0,#16		@top scanline of sprite
+	cmp r4,r8			@is there a valid disable range?
+	bhs 4f			@no disable range, skip check
+	cmp r1,r8			@top scanline >= disable_end?
+	bge 4f			@sprite is after disable range, keep it
+	add r11,r1,#8		@bottom of 8x8 sprite
+	cmp r11,r4			@bottom scanline <= disable_start?
+	ble 4f			@sprite is before disable range, keep it
+	b dm_ps_skip		@sprite overlaps disable range, hide it
+4:
 	add r0,r0,#(-16+SCREEN_Y_START)
 	and r0,r0,#0xff
 
@@ -2922,13 +2934,15 @@ dm_ps_loop:
 
 	@determine if this sprite is in the 8x16 region
 	@GB sprite Y (raw) = r3 & 0xFF, visible scanlines start at (Y-16)
-	and r8,r3,#0xff		@raw GB sprite Y
-	sub r8,r8,#16		@top scanline of sprite
+	and r11,r3,#0xff	@raw GB sprite Y
+	sub r11,r11,#16		@top scanline of sprite
 	@sprite is in 8x16 zone if its top scanline is within [start, end)
 	@or if it overlaps the zone at all
-	cmp r8,r7			@top scanline >= end? → 8x8
+	cmp r6,r7			@is 8x16 range valid?
+	bhs dm_ps_8x8		@no, use 8x8
+	cmp r11,r7			@top scanline >= end? → 8x8
 	bhs dm_ps_8x8
-	add r1,r8,#16		@bottom scanline (8x16 height)
+	add r1,r11,#16		@bottom scanline (8x16 height)
 	cmp r1,r6			@bottom scanline <= start? → 8x8
 	bls dm_ps_8x8
 
@@ -3538,15 +3552,22 @@ FF40_W:@		LCD Control
 	cmp r0,r1
 	bxeq lr
 FF40W_entry:
-	@track sprite size (bit 2) changes mid-frame
+	@track sprite size (bit 2) and sprite enable (bit 1) changes mid-frame
 	eor r2,r0,r1
-	tst r2,#0x04			@did bit 2 change?
+	tst r2,#0x06			@did bit 1 or bit 2 change?
 	beq 1f
-	ldrb_ r2,scanline
+	ldrb_ r3,scanline
+	tst r2,#0x04			@did bit 2 change?
+	beq 2f
 	tst r0,#0x04			@is bit 2 now set (8x16)?
-	strneb_ r2,sprsize_8x16_start
-	streqb_ r2,sprsize_8x16_end
-	mov r2,#1
+	strneb_ r3,sprsize_8x16_start
+	streqb_ r3,sprsize_8x16_end
+2:	tst r2,#0x02			@did bit 1 change?
+	beq 3f
+	tst r0,#0x02			@is bit 1 now set (re-enabled)?
+	strneb_ r3,spr_disable_end
+	streqb_ r3,spr_disable_start
+3:	mov r2,#1
 	strb_ r2,sprsize_changed
 1:
 	tst r0,#0x80
