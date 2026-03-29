@@ -331,14 +331,14 @@ RECENT_TILENUM_SIZE = 128
  _m_ writemem_tbl,16*4
  _m_ memmap_tbl,16*4
  _m_ cpuregs,8*4
- _m_ ,1 @gb_ime,1  @not used
+ _m_ sprsize_changed,1  @was gb_ime (unused)
  _m_ gb_ie,1
  _m_ gb_if,1
- _m_ ,1   @gb_interrupt_lines, not used
+ _m_ sprsize_8x16_start,1  @was gb_interrupt_lines (unused)
  _m_ rambank,1
  _m_ gbcmode,1
  _m_ sgbmode,1
- _m_ ,1
+ _m_ sprsize_8x16_end,1  @was padding
 
  _m_ dividereg,4
  _m_ timercounter,4

@@ -1625,6 +1625,20 @@ canary_value_doesnt_match:
 	bl display_frame
 		
 	bl display_sprites
+
+	@reset sprite size tracking for next frame (after OAMfinish used it)
+	mov r0,#0
+	strb_ r0,sprsize_changed
+	@init 8x16 range based on current LCDC bit 2 state
+	ldrb_ r1,lcdctrl
+	tst r1,#0x04
+	@if bit 2 is set now, 8x16 starts at scanline 0 for next frame
+	moveq r0,#144		@not 8x16: start=144 (no 8x16 region)
+	movne r0,#0		@8x16: start=0
+	strb_ r0,sprsize_8x16_start
+	mov r0,#144		@end=144 (will be updated if bit 2 changes)
+	strb_ r0,sprsize_8x16_end
+
 	bl consume_recent_tiles
 	bl consume_dirty_tiles
 	bl_long force_ui_at_top
@@ -2757,10 +2771,12 @@ OAMfinish:@		transfer OAM from GB to GBA
  	
 	ldrb_ r5,gbcmode
 
+	@check if sprite size changed mid-frame
+	ldrb_ r0,sprsize_changed
+	cmp r0,#0
+	bne dm_perSprite
+
 	ldrb_ r0,lcdctrl0frame
-@	ldr r0,active_lcdcbuff
-@	ldrb r0,[r0,#71]	;8x16?
-@	ldrb r0,lcdctrl		;8x16?
 	tst r0,#0x04
 	bne dm4
 dm11:
@@ -2875,6 +2891,95 @@ dm13:
 	str r0,[r2],#8
 	b dm14
 
+
+@--- per-sprite size path: checks each sprite's Y vs 8x16 scanline range ---
+dm_perSprite:
+	ldrb_ r6,sprsize_8x16_start	@r6=first scanline of 8x16 mode
+	ldrb_ r7,sprsize_8x16_end	@r7=first scanline after 8x16 mode
+	@if start >= end, 8x16 was never active (or tracking was off) - use 8x8 for all
+	cmp r6,r7
+	bhs dm11			@fallback to all-8x8
+
+dm_ps_loop:
+	ldr r3,[addy],#4
+	ands r0,r3,#0xff
+	beq dm_ps_skip		@skip if sprite Y=0
+	cmp r0,#159
+	bhi dm_ps_skip		@skip if sprite Y>159
+
+	add r0,r0,#(-16+SCREEN_Y_START)
+	and r0,r0,#0xff
+
+	and r1,r3,#0xff00
+	add r1,r1,#(SCREEN_X_START-8)*256	@adjusted x
+	orr r0,r0,r1,lsl#8
+	and r1,r3,#0x60000000	@flip
+	orr r0,r0,r1,lsr#1
+
+	@determine if this sprite is in the 8x16 region
+	@GB sprite Y (raw) = r3 & 0xFF, visible scanlines start at (Y-16)
+	and r8,r3,#0xff		@raw GB sprite Y
+	sub r8,r8,#16		@top scanline of sprite
+	@sprite is in 8x16 zone if its top scanline is within [start, end)
+	@or if it overlaps the zone at all
+	cmp r8,r7			@top scanline >= end? → 8x8
+	bhs dm_ps_8x8
+	add r1,r8,#16		@bottom scanline (8x16 height)
+	cmp r1,r6			@bottom scanline <= start? → 8x8
+	bls dm_ps_8x8
+
+	@8x16 for this sprite
+	orr r0,r0,#0x8000	@8x16 size flag
+	str r0,[r2],#4		@store OBJ Atr 0,1
+
+	mov r1,#PRIORITY
+	tst r3,#0x80000000	@priority
+	orrne r1,r1,#PRIORITY>>1
+	cmp r5,#0
+	andne r0,r3,#0x08000000
+	orrne r1,r1,r0,lsr#19
+	andne r0,r3,#0x07000000
+	orrne r1,r1,r0,lsr#12
+	andeq r0,r3,#0x10000000
+	orreq r1,r1,r0,lsr#16
+	and r0,r3,#0x00FF0000
+	orr r1,r1,r0,lsr#16
+	bic r1,r1,#0x0001	@mask bit 0 for 8x16
+	.if OBJ_BASE == 0x14000
+	add r1,r1,#512
+	.endif
+	strh r1,[r2],#4		@store OBJ Atr 2
+	b dm_ps_next
+
+dm_ps_8x8:
+	@8x8 for this sprite
+	str r0,[r2],#4		@store OBJ Atr 0,1
+
+	mov r1,#PRIORITY
+	tst r3,#0x80000000	@priority
+	orrne r1,r1,#PRIORITY>>1
+	cmp r5,#0
+	andne r0,r3,#0x08000000
+	orrne r1,r1,r0,lsr#19
+	andne r0,r3,#0x07000000
+	orrne r1,r1,r0,lsr#12
+	andeq r0,r3,#0x10000000
+	orreq r1,r1,r0,lsr#16
+	and r0,r3,#0x00FF0000
+	orr r1,r1,r0,lsr#16
+	.if OBJ_BASE == 0x14000
+	add r1,r1,#512
+	.endif
+	strh r1,[r2],#4		@store OBJ Atr 2
+	b dm_ps_next
+
+dm_ps_skip:
+	mov r0,#0x2a0		@double, y=160
+	str r0,[r2],#8
+dm_ps_next:
+	cmp addy,r9
+	bne dm_ps_loop
+	bx lr
 
 
 @----------------------------------------------------------------------------
@@ -3143,9 +3248,9 @@ newframe_vblank:	@called at line 144	(??? safe to use)
 	@screen on?
 	tst r0,#0x80
 	streqb_ r0,lcdctrl0midframe
-	ldrneb_ r0,lcdctrl0midframe	
+	ldrneb_ r0,lcdctrl0midframe
 	strb_ r0,lcdctrl0frame
-	
+
 	@swap "big" buffer
 	ldr_ r0,bigbufferbase
 	ldr_ r1,bigbufferbase2
@@ -3429,6 +3534,17 @@ FF40_W:@		LCD Control
 	cmp r0,r1
 	bxeq lr
 FF40W_entry:
+	@track sprite size (bit 2) changes mid-frame
+	eor r2,r0,r1
+	tst r2,#0x04			@did bit 2 change?
+	beq 1f
+	ldrb_ r2,scanline
+	tst r0,#0x04			@is bit 2 now set (8x16)?
+	strneb_ r2,sprsize_8x16_start
+	streqb_ r2,sprsize_8x16_end
+	mov r2,#1
+	strb_ r2,sprsize_changed
+1:
 	tst r0,#0x80
 	orrne cycles,#CYC_LCD_ENABLED
 	biceq cycles,#CYC_LCD_ENABLED

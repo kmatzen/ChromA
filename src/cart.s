@@ -187,10 +187,9 @@ loadcart: @called from C:  r0=rom number, r1=emuflags
 	
 	@check for GBC support, r4 = supports GBC
         ldrb r1,[r3,#0x143]
-        cmp r1,#0x80
-        cmpne r1,#0xC0
-        moveq r4,#1
-        movne r4,#0
+        tst r1,#0x80
+        movne r4,#1
+        moveq r4,#0
 
 	@check what GB type we want:
 	@0 = GB
