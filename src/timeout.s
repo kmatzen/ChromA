@@ -422,47 +422,17 @@ _checkScanlineIRQ:
 	@in vblank?  no Hblank or Mode 2 IRQ
 	tst r2,#0x01
 	bne noScanlineIRQ
-	@Mode 2 IRQ enabled? (bit 5 = 0x20)
-	tst r2,#0x20
-	bne ScanlineIRQ
-	@Hblank IRQ enabled? (bit 3 = 0x08)
-	tst r2,#0x08
+	@Hblank IRQ or Mode 2 IRQ enabled?
+	@TODO: real Hblank IRQ
+	tst r2,#0x28
 	beq noScanlineIRQ
-	@Set up deferred Hblank IRQ at mode 0 start
-	ldr_ r0,nexttimeout
-	str_ r0,saved_nexttimeout
-	adr r0,hblank_irq_fire
-	str_ r0,nexttimeout
-	sub cycles,cycles,#204*CYCLE	@shorten phase to reach hblank point
-	b noScanlineIRQ
 ScanlineIRQ:
 	ldrb_ r0,gb_if
 	orr r0,r0,#0x02		@2=LCD STAT
 	strb_ r0,gb_if
-	@Also set up Hblank IRQ if enabled
-	tst r2,#0x08
-	beq noScanlineIRQ
-	ldr_ r0,nexttimeout
-	str_ r0,saved_nexttimeout
-	adr r0,hblank_irq_fire
-	str_ r0,nexttimeout
-	sub cycles,cycles,#204*CYCLE
 noScanlineIRQ:
 @------------------
-	b checkTimerIRQ
-@------------------
-hblank_irq_fire:
-	@Hblank timeout fired — restore remaining scanline cycles and nexttimeout
-	add cycles,cycles,#204*CYCLE
-	ldr_ r0,saved_nexttimeout
-	str_ r0,nexttimeout
-	@Fire Hblank STAT IRQ
-	ldrb_ r0,gb_if
-	orr r0,r0,#0x02		@2=LCD STAT
-	strb_ r0,gb_if
-	tst cycles,#CYC_IE
-	beq _GO
-	b checkIRQDelayed
+
 @------------------
 checkTimerIRQ:
 	ldr_ r2,timercyclesperscanline
