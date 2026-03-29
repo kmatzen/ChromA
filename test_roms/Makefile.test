@@ -1,0 +1,40 @@
+# Build the headless mGBA test runner
+# Requires mGBA source built at /tmp/mgba-build
+#
+# Usage:
+#   make -f test_roms/Makefile.test          # Build runner
+#   make -f test_roms/Makefile.test test      # Run tests
+#   make -f test_roms/Makefile.test baseline  # Generate baselines
+
+MGBA_SRC ?= /tmp/mgba-build
+MGBA_BUILD ?= $(MGBA_SRC)/build
+
+CC = cc
+CFLAGS = -O2 \
+  -I$(MGBA_SRC)/include \
+  -I$(MGBA_BUILD)/include \
+  -I$(MGBA_SRC)/src \
+  -DBUILD_GLES2 -DBUILD_GLES3 -DENABLE_DEBUGGERS -DENABLE_DIRECTORIES \
+  -DENABLE_GDB_STUB -DENABLE_SCRIPTING -DENABLE_VFS -DENABLE_VFS_FD \
+  -DM_CORE_GB -DM_CORE_GBA -DUSE_DISCORD_RPC -DUSE_EDITLINE -DUSE_EPOXY \
+  -DUSE_FFMPEG -DUSE_FREETYPE -DUSE_JSON_C -DUSE_LIBSWRESAMPLE -DUSE_LIBZIP \
+  -DUSE_LUA -DUSE_LZMA -DUSE_PNG -DUSE_PTHREADS -DUSE_SQLITE3 -DUSE_ZLIB \
+  -D_DARWIN_C_SOURCE -DMGBA_DLL
+
+LDFLAGS = -L$(MGBA_BUILD) -lmgba -Wl,-rpath,$(MGBA_BUILD)
+
+.PHONY: all test baseline clean
+
+all: test_roms/mgba_runner
+
+test_roms/mgba_runner: test_roms/mgba_runner.c
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+
+test: test_roms/mgba_runner
+	python3 test_roms/run_tests.py
+
+baseline: test_roms/mgba_runner
+	python3 test_roms/run_tests.py --rebaseline
+
+clean:
+	rm -f test_roms/mgba_runner
