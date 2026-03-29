@@ -515,10 +515,7 @@ RECENT_TILENUM_SIZE = 128
  _m_ borderpartsadded,1
  _m_ sgb_hack_frame,4
  _m_ auto_border_reboot_frame,4
- _m_ lineslow,1
- _m_ ,1
- _m_ ,1
- _m_ ,1
+ _m_ saved_nexttimeout,4
 
 			@gbz80.s (wram_globals5)
  _m_ fiveminutes_,4
@@ -526,7 +523,7 @@ RECENT_TILENUM_SIZE = 128
     _m_ dontstop_,1
 	 _m_ hackflags,1
 	 _m_ hackflags2,1
- _m_ ,1
+ _m_ lineslow,1
 			@lcd.s (wram_globals6)
  _m_ FF41_R_function,4
  _m_ FF41_R_vblank_function,4
