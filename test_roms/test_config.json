@@ -35,6 +35,19 @@
         "screenshots": [],
         "expected_fail": true
     },
+    "Pokemon - Crystal Version (USA, Europe) (Rev 1)": {
+        "description": "Pokemon Crystal - intro/title/menu render correctly",
+        "frames": 4200,
+        "inputs": [
+            "3600:Start"
+        ],
+        "screenshots": [
+            {"frame": 600, "name": "gamefreak"},
+            {"frame": 2400, "name": "suicune"},
+            {"frame": 3900, "name": "menu"}
+        ],
+        "expected_fail": false
+    },
     "Hercules (USA, Europe) (SGB Enhanced)": {
         "description": "Hercules - verifies FF44 scanline fix (issue #10), press Start to reach menu",
         "frames": 2400,
