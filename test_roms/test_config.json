@@ -49,7 +49,7 @@
         "expected_fail": false
     },
     "Hercules (USA, Europe) (SGB Enhanced)": {
-        "description": "Hercules - verifies FF44 scanline fix (issue #10), press Start to reach menu",
+        "description": "Hercules SGB - verifies FF44 scanline fix, press Start to reach menu",
         "frames": 2400,
         "inputs": [
             "800:Start",
@@ -60,5 +60,14 @@
             {"frame": 1200, "name": "menu"}
         ],
         "expected_fail": false
+    },
+    "Hercules - The Legendary Journeys (U) (M6) [C][!]": {
+        "description": "Hercules GBC (issue #10) - title screen corrupted and frozen, pre-existing bug",
+        "frames": 1200,
+        "inputs": [],
+        "screenshots": [
+            {"frame": 600, "name": "title"}
+        ],
+        "expected_fail": true
     }
 }
