@@ -62,12 +62,19 @@
         "expected_fail": false
     },
     "Hercules - The Legendary Journeys (U) (M6) [C][!]": {
-        "description": "Hercules GBC (issue #10) - title screen corrupted and frozen, pre-existing bug",
-        "frames": 1200,
-        "inputs": [],
-        "screenshots": [
-            {"frame": 600, "name": "title"}
+        "description": "Hercules GBC (issue #10) - title corrupted (mid-frame palette), but gameplay works via FF44 fix",
+        "frames": 4500,
+        "inputs": [
+            "1200:Start",
+            "2400:Start",
+            "2700:A",
+            "3000:A"
         ],
-        "expected_fail": true
+        "screenshots": [
+            {"frame": 600, "name": "title"},
+            {"frame": 2400, "name": "copyright"},
+            {"frame": 4200, "name": "savefile"}
+        ],
+        "expected_fail": false
     }
 }
