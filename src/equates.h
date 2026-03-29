@@ -345,7 +345,7 @@ RECENT_TILENUM_SIZE = 128
  _m_ timermodulo,1
  _m_ timerctrl,1
  _m_ stctrl,1
- _m_ ,1
+ _m_ spr_disable_start,1  @was padding; scanline where sprites get disabled mid-frame
  _m_ frame,4
  _m_ nexttimeout,4
  _m_ nexttimeout_alt,4

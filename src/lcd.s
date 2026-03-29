@@ -2296,10 +2296,11 @@ _add_ui_border_4:
 	bx lr
 	.popsection
 
+	.pushsection .text
 update_ui_border_masks:
 	ldr_ r1,_ui_border_request
 	str_ r1,_ui_border_buffer
-update_ui_border_masks_2:	
+update_ui_border_masks_2:
 	and r0,r1,#3
 	cmp r0,#1
 	beq 1f
@@ -2355,6 +2356,7 @@ update_ui_border_masks_2:
 	str_ r0,ui_border_scroll2
 
 	bx lr
+	.popsection
 
 
 display_frame:	@called at vblank
