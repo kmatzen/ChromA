@@ -34,5 +34,18 @@
         "inputs": [],
         "screenshots": [],
         "expected_fail": true
+    },
+    "Hercules (USA, Europe) (SGB Enhanced)": {
+        "description": "Hercules - verifies FF44 scanline fix (issue #10), press Start to reach menu",
+        "frames": 2400,
+        "inputs": [
+            "800:Start",
+            "1300:Start"
+        ],
+        "screenshots": [
+            {"frame": 600, "name": "title"},
+            {"frame": 1200, "name": "menu"}
+        ],
+        "expected_fail": false
     }
 }
