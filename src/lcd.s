@@ -2782,10 +2782,14 @@ ff69_w_tail:
 	ldrb_ r2,scanline
 	cmp r2,#144
 	bxge lr				@ VBlank scanline → skip
-	@ Activate DMA3 and fill buffer entry for this scanline
+	@ Count visible-scanline palette writes; only activate DMA3 after 10+
+	@ (Normal games: 0-3 tail calls/frame. Hercules: ~143.)
 	ldr r0,=pal_scanline_active
-	mov r1,#1
+	ldr r1,[r0]
+	add r1,r1,#1
 	str r1,[r0]
+	cmp r1,#10
+	bxlt lr				@ not enough activity yet → skip fill
 	stmfd sp!,{r0-r6,lr}
 	ldr r0,=pal_dma_buffer
 	add r0,r0,r2,lsl#8		@ buffer[scanline * 256]
@@ -3198,8 +3202,8 @@ pal_hdma_done:
 	ldr r0,[r1]
 	mov r2,#0
 	str r2,[r1]			@ clear for next frame
-	cmp r0,#0
-	beq pal_hdma_no_dma3
+	cmp r0,#10
+	ble pal_hdma_no_dma3
 	mov r2,#REG_BASE
 	ldr r0,=pal_dma_buffer
 	str r0,[r2,#REG_DM3SAD]
