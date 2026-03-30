@@ -5025,8 +5025,8 @@ FF69_W:	@BCPD - BG Color Palette Data
 	addne r1,r1,#1
 	bicne r1,r1,#0x40		@ replaces andne+orrne
 	strneb_ r1,BCPS_index
-	@ Branch to DMA fill only when index wraps to 0 (every 64th write)
-	and r2,r1,#0x3F
+	@ Branch to DMA fill every 32 writes (one per scanline palette set)
+	and r2,r1,#0x1F
 	cmp r2,#0
 	beq_long ff69_w_tail
 	bx lr
