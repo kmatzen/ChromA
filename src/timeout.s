@@ -439,7 +439,9 @@ ScanlineIRQ:
 	strb_ r0,gb_if
 noScanlineIRQ:
 @------------------
-	@ Mid-frame palette tracking
+	@ Mid-frame palette tracking disabled — DMA3 buffer filled from FF69_W tail
+	@ Per-scanline hook overhead (~70 cycles) disrupts GBC VBlank handler timing
+	b checkTimerIRQ
 	ldrb_ r0,scanline
 	cmp r0,#4
 	bne pal_not_scanline4

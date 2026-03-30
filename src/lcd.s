@@ -2774,6 +2774,35 @@ gammaconvert:@	takes value in r0(0-0xFF), gamma in r1(0-4),returns new value in 
 
 	.pushsection .text
 @----------------------------------------------------------------------------
+@ FF69_W tail: fill DMA buffer on palette set wrap, activate DMA3
+@ Only called every 64th FF69 write (when BCPS index wraps to 0)
+@ lr has the writemem return address
+@----------------------------------------------------------------------------
+ff69_w_tail:
+	ldrb_ r2,scanline
+	cmp r2,#144
+	bxge lr				@ VBlank scanline → skip
+	@ Activate DMA3 and fill buffer entry for this scanline
+	ldr r0,=pal_scanline_active
+	mov r1,#1
+	str r1,[r0]
+	stmfd sp!,{r0-r6,lr}
+	ldr r0,=pal_dma_buffer
+	add r0,r0,r2,lsl#8		@ buffer[scanline * 256]
+	ldr r2,=gbc_palette
+	mov r3,#8
+1:	ldr r4,[r2],#4
+	ldr r5,[r2],#4
+	str r4,[r0],#4
+	str r5,[r0],#4
+	add r0,r0,#24
+	subs r3,r3,#1
+	bne 1b
+	ldmfd sp!,{r0-r6,pc}
+	.popsection
+
+	.pushsection .text
+@----------------------------------------------------------------------------
 FF46_W:@		sprite DMA transfer
 @----------------------------------------------------------------------------
 @	and r0,r0,#0xff		;not needed?
@@ -3163,9 +3192,12 @@ pal_hdma_wrapper:
 	orr r0,r0,#0x28		@ enable vblank+vcount interrupts
 	strh r0,[r2,#REG_DISPSTAT]
 pal_hdma_done:
-	@ Check for per-scanline DMA3 mode
-	ldr r0,=pal_scanline_active
-	ldr r0,[r0]
+	@ Check for per-scanline DMA3 mode, then clear flag for next frame
+	@ (FF69_W tail re-sets it during the GBC frame if palette writes occur)
+	ldr r1,=pal_scanline_active
+	ldr r0,[r1]
+	mov r2,#0
+	str r2,[r1]			@ clear for next frame
 	cmp r0,#0
 	beq pal_hdma_no_dma3
 	mov r2,#REG_BASE
@@ -4991,11 +5023,12 @@ FF69_W:	@BCPD - BG Color Palette Data
 	strb_ r2,pal_dirty
 	tst r1,#0x80
 	addne r1,r1,#1
-    @Minucce's tweaks
-    andne r1, r1, #0x3F
-    orrne r1, r1, #0x80
-
+	bicne r1,r1,#0x40		@ replaces andne+orrne
 	strneb_ r1,BCPS_index
+	@ Branch to DMA fill only when index wraps to 0 (every 64th write)
+	and r2,r1,#0x3F
+	cmp r2,#0
+	beq_long ff69_w_tail
 	bx lr
 @FF69_W	;BCPD - BG Color Palette Data
 @	ldrb r1,BCPS_index
