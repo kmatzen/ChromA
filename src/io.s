@@ -803,19 +803,13 @@ FF55_W:	@HDMA5
     cmp r1,#0
     beq general_dma
 cancel_hdma:
-    stmfd sp!,{r0-r12,lr}
-    ldrb_ r0,dma_blocks_total
-    ldrb_ r1,dma_blocks_remaining
-    sub r0,r0,r1
-    lsls r0,r0,#4
-    blxne_long DoDma
-    ldmfd sp!,{r0-r12,lr}
-    
+    @ Elapsed blocks already transferred per-HBlank, just clear counters
     ldr r1,=_dma_blocks_total
-    mov r2,#0x00
+    mov r2,#0
     strb r2,[r1]
-    
-    bx lr  @ I'm not sure if this is right or not
+    ldr r1,=_dma_blocks_remaining
+    strb r2,[r1]
+    bx lr
 general_dma:
     @ Steal cycles
 	ldr_ r1,cyclesperscanline
