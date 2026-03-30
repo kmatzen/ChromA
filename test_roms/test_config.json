@@ -76,5 +76,20 @@
             {"frame": 4200, "name": "savefile"}
         ],
         "expected_fail": false
+    },
+    "Metal Gear - Ghost Babel (Japan)": {
+        "description": "Metal Gear Solid Ghost Babel (issue #10) - HALT interrupt fix prevents elevator crash",
+        "frames": 5400,
+        "inputs": [
+            "3600:Start",
+            "4200:Start",
+            "4800:A"
+        ],
+        "screenshots": [
+            {"frame": 300, "name": "konami"},
+            {"frame": 3900, "name": "title"},
+            {"frame": 5200, "name": "difficulty"}
+        ],
+        "expected_fail": false
     }
 }
