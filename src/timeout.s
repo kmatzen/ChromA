@@ -465,9 +465,21 @@ pal_not_scanline4:
 	ldrb_ r0,scanline
 	cmp r0,#8
 	blo checkTimerIRQ
-	@ Record this split if we have room (max 8)
+	cmp r0,#144
+	bge checkTimerIRQ
+	@ Count all visible palette changes (uncapped, for DMA3 mode detection)
 	ldr r2,=pal_split_count
 	ldrb r1,[r2]
+	add r1,r1,#1
+	strb r1,[r2]
+	sub r1,r1,#1			@ r1 = index (old count)
+	@ Fill DMA buffer if per-scanline mode active
+	ldr r2,=pal_scanline_active
+	ldr r2,[r2]
+	cmp r2,#0
+	bne_long pal_fill_dma_scanline
+pal_fill_dma_return:
+	@ Record VCount split (first 8 only)
 	cmp r1,#8
 	bge checkTimerIRQ
 	@ Store scanline in pal_split_lines[count]
@@ -488,6 +500,27 @@ pal_not_scanline4:
 	ldr r2,=pal_split_count
 	strb r1,[r2]
 @------------------
+
+@------------------
+
+	.pushsection .text
+pal_fill_dma_scanline:
+	@ r0 = scanline, r1 = split index (both preserved)
+	stmfd sp!,{r2-r6}
+	ldr r2,=pal_dma_buffer
+	add r2,r2,r0,lsl#8		@ buffer[scanline * 256]
+	ldr r3,=gbc_palette
+	mov r4,#8
+1:	ldr r5,[r3],#4
+	ldr r6,[r3],#4
+	str r5,[r2],#4
+	str r6,[r2],#4
+	add r2,r2,#24
+	subs r4,r4,#1
+	bne 1b
+	ldmfd sp!,{r2-r6}
+	b_long pal_fill_dma_return
+	.popsection
 
 @------------------
 checkTimerIRQ:

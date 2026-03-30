@@ -3121,7 +3121,7 @@ end_gba_hdma:
 	strh r2,[r2,#REG_DM0CNT_H]	@DMA stop
 	strh r2,[r2,#REG_DM1CNT_H]
 	strh r2,[r2,#REG_DM2CNT_H]
-@	strh r2,[r2,#REG_DM3CNT_H]
+	strh r2,[r2,#REG_DM3CNT_H]
 
 	ldr r0,=vbldummy
 	str r0,vcountfptr
@@ -3163,6 +3163,19 @@ pal_hdma_wrapper:
 	orr r0,r0,#0x28		@ enable vblank+vcount interrupts
 	strh r0,[r2,#REG_DISPSTAT]
 pal_hdma_done:
+	@ Check for per-scanline DMA3 mode
+	ldr r0,=pal_scanline_active
+	ldr r0,[r0]
+	cmp r0,#0
+	beq pal_hdma_no_dma3
+	mov r2,#REG_BASE
+	ldr r0,=pal_dma_buffer
+	str r0,[r2,#REG_DM3SAD]
+	ldr r0,=PALETTE_BASE+256
+	str r0,[r2,#REG_DM3DAD]
+	ldr r0,=0xA6600040		@ 64 words, 32-bit, HBlank repeat, dest reload
+	str r0,[r2,#REG_DM3CNT_L]
+pal_hdma_no_dma3:
 	ldmfd sp!,{r10,pc}
 
 @----------------------------------------------------------------------------
@@ -3374,8 +3387,18 @@ newframe_vblank:	@called at line 144	(??? safe to use)
 	@double-buffer mid-frame palette split count
 	ldr r1,=pal_split_count
 	ldrb r0,[r1]
+	@ Cap VCount screen count at 8
+	cmp r0,#8
+	movgt r2,#8
+	movle r2,r0
 	ldr r1,=pal_split_count_screen
-	strb r0,[r1]
+	strb r2,[r1]
+	@ Enable DMA3 per-scanline mode if >16 palette changes
+	ldr r1,=pal_scanline_active
+	cmp r0,#16
+	movgt r2,#1
+	movle r2,#0
+	str r2,[r1]
 
 	@ Apply gamma correction to split palettes if needed
 	cmp r0,#0

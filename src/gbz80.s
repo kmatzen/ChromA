@@ -2887,6 +2887,11 @@ pal_vcount_index:	.skip 1		@ current split index during VCount chain
 pal_split_lines:	.skip 8		@ scanline number for each split (up to 8)
 pal_split_palettes:	.skip 64*8	@ BG palette snapshot for each split (64 bytes × 8)
 
+ .global pal_scanline_active
+ .global pal_dma_buffer
+ .align 2
+pal_scanline_active:	.skip 4		@ nonzero = DMA3 per-scanline mode active
+pal_dma_buffer:		.skip 256*144	@ per-scanline PALRAM data for HBlank DMA3
 
 	@.end
 
