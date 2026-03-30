@@ -593,6 +593,38 @@ PaletteTxAll:@		also called from UI.c
 	bx lr
 
 copy_gbc_palette:
+	ldrb_ r0,pal_split_line
+	cmp r0,#0xFF
+	beq copy_gbc_palette_nosplit
+	@ Split detected: use pal_before for BG portion, current for OBJ
+	@ Also copy current BG palette to pal_after
+	stmfd sp!,{r2-r9,lr}
+	@ Copy BG palette (64 bytes) from pal_before → gbc_palette2
+	ldr r0,=pal_before
+	ldr r1,=gbc_palette2
+	ldmia r0!,{r2-r9}
+	stmia r1!,{r2-r9}
+	ldmia r0!,{r2-r9}
+	stmia r1!,{r2-r9}
+	@ Copy current BG palette (64 bytes) gbc_palette → pal_after + pal_after_gba
+	ldr r0,=gbc_palette
+	ldr r1,=pal_after
+	ldr r2,=pal_after_gba
+	ldmia r0!,{r3-r9,lr}
+	stmia r1!,{r3-r9,lr}
+	stmia r2!,{r3-r9,lr}
+	ldmia r0!,{r3-r9,lr}
+	stmia r1!,{r3-r9,lr}
+	stmia r2!,{r3-r9,lr}
+	@ Copy OBJ palette (64 bytes) gbc_palette+64 → gbc_palette2+64
+	@ r0 already = gbc_palette+64, r1 already needs to be gbc_palette2+64
+	ldr r1,=gbc_palette2+64
+	ldmia r0!,{r2-r9}
+	stmia r1!,{r2-r9}
+	ldmia r0!,{r2-r9}
+	stmia r1!,{r2-r9}
+	ldmfd sp!,{r2-r9,pc}
+copy_gbc_palette_nosplit:
 	ldr r1,=gbc_palette
 	ldr r0,=gbc_palette2
 	mov r2,#128
@@ -1645,7 +1677,7 @@ canary_value_doesnt_match:
 	bl consume_dirty_tiles
 	bl_long force_ui_at_top
 	
-	ldr r0,=do_gba_hdma
+	ldr r0,=pal_hdma_wrapper
 	str r0,vcountfptr
 
 	bl_long showfps_
@@ -2569,8 +2601,8 @@ pal_loop2:
 	add r4,r4,#32
 	subs r8,r8,#1
 	bne pal_loop2
-aftergamma:	
-	
+aftergamma:
+
 	@Copy SGB palette to first entry based on UI selection, this will be removed when proper colorizing is supported
 	ldrb_ r0,sgbmode
 	movs r0,r0
@@ -3090,50 +3122,55 @@ end_gba_hdma:
 	
 
 
-@@----------------------------------------------------------------------------
-@vcountinterrupt; for palette changes
-@@----------------------------------------------------------------------------
-@	stmfd sp!,{r4-r7}
-@	ldr r4,=PALETTE_BASE
-@	adr r0,palrptr
-@	ldr r1,[r0]
-@	ldr r6,[r0,#4]
-@	cmp r1,r6
-@	beq vci_return
-@	
-@	ldr r2,=palbuff
-@	ldr r12,[r1,r2]
-@vci_loop1
-@	mov r5,r12,lsr#16
-@	;bg color?
-@	tst r12,#0x00000600
-@	and r3,r12,#0x00007800
-@	moveq r7,r3,lsr#10
-@	streqh r5,[r4,r7]
-@	mov r3,r3,lsr#6
-@	and r7,r12,#0x00000600
-@	mov r7,r7,lsr#8
-@	orr r3,r3,r7
-@	add r3,r3,#256
-@	strh r5,[r4,r3]
-@	add r1,r1,#4
-@	bic r1,r1,#0x200
-@	str r1,[r0]
-@	cmp r1,r6
-@	beq vci_return
-@	and r3,r12,#0x000000FF
-@	ldr r12,[r1,r2]
-@	and r5,r12,#0x000000FF
-@	cmp r3,r5
-@	beq vci_loop1
-@	ldr r7,=REG_BASE+REG_DISPSTAT
-@	ldrh r0,[r7]
-@	bic r0,r0,#0xFF00
-@	orr r0,r0,r12,lsl#8
-@	strh r0,[r7]	
-@vci_return	
-@	ldmfd sp!,{r4-r7}
-@	bx lr
+	.pushsection .text
+@----------------------------------------------------------------------------
+@ Wrapper around do_gba_hdma that adds mid-frame palette split support.
+@ Placed in .text to avoid IWRAM pressure.
+@----------------------------------------------------------------------------
+pal_hdma_wrapper:
+	stmfd sp!,{r10,lr}
+	bl_long do_gba_hdma
+	@ Check if mid-frame palette split is active
+	ldr r10,=GLOBAL_PTR_BASE
+	ldrb_ r0,pal_split_line_screen
+	cmp r0,#0xFF
+	beq pal_hdma_done
+	@ Override VCount to fire at the split scanline
+	add r0,r0,#SCREEN_Y_START
+	ldr r1,=pal_vcount_handler
+	ldr r3,=vcountfptr
+	str r1,[r3]
+	mov r2,#REG_BASE
+	mov r0,r0,lsl#8		@ VCount trigger value in bits 8-15
+	orr r0,r0,#0x28		@ enable vblank+vcount interrupts
+	strh r0,[r2,#REG_DISPSTAT]
+pal_hdma_done:
+	ldmfd sp!,{r10,pc}
+
+@----------------------------------------------------------------------------
+@ VCount handler: swap BG palette at mid-frame split point
+@----------------------------------------------------------------------------
+pal_vcount_handler:
+	stmfd sp!,{r4-r7}
+	ldr r0,=pal_after_gba
+	ldr r1,=PALETTE_BASE+256	@ GBA BG palette base (palette 0)
+	mov r2,#8			@ 8 BG palettes
+pal_vcount_loop:
+	ldmia r0!,{r3,r4}		@ 8 bytes (4 colors × 2 bytes)
+	stmia r1,{r3,r4}
+	add r1,r1,#32			@ 32-byte stride per GBA palette
+	subs r2,r2,#1
+	bne pal_vcount_loop
+	ldmfd sp!,{r4-r7}
+	@ Chain to end_gba_hdma at end of visible area
+	ldr r0,=end_gba_hdma
+	ldr r1,=vcountfptr
+	str r0,[r1]
+	mov r2,#REG_BASE
+	ldr r0,=0x28 + 256*(SCREEN_Y_START+144-1)
+	strh r0,[r2,#REG_DISPSTAT]
+	bx lr
+	.popsection
 	
 
 
@@ -3292,6 +3329,10 @@ newframe_vblank:	@called at line 144	(??? safe to use)
 	streqb_ r0,lcdctrl0midframe
 	ldrneb_ r0,lcdctrl0midframe
 	strb_ r0,lcdctrl0frame
+
+	@double-buffer mid-frame palette split line
+	ldrb_ r0,pal_split_line
+	strb_ r0,pal_split_line_screen
 
 	@swap "big" buffer
 	ldr_ r0,bigbufferbase
@@ -4866,12 +4907,14 @@ FF69_W:	@BCPD - BG Color Palette Data
 	and r2,r1,#0x3F
 	ldr addy,=gbc_palette
 	strb r0,[addy,r2]
+	mov r2,#1
+	strb_ r2,pal_dirty
 	tst r1,#0x80
 	addne r1,r1,#1
     @Minucce's tweaks
     andne r1, r1, #0x3F
     orrne r1, r1, #0x80
-    
+
 	strneb_ r1,BCPS_index
 	bx lr
 @FF69_W	;BCPD - BG Color Palette Data

@@ -516,9 +516,9 @@ RECENT_TILENUM_SIZE = 128
  _m_ sgb_hack_frame,4
  _m_ auto_border_reboot_frame,4
  _m_ lineslow,1
- _m_ ,1
- _m_ ,1
- _m_ ,1
+ _m_ pal_dirty,1
+ _m_ pal_split_line,1
+ _m_ pal_split_line_screen,1
 
 			@gbz80.s (wram_globals5)
  _m_ fiveminutes_,4
