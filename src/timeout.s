@@ -473,10 +473,7 @@ pal_not_scanline4:
 	add r1,r1,#1
 	strb r1,[r2]
 	sub r1,r1,#1			@ r1 = index (old count)
-	@ Fill DMA buffer only when per-scanline mode active AND this frame
-	@ has enough splits (>8) to indicate the VBlank handler is running
-	cmp r1,#8
-	blt pal_fill_dma_return
+	@ Fill DMA buffer if per-scanline mode active
 	ldr r2,=pal_scanline_active
 	ldr r2,[r2]
 	cmp r2,#0
