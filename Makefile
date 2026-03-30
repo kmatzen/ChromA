@@ -184,6 +184,7 @@ $(OUTPUT).elf	:	$(OFILES)	gba_crt0_my.o
 #replacement rule for gbafix
 #---------------------------------------------------------------------------------
 %.gba: %.elf
+	@bash ../scripts/validate_elf.sh $<
 	@$(OBJCOPY) -O binary $< $@
 	@echo CUSTOM built ... $(notdir $@)
 	@echo gbafix $@ -t GOOMBA COLOR -c GMBC
