@@ -2139,7 +2139,14 @@ tobuffer:
 @	bl apply16
 	ldmfd sp!,{r3-r8,pc}
 .popsection
+@ IWRAM stubs — bodies moved to .text to free IWRAM space
 tobuffer_split:
+	b_long tobuffer_split_impl
+apply16:
+	b_long apply16_impl
+
+	.pushsection .text
+tobuffer_split_impl:
 	stmfd sp!,{r3-r8,lr}
 	adr_ addy,bigbuffer
 	ldmia addy,{r1-r5}
@@ -2155,7 +2162,7 @@ tobuffer_split:
 	tst r8,#0x0000FF00
 	ldrne_ r6,ui_border_scroll2
 	ldr_ r7,ui_border_scroll3
-0:	
+0:
 	mov r8,r0
 
 1:
@@ -2177,28 +2184,28 @@ tobuffer_split:
 	adrl_ addy,dispcntdata
 	ldr_ r2,dispcntaddr
 	add r4,r2,#144*2
-	bl apply16
+	bl apply16_impl
 	str_ r2,dispcntaddr
 	mov r2,r4
 	adrl_ addy,windata
-	bl apply16
+	bl apply16_impl
 	ldmfd sp!,{r3-r8,pc}
 
-apply16:
+apply16_impl:
 	@sets halfwords, plus one extra one if end is not aligned
 	@r8 = count (in halfwords)
 	@r2 = dest, does not have to be word aligned
 	@addy = pointer to halfword repeated - 4
-	
+
 	@out: r2 = next halfword to write to
 	mov r0,r8,lsl#1
-	
+
 	@make aligned
 	tst r2,#2
 	ldrne r1,[addy]!
 	strneh r1,[r2],#2
 	subne r0,r0,#2
-	
+
 	@DMA transfer, possibly plus one extra halfword
 	mov r1,#REG_BASE
 	str addy,[r1,#REG_DM3SAD]
@@ -2210,8 +2217,7 @@ apply16:
 	bicne addy,addy,#0xFF000000
 	add r2,r2,r0
 	bx lr
-
-	.ltorg
+	.popsection
 	
 @
 @@
