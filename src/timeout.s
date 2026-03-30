@@ -102,6 +102,13 @@ line0x:
 	strb_ r1,scanline		@reset scanline count
 @	bl newframe		@display update
 
+	@ Initialize mid-frame palette tracking
+	mov r0,#0xFF
+	strb_ r0,pal_split_line
+	strb_ r0,pal_split_line_screen
+	mov r0,#0
+	strb_ r0,pal_dirty
+
 	@now do double speed vblank stuff:
 	ldr_ r0,doubletimer_
 	tst r0,#0x01
@@ -431,6 +438,37 @@ ScanlineIRQ:
 	orr r0,r0,#0x02		@2=LCD STAT
 	strb_ r0,gb_if
 noScanlineIRQ:
+@------------------
+	@ Mid-frame palette tracking
+	ldrb_ r0,scanline
+	cmp r0,#4
+	bne pal_not_scanline4
+	@ Scanline 4: snapshot BG palette and clear dirty flag
+	mov r0,#0
+	strb_ r0,pal_dirty
+	stmfd sp!,{r2-r9}
+	ldr r0,=gbc_palette
+	ldr r1,=pal_before
+	ldmia r0!,{r2-r9}
+	stmia r1!,{r2-r9}
+	ldmia r0!,{r2-r9}
+	stmia r1!,{r2-r9}
+	ldmfd sp!,{r2-r9}
+	b checkTimerIRQ
+pal_not_scanline4:
+	@ Check for mid-frame BG palette change (scanline >= 8 only)
+	ldrb_ r0,pal_dirty
+	movs r0,r0
+	beq checkTimerIRQ
+	mov r0,#0
+	strb_ r0,pal_dirty
+	ldrb_ r0,pal_split_line
+	cmp r0,#0xFF
+	bne checkTimerIRQ
+	ldrb_ r0,scanline
+	cmp r0,#8
+	blo checkTimerIRQ
+	strb_ r0,pal_split_line
 @------------------
 
 @------------------
