@@ -2375,10 +2375,34 @@ display_frame:	@called at vblank
 	bl add_ui_border
 	ldrb_ r0,bg_cache_updateok
 	movs r0,r0
-	blne transfer_palette_
+	beq no_bg_wait
 
+	bl transfer_palette_
+
+	@ No wait needed if gamma is already using the slow path.
+	ldrb_ r0,_gammavalue
+	movs r0,r0
+	bne no_bg_wait
+
+	@ No wait needed if SGB mask is active; display_bg will just return.
+	ldrb_ r0,sgb_mask
+	movs r0,r0
+	bne no_bg_wait
+
+	@ Wait for VBlank scanline 164 before display_bg to avoid tearing.
+	mov r1,#REG_BASE
+	ldrh r0,[r1,#REG_VCOUNT]
+	cmp  r0,#164
+	bhs  no_bg_wait
+
+df_wait_line:
+	ldrh r0,[r1,#REG_VCOUNT]
+	cmp  r0,#164
+	blo  df_wait_line
+
+no_bg_wait:
 	bl display_bg
-	
+
 	ldmfd sp!,{globalptr,pc}
 
 display_bg:
