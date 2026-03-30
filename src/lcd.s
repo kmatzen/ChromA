@@ -1767,7 +1767,21 @@ newframeinit:
 	
 	@fall thru to newmode  (calls newmode then returns)
 
+@ IWRAM stubs — newmode cluster moved to .text
 newmode:
+	b_long newmode_impl
+entermode0_stub:
+	b_long entermode0_
+entermode1_stub:
+	b_long entermode1_
+entermode2_stub:
+	b_long entermode2_
+mode0_update_scroll:
+	b_long mode0_update_scroll_impl
+mode2_update_scroll:
+	b_long mode2_update_scroll_impl
+	.pushsection .text
+newmode_impl:
 	ldrb_ r0,lcdctrl
 	tst r0,#0x20
 	beq entermode0
@@ -1853,7 +1867,7 @@ entermode2_:
 	.endif
 	str_ r1,bg23cnt
 
-mode2_update_scroll:
+mode2_update_scroll_impl:
 	ldr_ r1,windowyscroll
 	
 	@get wx
@@ -1933,7 +1947,7 @@ entermode0_:
 	addne r1,r1,#0x0200
 	subne r1,r1,#1
 	str_ r1,bg23cnt
-mode0_update_scroll:
+mode0_update_scroll_impl:
 	@get y pos
 	ldrb_ r0,scrollY
 	sub r0,r0,#SCREEN_Y_START
@@ -1991,7 +2005,7 @@ entermode1_:
 	subne r1,r1,#1
 	str_ r1,bg23cnt
 	
-mode1_update_scroll:
+mode1_update_scroll_impl:
 	ldr_ r1,windowyscroll
 	@get wx
 	ldrb_ r0,windowX
@@ -2003,6 +2017,8 @@ mode1_update_scroll:
 	orr r1,r1,r0,lsr#16
 	str_ r1,xyscroll
 	bx lr
+	.ltorg
+	.popsection
  .pushsection .iwram.3
 
 bufferfinish:
@@ -2061,10 +2077,10 @@ tobuffer:
 	ldrb_ r1,windowX
 	cmp r1,#7
 	bgt 1f
-	bl entermode1_
+	bl entermode1_stub
 	cmp r0,r0
 1:
-	blgt entermode2_
+	blgt entermode2_stub
 	ldmfd sp!,{r2,addy,lr}
 
 	subs r0,r2,addy
