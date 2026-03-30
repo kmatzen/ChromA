@@ -91,5 +91,15 @@
             {"frame": 5200, "name": "difficulty"}
         ],
         "expected_fail": false
+    },
+    "Legend of Zelda, The - Link's Awakening DX (USA, Europe) (Rev 2) (SGB Enhanced) (GB Compatible)": {
+        "description": "Zelda DX - dual-mode ROM (CGB 0x80 + SGB), verifies GBC detection with autoborder",
+        "frames": 3600,
+        "inputs": [],
+        "screenshots": [
+            {"frame": 1200, "name": "intro"},
+            {"frame": 3400, "name": "title"}
+        ],
+        "expected_fail": false
     }
 }
