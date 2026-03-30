@@ -103,9 +103,6 @@ line0x:
 @	bl newframe		@display update
 
 	@ Initialize mid-frame palette tracking
-	mov r0,#0xFF
-	strb_ r0,pal_split_line
-	strb_ r0,pal_split_line_screen
 	mov r0,#0
 	strb_ r0,pal_dirty
 	ldr r1,=pal_split_count
@@ -384,6 +381,13 @@ tick_hdma:
     blx_long DoDma
     ldmfd sp!,{r0-r12,lr}
 
+    @ Steal CPU cycles for HDMA block (8 machine cycles, 16 in double speed)
+    ldr_ r1,cyclesperscanline
+    cmp r1,#DOUBLE_SPEED
+    mov r1,#8 << CYC_SHIFT
+    moveq r1,#16 << CYC_SHIFT
+    sub cycles,cycles,r1
+
     @ Decrement _dma_blocks_remaining
     ldr r1,=_dma_blocks_remaining
     ldrb r2,[r1]
@@ -466,9 +470,6 @@ pal_not_scanline4:
 	ldrb r1,[r2]
 	cmp r1,#8
 	bge checkTimerIRQ
-	@ First split also sets pal_split_line for backward compat
-	cmp r1,#0
-	streqb_ r0,pal_split_line
 	@ Store scanline in pal_split_lines[count]
 	ldr r2,=pal_split_lines
 	strb r0,[r2,r1]

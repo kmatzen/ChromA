@@ -2711,6 +2711,28 @@ update_the_border_palette:
 	ldmfd sp!,{pc}
 	.popsection
 
+@----------------------------------------------------------------------------
+@ Apply gamma correction to all split palette snapshots in-place
+@ Called at frame end when gamma != 0 and split_count > 0
+@----------------------------------------------------------------------------
+gamma_correct_splits:
+	stmfd sp!,{r4-r9,lr}
+	ldr r8,=pal_split_count
+	ldrb r8,[r8]
+	ldr r5,=pal_split_palettes	@ src/dest (in-place)
+	ldrb_ r1,_gammavalue
+gamma_split_outer:
+	mov r9,#32			@ 32 colors per split (8 palettes × 4 colors)
+gamma_split_inner:
+	mov r4,r5			@ gamma_convert_one reads [r5] and writes [r4]
+	bl gamma_convert_one
+	mov r5,r4			@ r4 advanced past written color, sync r5
+	subs r9,r9,#1
+	bne gamma_split_inner
+	subs r8,r8,#1
+	bne gamma_split_outer
+	ldmfd sp!,{r4-r9,pc}
+
 gamma_convert_one:
 	@r5 = src, r4 = dest
 	stmfd sp!,{lr}
@@ -3349,13 +3371,20 @@ newframe_vblank:	@called at line 144	(??? safe to use)
 	ldrneb_ r0,lcdctrl0midframe
 	strb_ r0,lcdctrl0frame
 
-	@double-buffer mid-frame palette split line and count
-	ldrb_ r0,pal_split_line
-	strb_ r0,pal_split_line_screen
+	@double-buffer mid-frame palette split count
 	ldr r1,=pal_split_count
 	ldrb r0,[r1]
 	ldr r1,=pal_split_count_screen
 	strb r0,[r1]
+
+	@ Apply gamma correction to split palettes if needed
+	cmp r0,#0
+	beq no_split_gamma
+	ldrb_ r1,_gammavalue
+	cmp r1,#0
+	beq no_split_gamma
+	bl_long gamma_correct_splits
+no_split_gamma:
 
 	@swap "big" buffer
 	ldr_ r0,bigbufferbase
