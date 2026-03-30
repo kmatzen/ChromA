@@ -83,11 +83,10 @@
         "description": "Hercules GBC (issue #10) - per-scanline palette title screen (flickers), gameplay works",
         "frames": 4500,
         "inputs": [
-            "100:A",
-            "800:A",
-            "1500:A",
-            "2200:A",
-            "2900:A"
+            "1200:Start",
+            "2400:Start",
+            "2700:A",
+            "3000:A"
         ],
         "screenshots": [
             {
@@ -95,11 +94,11 @@
                 "name": "title"
             },
             {
-                "frame": 150,
+                "frame": 2400,
                 "name": "copyright"
             },
             {
-                "frame": 220,
+                "frame": 4200,
                 "name": "savefile"
             }
         ],
