@@ -2,7 +2,6 @@
 
 #define VRAM_CODE	__attribute__((section(".vram1"), long_call))
 
-
 extern u16 _dma_src;
 extern u16 _dma_dest;
 extern u8 _vrambank;
@@ -95,17 +94,17 @@ static __inline VRAM_CODE void SetDirtyTiles(int dest, int byteCount)
 	}
 }
 
-void VRAM_CODE DoDma(int byteCountRemaining) 
+void VRAM_CODE DoDma(int byteCountRemaining)
 {
 	while (byteCountRemaining > 0)
 	{
 		//first do range and count checking to make memory blocks contiguous
-	
+
 		int byteCount = byteCountRemaining;
 		byteCountRemaining = 0;
-		
+
 		int src = _dma_src;
-		
+
 		int srcEnd = src + byteCount;
 		int srcEndBlock = (srcEnd - 1) & 0xF000;  // What do all these hex values mean
 		int srcBlock = src & 0xF000;

@@ -374,29 +374,21 @@ default_scanlinehook_nohblank:
     beq _checkScanlineIRQ  @ If not mid-hdma, continue normal execution.
     @ Else, fall through to tick_hdma
 tick_hdma:
+    @ Transfer one 16-byte block per HBlank (matching real GBC behavior)
+    stmfd sp!,{r0-r12,lr}
+    mov r0,#16
+    blx_long DoDma
+    ldmfd sp!,{r0-r12,lr}
+
     @ Decrement _dma_blocks_remaining
     ldr r1,=_dma_blocks_remaining
     ldrb r2,[r1]
     sub r2,r2,#1
     strb r2,[r1]
-    
-    @ If _dma_blocks_remaining == 0, call DoDma
+
+    @ If _dma_blocks_remaining == 0, HDMA is complete
     cmp r2,#0
     bne _checkScanlineIRQ
-    @ Fall through to call_dodma
-call_dodma:
-    @ Call DoDma
-    
-    stmfd sp!,{r0-r12,lr}
-    ldrb_ r0,dma_blocks_total
-    lsl r0,r0,#4
-    blx_long DoDma  @ Call DoDma if we're doing HDMA
-    ldmfd sp!,{r0-r12,lr}
-    
-    @ Set _dma_blocks_remaining and _dma_blocks_total to 0
-    mov r2,#0
-    ldr r1,=_dma_blocks_remaining
-    strb r2,[r1]
     ldr r1,=_dma_blocks_total
     strb r2,[r1]
     
