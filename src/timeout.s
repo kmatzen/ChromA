@@ -520,6 +520,7 @@ pal_fill_dma_scanline:
 	bne 1b
 	ldmfd sp!,{r2-r6}
 	b_long pal_fill_dma_return
+
 	.popsection
 
 @------------------
