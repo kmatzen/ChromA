@@ -2868,6 +2868,20 @@ pal_before:	.skip 64	@ BG palette at frame start (for mid-frame split)
 pal_after:	.skip 64	@ BG palette after mid-frame change
 pal_after_gba:	.skip 64	@ gamma-corrected pal_after for VCount handler
 
+ .section .sbss
+ .align 2
+ .global pal_split_lines
+ .global pal_split_palettes
+ .global pal_split_count
+ .global pal_split_count_screen
+ .global pal_vcount_index
+pal_split_count:	.skip 1		@ number of palette splits this frame
+pal_split_count_screen:	.skip 1		@ double-buffered split count for display
+pal_vcount_index:	.skip 1		@ current split index during VCount chain
+ .skip 1				@ padding for alignment
+pal_split_lines:	.skip 8		@ scanline number for each split (up to 8)
+pal_split_palettes:	.skip 64*8	@ BG palette snapshot for each split (64 bytes × 8)
+
 
 	@.end
 
