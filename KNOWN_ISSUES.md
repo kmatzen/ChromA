@@ -2,60 +2,81 @@
 
 ## Per-scanline palette rendering (Hercules GBC title screen)
 
-**Status**: Root cause identified, DMA3 implementation attempted but caused regressions
+**Status**: Partially working — good colors with residual flicker
 
-**Affected games**: Hercules: The Legendary Journeys (GBC), and potentially any GBC game using per-scanline palette updates (common for title screens, cutscenes, gradient effects).
+### Current State
 
-### Symptom
+The Hercules GBC title screen renders with improved per-scanline palette colors via DMA3 HBlank repeat. The DMA buffer is filled directly from `FF69_W` (the palette write handler) with zero per-scanline hook overhead. However, two artifacts remain:
 
-The Hercules GBC title screen shows a dark, low-color approximation instead of the full-color character portrait visible on real hardware. The BG tiles are correct but all scanlines display the same palette instead of unique per-scanline palettes.
+1. **Flickering**: The GBC frame takes ~2 GBA frames to process (ARM/GBC cycle ratio is ~3:1). The top and bottom halves of the screen receive fresh palette data on alternating GBA frames. Unlike a real GBC LCD which persists between frames, the GBA display shows the half-stale state, causing visible flicker.
 
-### Root cause
+2. **Half-palette mixing**: The VBlank handler writes 32 bytes per scanline (4 of 8 palettes). The DMA buffer fill triggers every 32 writes, but at that point only half the palettes are current — the other half has the previous scanline's data. This causes columns using palettes 4-7 to show slightly wrong colors.
 
-The game's VBlank handler at ROM `0x0DA2` rewrites all 8 BG palettes (32 bytes via FF69/BCPD) during every HBlank for scanlines 0-142. This produces 143 unique palette states per frame, creating a full-color image from 2bpp tiles. The emulator's palette split mechanism (VCount interrupt chaining) only supports up to 8 mid-frame palette changes.
+### How it works
 
-### Why simple fixes don't work
+The game's VBlank handler at ROM address `0x0DA2`:
+1. Sets BCPS to 0x80 (auto-increment from index 0)
+2. Waits for LY=0 (busy-loop on FF44)
+3. For each scanline 0-142: waits for HBlank (STAT bit 1), writes 32 bytes to FF69
+4. Checks LY=0x8E (142) to stop
 
-- **Increasing to 144 VCount splits**: Causes black screen from interrupt overhead (~11% of GBA frame time) and regressions in other games due to VBlank palette setup being incorrectly captured as mid-frame splits.
-- **The `pal_split_count_screen` init bug**: The screen count was zeroed at each frame start, preventing VCount activation. Fixing this caused regressions because the split detection was too aggressive (capturing normal VBlank palette changes as splits).
+The emulator captures these writes:
+- `FF69_W` in IWRAM writes to `gbc_palette` and sets `pal_dirty`
+- Every 32nd write (BCPS index & 0x1F == 0), branches to `ff69_w_tail` in `.text`
+- The tail checks if per-scanline mode is active (>10 visible-scanline triggers)
+- If active, expands `gbc_palette` to the DMA buffer at `buffer[scanline * 256]`
+- `pal_hdma_wrapper` sets up DMA3 to replay the buffer during GBA display
 
-### Proposed fix: HBlank DMA via GBA DMA channel 3
+### Timing analysis
 
-GBA DMA3 is unused during display and could be configured for HBlank-repeat palette updates:
+Per-scanline handler cycle budget (double speed, 912 cycles/scanline):
+```
+STAT wait (Mode 2+3):  ~504 cycles  (21 iterations × 24 cycles)
+Palette writes:         ~436 cycles  (16 write pairs + 15 POPs)
+LY check + branch:       ~32 cycles
+LD HL setup:              ~24 cycles
+Total:                   ~996 cycles  → 84-cycle overrun per scanline
+```
 
-1. **Detection**: When `pal_split_count` exceeds a threshold (e.g., >16), switch to DMA3 mode instead of VCount chaining
-2. **Buffer**: Build a 144 x 256 byte buffer in EWRAM during GBC frame processing, capturing palette state at each scanline boundary
-3. **DMA3 setup**: In `pal_hdma_wrapper`, configure DMA3: source=buffer, dest=`PALETTE_BASE+0x100`, count=128 halfwords, mode=HBlank repeat
-4. **Cleanup**: Disable DMA3 at end of visible area in `end_gba_hdma`
+The handler self-corrects: after the first overrun, subsequent iterations start mid-scanline and wait less for HBlank, oscillating between 84-96 cycle overrun. This is acceptable — the drift is ~1 scanline offset, not cumulative.
 
-Estimated overhead: ~17% of GBA frame time when active (buffer conversion + DMA).
+### Why the per-scanline hook was removed
 
-### Key constraints
+The original scanline hook in `timeout.s` ran ~30 instructions per scanline when palette changes were detected. This stole ~70 ARM cycles per scanline from the GBC CPU budget. The handler's 84-cycle overrun margin is tight — adding 70 cycles pushed it to 154 cycles, causing the handler to fail and producing heavy flicker.
 
-- Must distinguish per-scanline mode (>16 splits) from normal 1-8 splits
-- Must exclude VBlank scanlines (144-153) from capture to avoid false positives
-- Buffer must be double-buffered
-- Gamma correction must be applied to the buffer when `_gammavalue != 0`
+The hook was replaced with `b checkTimerIRQ` (zero overhead). Palette detection is now done entirely from `FF69_W`'s tail function in `.text`, which only runs every 32nd palette write (~142 times per frame instead of every scanline).
 
-### Implementation attempt notes
+### Root causes of remaining flicker
 
-A DMA3 implementation was attempted with:
-- 36KB per-scanline PALRAM buffer in EWRAM (144 × 256 bytes)
-- Per-scanline capture in the scanline hook (expanding gbc_palette to PALRAM format)
-- DMA3 HBlank repeat setup when >16 palette dirty events detected per frame
-- Separate `end_gba_hdma_dma3` handler to stop DMA3 at end of visible area
+1. **GBC/GBA frame desync**: The GBA ARM CPU needs ~3 cycles to emulate 1 GBC cycle. A full GBC frame (154 scanlines × 912 cycles = 140,448 GBC cycles) requires ~420,000-560,000 ARM cycles, but the GBA only has 280,896 ARM cycles per frame. The GBC frame spans ~2 GBA frames, causing the VBlank handler's palette writes to be split across GBA display periods.
 
-Issues encountered:
-- **`pal_split_count_screen` init bug**: The VBlank init zeros `pal_split_count_screen`, which prevents the existing VCount handler from ever activating. Removing the zero causes massive regressions because ALL games have palette changes during VBlank that get captured as false mid-frame splits.
-- **Scanline hook ordering**: Adding the DMA capture code and dirty_count tracking to the scanline hook broke register usage or control flow in a way that caused Crystal and other games to show only gray. The exact cause needs more investigation.
-- **Mode detection threshold**: Even with visible-area-only dirty counting (scanlines 8-143), the threshold for DMA3 activation needs careful tuning to avoid false positives.
+2. **No LCD persistence**: Real GBC LCD has slow response time that masks frame-to-frame palette changes. The GBA display refreshes completely each frame, making the half-frame palette splits visible.
 
-The core challenge is that the scanline hook is in the critical path — any register clobber or control flow change affects all games. The DMA3 code path should be developed on a feature branch with per-change regression testing.
+3. **Half-palette capture**: Each DMA buffer fill captures `gbc_palette` when only 4 of 8 palettes have been updated for the current scanline. The remaining 4 palettes have the previous scanline's data.
+
+### What was tried and didn't work
+
+- **Hold timer for DMA3 activation**: Kept DMA3 active for N frames after detection. Broke gameplay because stale palette data persisted during non-title-screen scenes.
+- **Flat buffer fill from pal_hdma_wrapper**: Filled all 144 entries with the final gbc_palette state. Wrong colors (no per-scanline variation).
+- **Dual scanline fill (current + previous)**: Filled both scanline entries at the 64-byte boundary. Caused visual streaks from the double-write overhead.
+- **Double-buffered DMA**: Two 36KB buffers, swap at frame start. Didn't help because the issue is write timing, not read/write contention.
+- **STAT timing adjustment**: Extended HBlank by 42 dots to eliminate the 84-cycle overrun. Made things worse — the handler's self-correction mechanism was already compensating.
+- **Decay-based DMA3 persistence**: Slowly decayed activation counter instead of clearing. Didn't fix the core frame desync issue.
+- **Per-scanline hook with reduced instructions**: Even 9 instructions per scanline (vs the original ~30) caused heavy flicker. Budget is 0-5 instructions max.
 
 ### ROM analysis details
 
-- VBlank dispatch: FFB7=0x0B -> table at `0x0C5C` -> handler `0x0DA2`
+- VBlank dispatch: FFB7=0x0B → table at `0x0C5C` → handler `0x0DA2`
 - Display config table at `0x2D8C`: both CC5E=0 and CC5E=1 entries write the same BG map (`80,81,82...`); the visual difference comes entirely from per-scanline palette data
 - Palette data source: WRAM `0xC900`, loaded by `0x2CD8`, read via POP during the VBlank handler
 - Handler timing: BCPS=0x80 (auto-increment), writes 32 bytes/scanline to FF69, checks `bit 1,[FF41]` for HBlank and `[FF44]==0x8E` for end of visible area
 - The palette copy (5800 bytes to `0xC900`) intentionally overwrites game state at `0xCC5E`
+
+### Instruction timing fixes found during investigation
+
+Pre-existing bugs fixed during this investigation:
+- **LD BC/DE/HL/SP,nn** (opcodes 01,11,21,31): Were charging 16 cycles instead of correct 12
+- **JR n** (opcode 18): Was charging 8 cycles instead of correct 12 (missing branch penalty)
+- **ADD SP,n** (opcode E8): Was charging 12 cycles instead of correct 16
+
+These are now validated automatically by `scripts/validate_timing.py` during every build.
