@@ -3393,17 +3393,14 @@ newframe_vblank:	@called at line 144	(??? safe to use)
 	movle r2,r0
 	ldr r1,=pal_split_count_screen
 	strb r2,[r1]
-	@ DMA3 per-scanline mode: activate if >16 changes, stay active until
-	@ screen turns off (lcdctrl bit 7 = 0) to avoid flicker
+	@ DMA3 per-scanline mode: activate with hold timer to avoid flicker
 	ldr r1,=pal_scanline_active
+	ldr r2,[r1]
 	cmp r0,#16
-	movgt r2,#1
-	bgt 1f
-	ldr r2,[r1]			@ keep current state (buffer data persists)
-	ldrb_ r0,lcdctrl
-	tst r0,#0x80
-	moveq r2,#0			@ deactivate only when screen off
-1:	str r2,[r1]
+	ldrgt r2,=3600			@ 60-second hold on heavy palette activity
+	cmp r2,#0
+	subgt r2,r2,#1
+	str r2,[r1]
 
 	@ Apply gamma correction to split palettes if needed
 	cmp r0,#0
