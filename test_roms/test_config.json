@@ -101,5 +101,25 @@
             {"frame": 3400, "name": "title"}
         ],
         "expected_fail": false
+    },
+    "Kirby's Dream Land 2 (USA, Europe) (SGB Enhanced)": {
+        "description": "Kirby's Dream Land 2 - SGB border and gameplay (issue #38)",
+        "frames": 3600,
+        "inputs": [],
+        "screenshots": [
+            {"frame": 1200, "name": "title"},
+            {"frame": 2400, "name": "demo"}
+        ],
+        "expected_fail": false
+    },
+    "Kirby Dream Land 2 DX": {
+        "description": "Kirby's Dream Land 2 DX romhack - GBC colorization with SGB border (issue #38)",
+        "frames": 3600,
+        "inputs": [],
+        "screenshots": [
+            {"frame": 1200, "name": "title"},
+            {"frame": 2400, "name": "demo"}
+        ],
+        "expected_fail": false
     }
 }
