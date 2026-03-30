@@ -185,6 +185,7 @@ $(OUTPUT).elf	:	$(OFILES)	gba_crt0_my.o
 #---------------------------------------------------------------------------------
 %.gba: %.elf
 	@bash ../scripts/validate_elf.sh $<
+	@python3 ../scripts/validate_timing.py
 	@$(OBJCOPY) -O binary $< $@
 	@echo CUSTOM built ... $(notdir $@)
 	@echo gbafix $@ -t GOOMBA COLOR -c GMBC
