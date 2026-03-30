@@ -3163,33 +3163,11 @@ pal_hdma_wrapper:
 	orr r0,r0,#0x28		@ enable vblank+vcount interrupts
 	strh r0,[r2,#REG_DISPSTAT]
 pal_hdma_done:
-	@ Detect per-scanline palette mode from pal_dirty counter
-	@ pal_dirty is incremented by FF69_W; > 0 means palette writes happened
-	ldrb_ r0,pal_dirty
-	ldr r1,=pal_scanline_active
+	@ Check for per-scanline DMA3 mode
+	ldr r0,=pal_scanline_active
+	ldr r0,[r0]
 	cmp r0,#0
-	movgt r2,#1
-	moveq r2,#0
-	str r2,[r1]
-	cmp r2,#0
 	beq pal_hdma_no_dma3
-	@ Fill DMA buffer with current palette (flat: same for all scanlines)
-	stmfd sp!,{r3-r9}
-	ldr r3,=pal_dma_buffer
-	mov r8,#144
-1:	ldr r4,=gbc_palette
-	mov r9,#8
-2:	ldr r5,[r4],#4
-	ldr r6,[r4],#4
-	str r5,[r3],#4
-	str r6,[r3],#4
-	add r3,r3,#24
-	subs r9,r9,#1
-	bne 2b
-	subs r8,r8,#1
-	bne 1b
-	ldmfd sp!,{r3-r9}
-	@ Set up DMA3
 	mov r2,#REG_BASE
 	ldr r0,=pal_dma_buffer
 	str r0,[r2,#REG_DM3SAD]
