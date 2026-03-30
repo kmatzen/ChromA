@@ -2,7 +2,7 @@
 
 ## Per-scanline palette rendering (Hercules GBC title screen)
 
-**Status**: Root cause identified, fix requires architectural change
+**Status**: Root cause identified, DMA3 implementation attempted but caused regressions
 
 **Affected games**: Hercules: The Legendary Journeys (GBC), and potentially any GBC game using per-scanline palette updates (common for title screens, cutscenes, gradient effects).
 
@@ -36,6 +36,21 @@ Estimated overhead: ~17% of GBA frame time when active (buffer conversion + DMA)
 - Must exclude VBlank scanlines (144-153) from capture to avoid false positives
 - Buffer must be double-buffered
 - Gamma correction must be applied to the buffer when `_gammavalue != 0`
+
+### Implementation attempt notes
+
+A DMA3 implementation was attempted with:
+- 36KB per-scanline PALRAM buffer in EWRAM (144 × 256 bytes)
+- Per-scanline capture in the scanline hook (expanding gbc_palette to PALRAM format)
+- DMA3 HBlank repeat setup when >16 palette dirty events detected per frame
+- Separate `end_gba_hdma_dma3` handler to stop DMA3 at end of visible area
+
+Issues encountered:
+- **`pal_split_count_screen` init bug**: The VBlank init zeros `pal_split_count_screen`, which prevents the existing VCount handler from ever activating. Removing the zero causes massive regressions because ALL games have palette changes during VBlank that get captured as false mid-frame splits.
+- **Scanline hook ordering**: Adding the DMA capture code and dirty_count tracking to the scanline hook broke register usage or control flow in a way that caused Crystal and other games to show only gray. The exact cause needs more investigation.
+- **Mode detection threshold**: Even with visible-area-only dirty counting (scanlines 8-143), the threshold for DMA3 activation needs careful tuning to avoid false positives.
+
+The core challenge is that the scanline hook is in the critical path — any register clobber or control flow change affects all games. The DMA3 code path should be developed on a feature branch with per-change regression testing.
 
 ### ROM analysis details
 
