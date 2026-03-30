@@ -439,24 +439,9 @@ ScanlineIRQ:
 	strb_ r0,gb_if
 noScanlineIRQ:
 @------------------
-	@ Mid-frame palette tracking
-	ldrb_ r0,scanline
-	cmp r0,#4
-	bne pal_not_scanline4
-	@ Scanline 4: snapshot BG palette and clear dirty flag
-	mov r0,#0
-	strb_ r0,pal_dirty
-	stmfd sp!,{r2-r9}
-	ldr r0,=gbc_palette
-	ldr r1,=pal_before
-	ldmia r0!,{r2-r9}
-	stmia r1!,{r2-r9}
-	ldmia r0!,{r2-r9}
-	stmia r1!,{r2-r9}
-	ldmfd sp!,{r2-r9}
-	b checkTimerIRQ
-pal_not_scanline4:
-	@ Check for mid-frame BG palette change (scanline >= 8 only)
+	@ Mid-frame palette tracking — minimal: just clear pal_dirty
+	@ Heavy tracking (snapshots, counting) disabled because the per-scanline
+	@ overhead disrupts GBC VBlank handler timing and causes flicker
 	ldrb_ r0,pal_dirty
 	movs r0,r0
 	beq checkTimerIRQ
