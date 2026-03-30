@@ -2861,15 +2861,20 @@ XGB_HRAM: .skip 0x80
  .align
 CANARY1:	.skip 4
 gbc_palette:	.skip 128	@CGB $FF68-$FF6D???
-gbc_palette2:	.skip 128
 CHR_DECODE: .skip 0x400
 CANARY2:	.skip 4
-pal_before:	.skip 64	@ BG palette at frame start (for mid-frame split)
-pal_after:	.skip 64	@ BG palette after mid-frame change
-pal_after_gba:	.skip 64	@ gamma-corrected pal_after for VCount handler
 
  .section .sbss
  .align 2
+ .global gbc_palette2
+ .global pal_before
+ .global pal_after
+ .global pal_after_gba
+gbc_palette2:	.skip 128	@ moved to EWRAM (accessed once/frame)
+pal_before:	.skip 64	@ BG palette at frame start
+pal_after:	.skip 64	@ BG palette after mid-frame change
+pal_after_gba:	.skip 64	@ gamma-corrected pal_after for VCount handler
+
  .global pal_split_lines
  .global pal_split_palettes
  .global pal_split_count
