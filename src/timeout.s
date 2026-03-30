@@ -439,13 +439,24 @@ ScanlineIRQ:
 	strb_ r0,gb_if
 noScanlineIRQ:
 @------------------
-	@ Mid-frame palette tracking — absolute minimum (5 instructions)
-	@ ANY extra overhead here disrupts GBC VBlank handler timing
+	@ Mid-frame palette tracking — minimal: just clear pal_dirty
+	@ Heavy tracking (snapshots, counting) disabled because the per-scanline
+	@ overhead disrupts GBC VBlank handler timing and causes flicker
 	ldrb_ r0,pal_dirty
 	movs r0,r0
 	beq checkTimerIRQ
 	mov r0,#0
 	strb_ r0,pal_dirty
+	ldrb_ r0,scanline
+	cmp r0,#8
+	blo checkTimerIRQ
+	cmp r0,#144
+	bge checkTimerIRQ
+	@ Count all visible palette changes (uncapped, for DMA3 mode detection)
+	ldr r2,=pal_split_count
+	ldrb r1,[r2]
+	add r1,r1,#1
+	strb r1,[r2]
 	sub r1,r1,#1			@ r1 = index (old count)
 	@ Fill DMA buffer if per-scanline mode active
 	ldr r2,=pal_scanline_active
