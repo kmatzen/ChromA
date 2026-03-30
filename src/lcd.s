@@ -2783,26 +2783,39 @@ ff69_w_tail:
 	cmp r2,#144
 	bxge lr				@ VBlank scanline → skip
 	@ Count visible-scanline palette writes; only activate DMA3 after 10+
-	@ (Normal games: 0-3 tail calls/frame. Hercules: ~143.)
 	ldr r0,=pal_scanline_active
 	ldr r1,[r0]
 	add r1,r1,#1
 	str r1,[r0]
 	cmp r1,#10
 	bxlt lr				@ not enough activity yet → skip fill
-	stmfd sp!,{r0-r6,lr}
+	@ Fill buffer for current scanline AND previous (each half of 64-byte set
+	@ covers different palettes; at this point all 8 palettes are complete)
+	stmfd sp!,{r0-r7,lr}
+	mov r7,r2			@ r7 = current scanline
+	@ Fill current scanline
 	ldr r0,=pal_dma_buffer
-	add r0,r0,r2,lsl#8		@ buffer[scanline * 256]
+	add r0,r0,r7,lsl#8
 	ldr r2,=gbc_palette
+	bl ff69_fill_one
+	@ Fill previous scanline (had stale palette 4-7 data)
+	subs r7,r7,#1
+	bmi 2f				@ skip if scanline 0
+	ldr r0,=pal_dma_buffer
+	add r0,r0,r7,lsl#8
+	ldr r2,=gbc_palette
+	bl ff69_fill_one
+2:	ldmfd sp!,{r0-r7,pc}
+ff69_fill_one:
 	mov r3,#8
-1:	ldr r4,[r2],#4
+3:	ldr r4,[r2],#4
 	ldr r5,[r2],#4
 	str r4,[r0],#4
 	str r5,[r0],#4
 	add r0,r0,#24
 	subs r3,r3,#1
-	bne 1b
-	ldmfd sp!,{r0-r6,pc}
+	bne 3b
+	bx lr
 	.popsection
 
 	.pushsection .text
@@ -5029,8 +5042,8 @@ FF69_W:	@BCPD - BG Color Palette Data
 	addne r1,r1,#1
 	bicne r1,r1,#0x40		@ replaces andne+orrne
 	strneb_ r1,BCPS_index
-	@ Branch to DMA fill every 32 writes (one per scanline palette set)
-	and r2,r1,#0x1F
+	@ Branch to DMA fill every 64 writes (full 8-palette set complete)
+	and r2,r1,#0x3F
 	cmp r2,#0
 	beq_long ff69_w_tail
 	bx lr
