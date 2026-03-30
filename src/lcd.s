@@ -593,11 +593,11 @@ PaletteTxAll:@		also called from UI.c
 	bx lr
 
 copy_gbc_palette:
-	ldrb_ r0,pal_split_line
-	cmp r0,#0xFF
+	ldr r0,=pal_split_count
+	ldrb r0,[r0]
+	cmp r0,#0
 	beq copy_gbc_palette_nosplit
 	@ Split detected: use pal_before for BG portion, current for OBJ
-	@ Also copy current BG palette to pal_after
 	stmfd sp!,{r2-r9,lr}
 	@ Copy BG palette (64 bytes) from pal_before → gbc_palette2
 	ldr r0,=pal_before
@@ -606,18 +606,8 @@ copy_gbc_palette:
 	stmia r1!,{r2-r9}
 	ldmia r0!,{r2-r9}
 	stmia r1!,{r2-r9}
-	@ Copy current BG palette (64 bytes) gbc_palette → pal_after + pal_after_gba
-	ldr r0,=gbc_palette
-	ldr r1,=pal_after
-	ldr r2,=pal_after_gba
-	ldmia r0!,{r3-r9,lr}
-	stmia r1!,{r3-r9,lr}
-	stmia r2!,{r3-r9,lr}
-	ldmia r0!,{r3-r9,lr}
-	stmia r1!,{r3-r9,lr}
-	stmia r2!,{r3-r9,lr}
 	@ Copy OBJ palette (64 bytes) gbc_palette+64 → gbc_palette2+64
-	@ r0 already = gbc_palette+64, r1 already needs to be gbc_palette2+64
+	ldr r0,=gbc_palette+64
 	ldr r1,=gbc_palette2+64
 	ldmia r0!,{r2-r9}
 	stmia r1!,{r2-r9}
@@ -2636,7 +2626,7 @@ pal_loop3:
 	
 	subs r2,r2,#1
 	bne pal_loop3
-	
+
 	ldmfd sp!,{r0-r9,globalptr,lr}
 	bx lr
 
@@ -3131,11 +3121,17 @@ pal_hdma_wrapper:
 	stmfd sp!,{r10,lr}
 	bl_long do_gba_hdma
 	@ Check if mid-frame palette split is active
-	ldr r10,=GLOBAL_PTR_BASE
-	ldrb_ r0,pal_split_line_screen
-	cmp r0,#0xFF
+	ldr r0,=pal_split_count_screen
+	ldrb r0,[r0]
+	cmp r0,#0
 	beq pal_hdma_done
-	@ Override VCount to fire at the split scanline
+	@ Start at split index 0
+	ldr r1,=pal_vcount_index
+	mov r2,#0
+	strb r2,[r1]
+	@ Set VCount to fire at the first split scanline
+	ldr r2,=pal_split_lines
+	ldrb r0,[r2]
 	add r0,r0,#SCREEN_Y_START
 	ldr r1,=pal_vcount_handler
 	ldr r3,=vcountfptr
@@ -3148,12 +3144,16 @@ pal_hdma_done:
 	ldmfd sp!,{r10,pc}
 
 @----------------------------------------------------------------------------
-@ VCount handler: swap BG palette at mid-frame split point
+@ VCount handler: swap BG palette at mid-frame split point, chain to next
 @----------------------------------------------------------------------------
 pal_vcount_handler:
 	stmfd sp!,{r4-r7}
-	ldr r0,=pal_after_gba
-	ldr r1,=PALETTE_BASE+256	@ GBA BG palette base (palette 0)
+	@ Get current split index and load palette pointer
+	ldr r5,=pal_vcount_index
+	ldrb r5,[r5]
+	ldr r0,=pal_split_palettes
+	add r0,r0,r5,lsl#6		@ r0 = &pal_split_palettes[index * 64]
+	ldr r1,=PALETTE_BASE+256	@ GBA BG palette 8 base
 	mov r2,#8			@ 8 BG palettes
 pal_vcount_loop:
 	ldmia r0!,{r3,r4}		@ 8 bytes (4 colors × 2 bytes)
@@ -3161,8 +3161,27 @@ pal_vcount_loop:
 	add r1,r1,#32			@ 32-byte stride per GBA palette
 	subs r2,r2,#1
 	bne pal_vcount_loop
+	@ Advance to next split
+	add r5,r5,#1
+	ldr r6,=pal_vcount_index
+	strb r5,[r6]
+	ldr r6,=pal_split_count_screen
+	ldrb r6,[r6]
+	cmp r5,r6
+	bge pal_vcount_done
+	@ More splits: reprogram VCount for next split scanline
+	ldr r2,=pal_split_lines
+	ldrb r0,[r2,r5]
+	add r0,r0,#SCREEN_Y_START
+	mov r2,#REG_BASE
+	mov r0,r0,lsl#8
+	orr r0,r0,#0x28
+	strh r0,[r2,#REG_DISPSTAT]
 	ldmfd sp!,{r4-r7}
-	@ Chain to end_gba_hdma at end of visible area
+	bx lr
+pal_vcount_done:
+	ldmfd sp!,{r4-r7}
+	@ No more splits: chain to end_gba_hdma at end of visible area
 	ldr r0,=end_gba_hdma
 	ldr r1,=vcountfptr
 	str r0,[r1]
@@ -3330,9 +3349,13 @@ newframe_vblank:	@called at line 144	(??? safe to use)
 	ldrneb_ r0,lcdctrl0midframe
 	strb_ r0,lcdctrl0frame
 
-	@double-buffer mid-frame palette split line
+	@double-buffer mid-frame palette split line and count
 	ldrb_ r0,pal_split_line
 	strb_ r0,pal_split_line_screen
+	ldr r1,=pal_split_count
+	ldrb r0,[r1]
+	ldr r1,=pal_split_count_screen
+	strb r0,[r1]
 
 	@swap "big" buffer
 	ldr_ r0,bigbufferbase

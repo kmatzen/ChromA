@@ -108,6 +108,10 @@ line0x:
 	strb_ r0,pal_split_line_screen
 	mov r0,#0
 	strb_ r0,pal_dirty
+	ldr r1,=pal_split_count
+	strb r0,[r1]
+	ldr r1,=pal_split_count_screen
+	strb r0,[r1]
 
 	@now do double speed vblank stuff:
 	ldr_ r0,doubletimer_
@@ -454,13 +458,34 @@ pal_not_scanline4:
 	beq checkTimerIRQ
 	mov r0,#0
 	strb_ r0,pal_dirty
-	ldrb_ r0,pal_split_line
-	cmp r0,#0xFF
-	bne checkTimerIRQ
 	ldrb_ r0,scanline
 	cmp r0,#8
 	blo checkTimerIRQ
-	strb_ r0,pal_split_line
+	@ Record this split if we have room (max 8)
+	ldr r2,=pal_split_count
+	ldrb r1,[r2]
+	cmp r1,#8
+	bge checkTimerIRQ
+	@ First split also sets pal_split_line for backward compat
+	cmp r1,#0
+	streqb_ r0,pal_split_line
+	@ Store scanline in pal_split_lines[count]
+	ldr r2,=pal_split_lines
+	strb r0,[r2,r1]
+	@ Snapshot current BG palette (64 bytes) to pal_split_palettes[count]
+	stmfd sp!,{r2-r9}
+	ldr r0,=pal_split_palettes
+	add r0,r0,r1,lsl#6		@ r0 = &pal_split_palettes[count * 64]
+	ldr r2,=gbc_palette
+	ldmia r2!,{r3-r9,lr}
+	stmia r0!,{r3-r9,lr}
+	ldmia r2!,{r3-r9,lr}
+	stmia r0!,{r3-r9,lr}
+	ldmfd sp!,{r2-r9}
+	@ Increment split count
+	add r1,r1,#1
+	ldr r2,=pal_split_count
+	strb r1,[r2]
 @------------------
 
 @------------------
