@@ -161,15 +161,15 @@ DEPENDS	:=	$(OFILES:.o=.d)
 
 %.o	:	%.lz77
 	@echo $(notdir $<)
-	@$(bin2o)
+	@bin2s -a 4 -H `(echo $(<F) | tr . _)`.h $< | $(AS) -o $@
 
 %.o	:	%.bin
 	@echo $(notdir $<)
-	@$(bin2o)
+	@bin2s -a 4 -H `(echo $(<F) | tr . _)`.h $< | $(AS) -o $@
 
 %.o	:	%.gba
 	@echo $(notdir $<)
-	@$(bin2o)
+	@bin2s -a 4 -H `(echo $(<F) | tr . _)`.h $< | $(AS) -o $@
 
 
 #---------------------------------------------------------------------------------
