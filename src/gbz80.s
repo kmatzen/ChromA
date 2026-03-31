@@ -2431,11 +2431,6 @@ pr_loop:
 	bx lr
  .endif
 
-sram_W2_instruction_save32:
- 	sub r1,r1,#0x4000   @32k sram: A000>>6000
-sram_W2_instruction_save64:
-	add r1,r1,#0x4000   @64k sram: A000>>E000
-
 @----------------------------------------------------------------------------
 emu_reset:	@called by loadcart (r0-r9 are free to use)
 @----------------------------------------------------------------------------
@@ -2448,16 +2443,6 @@ emu_reset:	@called by loadcart (r0-r9 are free to use)
 	@gfx_reset zeroes doublespeed byte, this commits that change
 	bl_long updatespeed
 cpu_reset:
-	@reset SRAM size - so it can tell the actual SRAM size detected
-	ldr r0,=save_start
-	ldr r0,[r0]
-	cmp r0,#0xE000
-	
-	ldreq r0,sram_W2_instruction_save64
-	ldrne r0,sram_W2_instruction_save32
-	ldr r1,=sram_W2_modify
-	str r0,[r1]
-
 	mov r0,#0
 	str_ r0,FF41_PC
 	str_ r0,FF41_PC_2
