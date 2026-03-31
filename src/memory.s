@@ -28,7 +28,7 @@
 	global_func memcpy32
 	global_func memcpy_unaligned_src
 	
-	.global sram_W2_modify
+	@ sram_W2_modify removed: bank-aware mapping replaces runtime patching
 @----------------------------------------------------------------------------
 empty_R:		@read bad address (error)
 @----------------------------------------------------------------------------
@@ -104,15 +104,16 @@ mem_RC0_2:	@ram read ($D000-$DFFF)
 @----------------------------------------------------------------------------
 sram_W2:	@write to real sram ($A000-$BFFF)  AND emulated sram
 @----------------------------------------------------------------------------
-	orr r1,addy,#0xe000000	@r1=e00A000+
-sram_W2_modify:
- .if SRAM_32
- 	sub r1,r1,#0x4000   @32k sram: A000>>6000
- .else @64k sram
-	add r1,r1,#0x4000   @64k sram: A000>>E000
- .endif
+	@ Map GBC SRAM to GBA cart SRAM with bank support.
+	@ GBA cart SRAM offset = (addy & 0x1FFF) + bank*0x2000
+	@ This puts bank 0 at 0x0000, bank 1 at 0x2000, etc.
+	@ For 8KB games (1 bank): uses 0x0000-0x1FFF
+	@ For 32KB games (4 banks): uses 0x0000-0x7FFF
+	mov r1,addy,lsl#19
+	mov r1,r1,lsr#19		@r1 = addy & 0x1FFF
 	ldr_ r2,srambank
-	add r1,r1,r2,lsl#13	@add bank offset (bank * 0x2000)
+	add r1,r1,r2,lsl#13		@r1 += bank * 0x2000
+	orr r1,r1,#0x0e000000		@r1 = GBA cart SRAM address
 	strb r0,[r1]
 @----------------------------------------------------------------------------
 sram_W:	@sram write ($A000-$BFFF)

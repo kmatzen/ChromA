@@ -15,7 +15,11 @@
 #include <fcntl.h>
 
 static void silence_log(struct mLogger* logger, int category, enum mLogLevel level, const char* format, va_list args) {
-    (void)logger; (void)category; (void)level; (void)format; (void)args;
+    (void)logger; (void)category;
+    if (level == mLOG_INFO) {
+        vfprintf(stderr, format, args);
+        fprintf(stderr, "\n");
+    }
 }
 
 static struct mLogger s_logger = { .log = silence_log };
@@ -107,7 +111,7 @@ int main(int argc, char** argv) {
     const char* output_path = argv[3];
 
     /* Parse optional --input arguments and --screenshot arguments */
-    struct InputEvent inputs[256];
+    struct InputEvent inputs[8192];
     int num_inputs = 0;
 
     struct { int frame; char path[512]; } screenshots[64];
@@ -132,13 +136,13 @@ int main(int argc, char** argv) {
                 if (k >= 0) keys |= (1 << k);
                 tok = strtok(NULL, "+,");
             }
-            if (num_inputs < 254) {
+            if (num_inputs < 8190) {
                 inputs[num_inputs].frame = frame;
                 inputs[num_inputs].keys = keys;
                 inputs[num_inputs].press = 1;
                 num_inputs++;
-                /* Auto-release after 2 frames */
-                inputs[num_inputs].frame = frame + 2;
+                /* Auto-release after 15 frames (~250ms) */
+                inputs[num_inputs].frame = frame + 15;
                 inputs[num_inputs].keys = keys;
                 inputs[num_inputs].press = 0;
                 num_inputs++;
@@ -209,6 +213,34 @@ int main(int argc, char** argv) {
     /* Final screenshot */
     write_bmp(output_path, framebuffer, width, height, stride);
     fprintf(stderr, "Final screenshot at frame %d: %s\n", total_frames, output_path);
+
+    /* Dump memory regions if --memdump specified */
+    for (int i = 4; i < argc; i++) {
+        if (!strcmp(argv[i], "--memdump") && i + 1 < argc) {
+            i++;
+            /* format: addr:len:file */
+            char buf[768];
+            strncpy(buf, argv[i], sizeof(buf) - 1);
+            buf[sizeof(buf)-1] = 0;
+            char *p1 = strchr(buf, ':');
+            if (!p1) continue;
+            *p1++ = 0;
+            char *p2 = strchr(p1, ':');
+            if (!p2) continue;
+            *p2++ = 0;
+            uint32_t addr = strtoul(buf, NULL, 0);
+            uint32_t len = strtoul(p1, NULL, 0);
+            FILE *df = fopen(p2, "wb");
+            if (df) {
+                for (uint32_t a = 0; a < len; a++) {
+                    uint8_t byte = core->rawRead8(core, addr + a, -1);
+                    fwrite(&byte, 1, 1, df);
+                }
+                fclose(df);
+                fprintf(stderr, "Dumped %u bytes from 0x%08X to %s\n", len, addr, p2);
+            }
+        }
+    }
 
     core->deinit(core);
     free(framebuffer);
