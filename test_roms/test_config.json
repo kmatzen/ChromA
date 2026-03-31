@@ -177,19 +177,28 @@
         "expected_fail": false
     },
     "Shantae (USA)": {
-        "description": "Shantae (upstream #3) - HDMA sprite rendering, title screen and intro",
-        "frames": 1800,
+        "description": "Shantae (upstream #3) - HDMA sprite rendering during gameplay",
+        "frames": 6000,
         "inputs": [
-            "1200:Start"
+            "1200:Start",
+            "1800:Start",
+            "2100:A",
+            "2400:A",
+            "2700:A",
+            "3000:A"
         ],
         "screenshots": [
             {
-                "frame": 600,
-                "name": "wayforward"
-            },
-            {
                 "frame": 1500,
                 "name": "title"
+            },
+            {
+                "frame": 3000,
+                "name": "gameplay_lighthouse"
+            },
+            {
+                "frame": 5400,
+                "name": "gameplay_dialogue"
             }
         ],
         "expected_fail": false
@@ -234,60 +243,79 @@
         "expected_fail": false
     },
     "Crystalis (USA)": {
-        "description": "Crystalis (upstream #10) - tile flicker during scrolling",
-        "frames": 3600,
+        "description": "Crystalis (upstream #10) - tile rendering and scrolling in gameplay",
+        "frames": 9000,
         "inputs": [
             "600:Start",
             "900:Start",
-            "1200:A"
+            "1200:A",
+            "3600:Start",
+            "3900:A",
+            "4200:A",
+            "4500:A"
         ],
         "screenshots": [
             {
-                "frame": 300,
-                "name": "nintendo"
-            },
-            {
                 "frame": 3000,
                 "name": "nameentry"
+            },
+            {
+                "frame": 5400,
+                "name": "gameplay"
             }
         ],
         "expected_fail": false
     },
     "Lufia - The Legend Returns (USA)": {
-        "description": "Lufia (upstream #10) - garbled world map tiles",
-        "frames": 3600,
+        "description": "Lufia (upstream #10) - overworld tile rendering",
+        "frames": 9000,
         "inputs": [
             "300:Start",
             "600:A",
-            "900:Start"
+            "900:Start",
+            "2400:A",
+            "2700:A",
+            "3000:A",
+            "3300:A",
+            "3600:A",
+            "3900:A",
+            "4200:A",
+            "4500:A"
         ],
         "screenshots": [
             {
-                "frame": 1200,
-                "name": "natsume"
-            },
-            {
                 "frame": 2400,
                 "name": "title"
+            },
+            {
+                "frame": 4800,
+                "name": "overworld"
             }
         ],
         "expected_fail": false
     },
     "Cannon Fodder (USA) (En,Fr,De,Es,It)": {
-        "description": "Cannon Fodder GBC (upstream #28) - menu graphics/audio distortion",
-        "frames": 1800,
+        "description": "Cannon Fodder GBC (upstream #28) - menu graphics distortion",
+        "frames": 6000,
         "inputs": [
             "300:Start",
-            "600:A"
+            "600:A",
+            "900:A",
+            "1200:A",
+            "1500:Start"
         ],
         "screenshots": [
             {
-                "frame": 300,
-                "name": "splash"
+                "frame": 900,
+                "name": "language"
             },
             {
-                "frame": 1500,
-                "name": "menu"
+                "frame": 1800,
+                "name": "nameentry"
+            },
+            {
+                "frame": 5400,
+                "name": "menu_late"
             }
         ],
         "expected_fail": false
