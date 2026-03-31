@@ -2214,24 +2214,25 @@ apply16_impl:
 	@addy = pointer to halfword repeated - 4
 
 	@out: r2 = next halfword to write to
-	mov r0,r8,lsl#1
+	@CPU loop instead of DMA3 to avoid clobbering palette HBlank DMA3
+	ldr r1,[addy]			@ load fill value (word containing repeated halfword)
+	mov r0,r8,lsl#1		@ r0 = byte count
 
 	@make aligned
 	tst r2,#2
-	ldrne r1,[addy]!
 	strneh r1,[r2],#2
 	subne r0,r0,#2
 
-	@DMA transfer, possibly plus one extra halfword
-	mov r1,#REG_BASE
-	str addy,[r1,#REG_DM3SAD]
-	add addy,r0,#2  @add extra halfword if final halfword is not word aligned
-	movs addy,addy,lsr#2
-	strne r2,[r1,#REG_DM3DAD]
-	orrne addy,addy,#0x85000000 @enable, fixed src, inc dest
-	strne addy,[r1,#REG_DM3CNT_L]
-	bicne addy,addy,#0xFF000000
-	add r2,r2,r0
+	@word fill loop
+	movs addy,r0,lsr#2		@ addy = word count
+	beq 1f
+0:	str r1,[r2],#4
+	subs addy,addy,#1
+	bne 0b
+1:
+	@trailing halfword if byte count was not word-aligned
+	tst r0,#2
+	strneh r1,[r2],#2
 	bx lr
 	.popsection
 	
