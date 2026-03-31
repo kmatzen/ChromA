@@ -111,6 +111,8 @@ sram_W2_modify:
  .else @64k sram
 	add r1,r1,#0x4000   @64k sram: A000>>E000
  .endif
+	ldr_ r2,srambank
+	add r1,r1,r2,lsl#13	@add bank offset (bank * 0x2000)
 	strb r0,[r1]
 @----------------------------------------------------------------------------
 sram_W:	@sram write ($A000-$BFFF)
