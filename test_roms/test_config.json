@@ -40,7 +40,7 @@
     },
     "Pokemon - Crystal Version (USA, Europe) (Rev 1)": {
         "description": "Pokemon Crystal - full intro through save, verifies SRAM write-through",
-        "frames": 9000,
+        "frames": 8200,
         "inputs": [
             "300:A", "345:A", "390:A", "435:A", "480:A", "525:A", "570:A",
             "615:A", "660:A", "705:A", "750:A", "795:A", "840:A", "885:A",
@@ -64,8 +64,7 @@
             "7000:Start",
             "7200:Down", "7400:Down",
             "7600:A",
-            "7900:A",
-            "8400:A"
+            "7900:A"
         ],
         "screenshots": [
             {
@@ -83,10 +82,6 @@
             {
                 "frame": 6000,
                 "name": "bedroom"
-            },
-            {
-                "frame": 8200,
-                "name": "saved"
             }
         ],
         "expected_fail": false

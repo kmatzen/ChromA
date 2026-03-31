@@ -22,10 +22,14 @@ EMULATOR = PROJECT_DIR / "jagoombacolor.gba"
 
 # Addresses from jagoombacolor.elf
 XGB_SRAM_ADDR = 0x02038000
-GBA_SRAM_ADDR = 0x0E000000
+GBA_SRAM_BASE = 0x0E000000
+GBA_CART_SIZE = 0x10000  # 64K flash cart
 
 def run_and_dump_sram(rom_path, frames, inputs, sram_size):
     """Run a ROM and dump both XGB_SRAM and GBA cart SRAM."""
+    # Write-through base = GBA cart end - game SRAM size
+    gba_sram_addr = GBA_SRAM_BASE + (GBA_CART_SIZE - sram_size)
+
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
         gba_path = tmpdir / "test.gba"
@@ -47,7 +51,7 @@ def run_and_dump_sram(rom_path, frames, inputs, sram_size):
         for inp in inputs:
             cmd.extend(["--input", inp])
         cmd.extend(["--memdump", f"{XGB_SRAM_ADDR}:{sram_size}:{xgb_path}"])
-        cmd.extend(["--memdump", f"{GBA_SRAM_ADDR}:{sram_size}:{gba_path_sram}"])
+        cmd.extend(["--memdump", f"{gba_sram_addr}:{sram_size}:{gba_path_sram}"])
 
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         if result.returncode != 0:
@@ -149,8 +153,11 @@ def main():
         crystal_inputs.append("7900:A")
         # Wait for save animation, dismiss "saved the game" message
         crystal_inputs.append("8400:A")
+        # Close the menu (B to exit save stats, B to close start menu)
+        crystal_inputs.append("8600:B")
+        crystal_inputs.append("8800:B")
         # Let it run a bit more after saving
-        total_crystal_frames = 9000
+        total_crystal_frames = 9600
 
         results.append(test_writethrough(
             "Pokemon Crystal (save test)", crystal,
