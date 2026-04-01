@@ -891,7 +891,12 @@ cmc_part2:
 	.pushsection .text
 _cmc_part2_:
 	ble cmc_done
-	mov r6,#1
+	@ Compute starting bit from dest address alignment within 32-byte row.
+	@ bit = 1 << ((destAddr & 31) / 4) = 1 << ((destAddr >> 2) & 7)
+	and r6,r0,#0x1C		@r6 = destAddr & 0x1C (byte offset, 4-aligned)
+	mov r6,r6,lsr#2		@r6 = offset / 4 (0..7)
+	mov r4,#1
+	mov r6,r4,lsl r6	@r6 = 1 << bit position
 cmc_loop2:
 	ldr r4,[r0],#4
 	ldr r5,[r1],#4
