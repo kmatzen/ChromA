@@ -74,9 +74,12 @@ static int write_bmp(const char* path, const mColor* pixels, int width, int heig
 }
 
 static void print_usage(const char* name) {
-    fprintf(stderr, "Usage: %s <rom.gba> <frames> <output.bmp> [--input frame:keys ...]\n", name);
-    fprintf(stderr, "  keys: A B Select Start Right Left Up Down R L\n");
-    fprintf(stderr, "  Example: %s test.gba 3600 out.bmp --input 300:Start 400:A\n", name);
+    fprintf(stderr, "Usage: %s <rom.gba> <frames> <output.bmp> [options]\n", name);
+    fprintf(stderr, "  --input frame:keys     Simulate button press (A B Select Start Right Left Up Down R L)\n");
+    fprintf(stderr, "  --screenshot frame:path  Capture screenshot at frame\n");
+    fprintf(stderr, "  --memdump addr:len:file  Dump memory region after run\n");
+    fprintf(stderr, "  --savefile path          Load/save .sav file (created if missing)\n");
+    fprintf(stderr, "  Example: %s test.gba 3600 out.bmp --input 300:Start --savefile test.sav\n", name);
 }
 
 /* Parse key name to GBA key bit */
@@ -117,6 +120,8 @@ int main(int argc, char** argv) {
     struct { int frame; char path[512]; } screenshots[64];
     int num_screenshots = 0;
 
+    const char* savefile_path = NULL;
+
     for (int i = 4; i < argc; i++) {
         if (!strcmp(argv[i], "--input") && i + 1 < argc) {
             i++;
@@ -147,6 +152,9 @@ int main(int argc, char** argv) {
                 inputs[num_inputs].press = 0;
                 num_inputs++;
             }
+        } else if (!strcmp(argv[i], "--savefile") && i + 1 < argc) {
+            i++;
+            savefile_path = argv[i];
         } else if (!strcmp(argv[i], "--screenshot") && i + 1 < argc) {
             i++;
             char buf[768];
@@ -177,6 +185,11 @@ int main(int argc, char** argv) {
     if (!vf || !core->loadROM(core, vf)) {
         fprintf(stderr, "Failed to load ROM: %s\n", rom_path);
         return 1;
+    }
+
+    if (savefile_path) {
+        mCoreLoadSaveFile(core, savefile_path, false);
+        fprintf(stderr, "Save file: %s\n", savefile_path);
     }
 
     unsigned width, height;
