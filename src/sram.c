@@ -23,13 +23,11 @@ int get_saved_sram(void)
 #define SAVE_START_64K 0xE000
 
 #if SRAM_SIZE==32
-	//for 32k SRAM
 	#define SAVE_START SAVE_START_32K
-	//#define GBA_SRAM_SIZE 0x8000
+	#define GBA_SRAM_SIZE 0x8000
 #else
-	//for 64k SRAM
 	#define SAVE_START SAVE_START_64K
-	//#define GBA_SRAM_SIZE 0x10000
+	#define GBA_SRAM_SIZE 0x10000
 #endif
 
 EWRAM_DATA u32 save_start = SAVE_START;
@@ -984,189 +982,17 @@ void quicksave() {
 
 int backup_gb_sram(int called_from)
 {
-	if (sram_copy == NULL)
-	{
-		getsram();
-	}
-
-	int already_tried_to_save = 0;
-//need to check this
-	int i;
-restart:
-	i=0;
-	configdata *cfg;
-	stateheader *sh;
-	lzo_uint compressedsize;
-	u32 chk=0;
-	
-	if (called_from==1 && romstart != NULL)
-	{
-		chk=checksum_this();
-	}
-	
+	(void)called_from;
 	if(!using_flashcart())
 		return 1;
-
-	lzo_workspace = sram_copy + 0xE000;
-	compressed_save = lzo_workspace + 0x10000;
-	current_save_file = (stateheader*)compressed_save;
-	
-	if (called_from==1 && g_sramsize==3 ) //called from UI and 32K sram size
-	{
-		i=findstate(chk,SRAMSAVE,&sh);//find out where to save
-		if(i>=0)
-		{
-			memcpy(compressed_save,sh,sizeof(stateheader));//use old info, in case the rom for this sram is gone and we can't look up its name.
-			lzo1x_1_compress(XGB_SRAM,0x8000,compressed_save+sizeof(stateheader),&compressedsize,lzo_workspace);	//workspace needs to be 64k
-			lzo_workspace = NULL;
-			sh=current_save_file;
-			sh->size=(compressedsize+sizeof(stateheader)+3)&~3;	//size of compressed state+header, word aligned
-			sh->checksum = chk;
-			sh->uncompressed_size=0x8000;	//size of compressed state
-			int success = updatestates(i,0,SRAMSAVE);
-			cleanup_ewram();
-			if (!success)
-			{
-				writeerror();
-				if (!already_tried_to_save)
-				{
-					already_tried_to_save = 1;
-					deletemenu(sh->size);
-					goto restart;
-				}
-				compressed_save = NULL;
-				current_save_file = NULL;
-				return 0;
-			}
-		}
-		compressed_save = NULL;
-		current_save_file = NULL;
+	if(!(g_cartflags&MBC_SAV))
 		return 1;
-	}
-	
-	/*
-	#if 0
-	#if LITTLESOUNDDJ
-	if (called_from==1 && g_sramsize==4 )
-	{
-		i=findstate(chk,SRAMSAVE,&sh);//find out where to save
-		if(i>=0)
-		{
-			u8 * old_buffer2 = buffer2;
-			u8 * old_buffer3 = buffer3;
-			buffer3=buffer2;
-			
-			memcpy(compressed_save,sh,sizeof(stateheader));//use old info, in case the rom for this sram is gone and we can't look up its name.
-			lzo1x_1_compress(M3_SRAM_BUFFER,0x20000,compressed_save + sizeof(stateheader),&compressedsize,M3_COMPRESS_BUFFER);	//workspace needs to be 64k
-			sh=current_save_file;
-			sh->size=(compressedsize+sizeof(stateheader)+3)&~3;	//size of compressed state+header, word aligned
-			sh->checksum = chk;
-			sh->uncompressed_size=0x20000;	//size of compressed state
-			if (!updatestates(i,0,SRAMSAVE))
-			{
-				buffer2 = old_buffer2;
-				buffer3 = old_buffer3;
-				writeerror();
-				if (!already_tried_to_save)
-				{
-					already_tried_to_save = 1;
-					deletemenu(sh->size);
-					goto restart;
-				}
-				return 0;
-			}
-			buffer2 = old_buffer2;
-			buffer3 = old_buffer3;
-		}
-		return 1;
-	}
-	#endif
-	#endif
-	*/
-	
-	i=findstate(0,CONFIGSAVE,(stateheader**)&cfg);	//find config
-	
-	if (called_from==1 && chk==sram_owner)
-	{
-		//copy XGB_SRAM to MEM_SRAM, because some instructions (push) don't properly modify GBA SRAM
-		bytecopy(MEM_SRAM+save_start,XGB_SRAM,0x2000);
-	}
-	
-	if(i>=0 && cfg->sram_checksum)	//SRAM is occupied?
-	{
-		i=findstate(cfg->sram_checksum,SRAMSAVE,&sh);//find out where to save
-		if(i>=0)
-		{
-			int save_size=0x2000;
 
-			memcpy(compressed_save,sh,sizeof(stateheader));//use old info, in case the rom for this sram is gone and we can't look up its name.
-			lzo1x_1_compress(MEM_SRAM+save_start,save_size,compressed_save+sizeof(stateheader),&compressedsize,lzo_workspace);	//workspace needs to be 64k
-			sh=(stateheader*)current_save_file;
-			sh->size=(compressedsize+sizeof(stateheader)+3)&~3;	//size of compressed state+header, word aligned
-			sh->checksum = cfg->sram_checksum;
-			sh->uncompressed_size=save_size;	//size of compressed state
-			int success = updatestates(i,0,SRAMSAVE);
-			cleanup_ewram();
-			if (!success)
-			{
-				writeerror();
-				if (!already_tried_to_save)
-				{
-					already_tried_to_save = 1;
-					deletemenu(sh->size);
-					goto restart;
-				}
-				compressed_save = NULL;
-				current_save_file = NULL;
-				return 0;
-			}
-			else
-			{
-				i=findstate(0,CONFIGSAVE,(stateheader**)&cfg);	//find config
-				no_sram_owner();
-			}
-		}
-		else
-		{
-			compressed_save = NULL;
-			current_save_file = NULL;
-			//could not find SRAM file, but we still have something to save!
-			int r;
-			r=find_rom_number_by_checksum(cfg->sram_checksum);
-			if (r>=0)
-			{
-				int save_success;
-				u32 oldromnum=romnum;
-				//u8* oldromstart=romstart;
-				//romstart=findrom2(r);
-				romnum=r;
-				save_success=save_new_sram(MEM_SRAM+save_start);
-				romnum=oldromnum;
-				//romstart=oldromstart;
-				if (!save_success)
-				{
-					writeerror();
-					if (!already_tried_to_save)
-					{
-						already_tried_to_save = 1;
-						sh=current_save_file;
-						deletemenu(sh->size);
-						goto restart;
-					}
-					compressed_save = NULL;
-					current_save_file = NULL;
-					return 0;
-				}
-				else
-				{
-					//all saved, now erase the sram
-					no_sram_owner();
-				}
-			}
-		}
-	}
-	compressed_save = NULL;
-	current_save_file = NULL;
+	// Sync XGB_SRAM → GBA cart SRAM to catch any writes that bypassed
+	// sram_W2 (e.g. GB stack pushes targeting SRAM).
+	u32 game_sram_size = g_rammask + 1;
+	u32 wt_offset = GBA_SRAM_SIZE - game_sram_size;
+	bytecopy(MEM_SRAM + wt_offset, XGB_SRAM, game_sram_size);
 	return 1;
 }
 
@@ -1205,83 +1031,17 @@ int save_new_sram(u8 *SRAM_SOURCE)
 
 int get_saved_sram(void)
 {
-	//returns:
-	// 0 - game doesn't use SRAM
-	// 1 - successfully loaded
-	// 2 - file not found
-	
-	int i,j;
-	int retval;
-	u32 chk;
-	configdata *cfg;
-	stateheader *sh;
-	lzo_uint statesize;
-
 	if(!using_flashcart())
-	{
 		return 0;
-	}
-	if (doNotLoadSram)
-	{
+	if(!(g_cartflags&MBC_SAV))
 		return 0;
-	}
 
-	if(g_cartflags&MBC_SAV)
-	{	//if rom uses SRAM
-		chk=checksum_this();
-		i=findstate(0,CONFIGSAVE,(stateheader**)&cfg);	//find config
-		j=findstate(chk,SRAMSAVE,&sh);	//see if packed SRAM exists
-		
-		//probably shouldn't do this
-/*
-		if(i>=0) if(chk==cfg->sram_checksum) {	//SRAM is already ours
-			bytecopy(XGB_SRAM,MEM_SRAM+save_start,0x2000);
-			if(j<0) save_new_sram();	//save it if we need to
-			return;
-		}
-		*/
-//		flush_end_sram();
-		
-		if(j>=0) {//packed SRAM exists: unpack into XGB_SRAM
-			statesize=sh->size-sizeof(stateheader);
-			/*
-			#if LITTLESOUNDDJ
-			if (g_sramsize!=4)
-			{
-				lzo1x_decompress((u8*)(sh+1),statesize,XGB_SRAM,&statesize,NULL);
-			}
-			else
-			{
-				lzo1x_decompress((u8*)(sh+1),statesize,buffer2,&statesize,NULL);
-				memcpy(M3_SRAM_BUFFER,buffer2,0x20000);
-			}
-			#else
-			*/
-			lzo1x_decompress((u8*)(sh+1),statesize,XGB_SRAM,&statesize,NULL);
-			//#endif
-			retval=1;
-		} else { //pack new sram and save it.
-			save_new_sram(XGB_SRAM);
-			retval=2;
-		}
-		
-		//For 32k SRAM, don't bother storing anything in real SRAM, in fact, flush it out.
-		if (g_sramsize==3 || g_sramsize==4)
-		{
-			no_sram_owner();
-		}
-		else
-		{
-			//otherwise, use the sram saving system
-			bytecopy(MEM_SRAM+save_start,XGB_SRAM,0x2000);
-			register_sram_owner();//register new sram owner
-		}
-		return retval;
-	}
-	else
-	{
-		return 0;
-	}
+	// Restore emulated SRAM from the write-through region in GBA cart
+	// SRAM.  The offset matches the sram_W2 assembly calculation.
+	u32 game_sram_size = g_rammask + 1;
+	u32 wt_offset = GBA_SRAM_SIZE - game_sram_size;
+	bytecopy(XGB_SRAM, MEM_SRAM + wt_offset, game_sram_size);
+	return 1;
 }
 
 void register_sram_owner()
@@ -1298,41 +1058,9 @@ void no_sram_owner()
 }
 
 void setup_sram_after_loadstate() {
-//need to check this
-	int i;
-	u32 chk;
-	configdata *cfg;
-
-	if(g_cartflags&MBC_SAV) {	//if rom uses SRAM
-		chk=checksum_this();
-		i=findstate(0,CONFIGSAVE,(stateheader**)&cfg);	//find config
-		if(i>=0) if(chk!=cfg->sram_checksum) {//if someone else was using sram, save it
-			backup_gb_sram(0);
-		}
-		
-		if (g_sramsize < 3)
-		{
-			//For 8KB size or less:
-			bytecopy(MEM_SRAM+save_start,XGB_SRAM,0x2000);		//copy gb sram to real sram
-		}
-		else
-		{
-			no_sram_owner();
-		}
-		i=findstate(chk,SRAMSAVE,(stateheader**)&cfg);	//does packed SRAM for this rom exist?
-		if(i<0)						//if not, create it
-			save_new_sram(XGB_SRAM);
-		if (g_sramsize < 3)
-		{
-			//For 8KB size or less:
-			register_sram_owner();//register new sram owner
-		}
-		else
-		{
-			//otherwise rewrite the SRAM to the save file immediately
-			backup_gb_sram(1);
-		}
-	}
+	// After loading a save state, sync emulated SRAM to GBA cart SRAM
+	// so the write-through region stays consistent.
+	backup_gb_sram(0);
 }
 
 //returns a rom number, or -1
