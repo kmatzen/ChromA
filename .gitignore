@@ -5,3 +5,4 @@ SymbolTable.txt
 *.gbc
 *.elf
 build
+test_roms/mgba_runner
