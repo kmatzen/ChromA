@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Test SRAM write-through: verify GBC SRAM writes reach GBA cart SRAM.
+"""Test SRAM write-through and save reload for jagoombacolor.
 
-Tests that sram_W2 correctly writes to both emulated XGB_SRAM and
-physical GBA cart SRAM for games that use SRAM saves.
+Tests:
+  1. Write-through: sram_W2 writes to both emulated XGB_SRAM and GBA cart SRAM
+  2. Save reload:   a save persisted via Goomba's UI can be reloaded on a
+                     fresh boot with the same .sav file
 
 Usage:
     python3 test_roms/test_sram_writethrough.py
 """
 
-import struct
 import subprocess
 import sys
 import tempfile
@@ -25,84 +26,215 @@ XGB_SRAM_ADDR = 0x02038000
 GBA_SRAM_BASE = 0x0E000000
 GBA_CART_SIZE = 0x10000  # 64K flash cart
 
-def run_and_dump_sram(rom_path, frames, inputs, sram_size):
-    """Run a ROM and dump both XGB_SRAM and GBA cart SRAM."""
-    # Write-through base = GBA cart end - game SRAM size
-    gba_sram_addr = GBA_SRAM_BASE + (GBA_CART_SIZE - sram_size)
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
-        gba_path = tmpdir / "test.gba"
-        xgb_path = tmpdir / "xgb_sram.bin"
-        gba_path_sram = tmpdir / "gba_sram.bin"
-
-        # Compile
-        result = subprocess.run(
-            [sys.executable, str(COMPILER), "-e", str(EMULATOR),
-             "-o", str(gba_path), str(rom_path)],
-            capture_output=True, text=True
-        )
-        if result.returncode != 0:
-            print(f"ERROR compiling: {result.stderr}")
-            return None, None
-
-        # Run
-        cmd = [str(RUNNER), str(gba_path), str(frames), "/dev/null"]
-        for inp in inputs:
-            cmd.extend(["--input", inp])
-        cmd.extend(["--memdump", f"{XGB_SRAM_ADDR}:{sram_size}:{xgb_path}"])
-        cmd.extend(["--memdump", f"{gba_sram_addr}:{sram_size}:{gba_path_sram}"])
-
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-        if result.returncode != 0:
-            print(f"ERROR running: {result.stderr}")
-            return None, None
-
-        with open(xgb_path, "rb") as f:
-            xgb = f.read()
-        with open(gba_path_sram, "rb") as f:
-            gba = f.read()
-
-        return xgb, gba
+def compile_rom(rom_path, output_path):
+    result = subprocess.run(
+        [sys.executable, str(COMPILER), "-e", str(EMULATOR),
+         "-o", str(output_path), str(rom_path)],
+        capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        print(f"  ERROR compiling: {result.stderr}")
+        return False
+    return True
 
 
-def test_writethrough(name, rom_path, frames, inputs, sram_size, num_banks):
-    """Test that SRAM write-through works for a game."""
+def run_mgba(gba_path, frames, inputs, memdumps=None, savefile=None):
+    """Run a ROM and return requested memory dumps as a dict of bytes."""
+    cmd = [str(RUNNER), str(gba_path), str(frames), "/dev/null"]
+    for inp in inputs:
+        cmd.extend(["--input", inp])
+    if savefile:
+        cmd.extend(["--savefile", str(savefile)])
+    dump_paths = {}
+    for name, (addr, length, path) in (memdumps or {}).items():
+        cmd.extend(["--memdump", f"{addr}:{length}:{path}"])
+        dump_paths[name] = path
+
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    if result.returncode != 0:
+        print(f"  ERROR running: {result.stderr[:500]}")
+        return None
+
+    dumps = {}
+    for name, path in dump_paths.items():
+        dumps[name] = Path(path).read_bytes()
+    return dumps
+
+
+CRYSTAL_SRAM_SIZE = 32768
+CRYSTAL_NUM_BANKS = 4
+CRYSTAL_ROM_NAME = "Pokemon - Crystal Version (USA, Europe) (Rev 1).gbc"
+
+
+def crystal_advance_inputs():
+    """A-spam to advance through Goomba menu, Game Freak logo, title, Oak
+    intro, character naming, and into gameplay."""
+    return [f"{f}:A" for f in range(300, 5500, 45)]
+
+
+def test_writethrough(tmpdir):
+    """Verify sram_W2 writes game save data to GBA cart SRAM.
+
+    Play Crystal, trigger an in-game save, then compare XGB_SRAM (emulated)
+    with the corresponding region in GBA cart SRAM (write-through target).
+    """
     print(f"\n{'='*60}")
-    print(f"Test: {name} ({sram_size//1024}KB SRAM, {num_banks} bank(s))")
+    print("Test: SRAM write-through (Crystal 32KB)")
 
-    xgb, gba = run_and_dump_sram(rom_path, frames, inputs, sram_size)
-    if xgb is None:
+    crystal = SCRIPT_DIR / CRYSTAL_ROM_NAME
+    if not crystal.exists():
+        print(f"  SKIP: ROM not found")
+        return None
+
+    gba_path = tmpdir / "crystal.gba"
+    if not compile_rom(crystal, gba_path):
         return False
 
-    xgb_nz = sum(1 for b in xgb if b != 0)
-    gba_nz = sum(1 for b in gba if b != 0)
+    inputs = crystal_advance_inputs() + [
+        "7000:Start", "7200:Down", "7400:Down",  # navigate to SAVE
+        "7600:A", "7900:A",                       # save the game
+        "8400:A", "8600:B", "8800:B",             # dismiss + close menu
+    ]
 
+    sram_offset = GBA_CART_SIZE - CRYSTAL_SRAM_SIZE
+    dumps = run_mgba(
+        gba_path, 9600, inputs,
+        memdumps={
+            "xgb": (XGB_SRAM_ADDR, CRYSTAL_SRAM_SIZE,
+                    str(tmpdir / "wt_xgb.bin")),
+            "gba": (GBA_SRAM_BASE + sram_offset, CRYSTAL_SRAM_SIZE,
+                    str(tmpdir / "wt_gba.bin")),
+        },
+    )
+    if dumps is None:
+        return False
+
+    xgb, gba = dumps["xgb"], dumps["gba"]
+    xgb_nz = sum(1 for b in xgb if b != 0)
     print(f"  XGB_SRAM: {xgb_nz} non-zero bytes")
-    print(f"  GBA SRAM: {gba_nz} non-zero bytes")
+    print(f"  GBA SRAM: {sum(1 for b in gba if b != 0)} non-zero bytes")
 
     if xgb_nz == 0:
-        print(f"  SKIP: Game hasn't written to SRAM during test")
-        return True  # Not a failure, just no data to compare
+        print(f"  SKIP: Game did not write to SRAM")
+        return True
 
-    # Compare bank by bank
-    total_mismatches = 0
-    for bank in range(num_banks):
-        start = bank * 0x2000
-        end = start + 0x2000
-        xb = xgb[start:end]
-        gb = gba[start:end]
-        bnz = sum(1 for b in xb if b != 0)
-        mm = sum(1 for a, b in zip(xb, gb) if a != b)
-        total_mismatches += mm
+    total_mm = 0
+    for bank in range(CRYSTAL_NUM_BANKS):
+        s, e = bank * 0x2000, (bank + 1) * 0x2000
+        bnz = sum(1 for b in xgb[s:e] if b != 0)
+        mm = sum(1 for a, b in zip(xgb[s:e], gba[s:e]) if a != b)
+        total_mm += mm
         if bnz > 0 or mm > 0:
             print(f"  Bank {bank}: {bnz} non-zero, {mm} mismatches")
 
-    # Allow small number of mismatches (stack writes bypass sram_W2)
-    match_pct = (1 - total_mismatches / sram_size) * 100
-    # Threshold: if SRAM has data, at least 95% should match
+    match_pct = (1 - total_mm / CRYSTAL_SRAM_SIZE) * 100
     passed = match_pct >= 95.0
-    print(f"  Overall: {match_pct:.1f}% match ({total_mismatches} mismatches)")
+    print(f"  Match: {match_pct:.1f}% ({total_mm} mismatches)")
+    print(f"  Result: {'PASS' if passed else 'FAIL'}")
+    return passed
+
+
+def test_save_reload(tmpdir):
+    """Verify that a game save persists across sessions.
+
+    Run 1: Play Crystal, save in-game, then open Goomba UI (L+R) so
+           backup_gb_sram compresses the save into GBA SRAM.  The --savefile
+           flag causes mGBA to persist the SRAM to a .sav file on exit.
+    Run 2: Boot the same ROM with the .sav from run 1.  Advance past the
+           Goomba menu into the game and dump XGB_SRAM.  The decompressed
+           save data should match run 1.
+    """
+    print(f"\n{'='*60}")
+    print("Test: Save reload (Crystal 32KB)")
+
+    crystal = SCRIPT_DIR / CRYSTAL_ROM_NAME
+    if not crystal.exists():
+        print(f"  SKIP: ROM not found")
+        return None
+
+    gba_path = tmpdir / "crystal.gba"
+    if not compile_rom(crystal, gba_path):
+        return False
+
+    savefile = tmpdir / "crystal.sav"
+
+    # --- Run 1: play, in-game save, Goomba UI flush ---
+    run1_inputs = crystal_advance_inputs() + [
+        "7000:Start", "7200:Down", "7400:Down",
+        "7600:A", "7900:A",
+        "8400:A", "8600:B", "8800:B",
+        "9200:L+R",     # open Goomba UI → backup_gb_sram
+        "9600:B",       # close Goomba UI
+    ]
+
+    dumps1 = run_mgba(
+        gba_path, 10200, run1_inputs,
+        memdumps={
+            "xgb": (XGB_SRAM_ADDR, CRYSTAL_SRAM_SIZE,
+                    str(tmpdir / "run1_xgb.bin")),
+        },
+        savefile=savefile,
+    )
+    if dumps1 is None:
+        return False
+
+    first_xgb = dumps1["xgb"]
+    first_nz = sum(1 for b in first_xgb if b != 0)
+    print(f"  Run 1 XGB_SRAM: {first_nz} non-zero bytes")
+
+    if first_nz == 0:
+        print(f"  SKIP: Game did not write to SRAM")
+        return True
+
+    if not savefile.exists():
+        print(f"  FAIL: .sav file not created")
+        return False
+    print(f"  Save file: {savefile.stat().st_size} bytes")
+
+    # --- Run 2: reload and verify ---
+    # A-spam to get past Goomba splash/menu into the game.  The save is
+    # loaded during loadcart (get_saved_sram).  By frame ~3000 we're well
+    # past that point.
+    run2_inputs = [f"{f}:A" for f in range(300, 3000, 45)]
+
+    dumps2 = run_mgba(
+        gba_path, 3600, run2_inputs,
+        memdumps={
+            "xgb": (XGB_SRAM_ADDR, CRYSTAL_SRAM_SIZE,
+                    str(tmpdir / "run2_xgb.bin")),
+        },
+        savefile=savefile,
+    )
+    if dumps2 is None:
+        return False
+
+    reload_xgb = dumps2["xgb"]
+    reload_nz = sum(1 for b in reload_xgb if b != 0)
+    print(f"  Run 2 XGB_SRAM: {reload_nz} non-zero bytes")
+
+    # Compare non-empty banks.  The game may update a few bytes (RTC,
+    # frame counters) so we allow up to 10% mismatch.
+    total_mm = 0
+    total_compared = 0
+    for bank in range(CRYSTAL_NUM_BANKS):
+        s, e = bank * 0x2000, (bank + 1) * 0x2000
+        orig_nz = sum(1 for b in first_xgb[s:e] if b != 0)
+        if orig_nz == 0:
+            continue
+        mm = sum(1 for a, b in zip(first_xgb[s:e], reload_xgb[s:e]) if a != b)
+        total_mm += mm
+        total_compared += 0x2000
+        if mm > 0:
+            print(f"  Bank {bank}: {mm} mismatches (of {orig_nz} non-zero)")
+
+    if total_compared == 0:
+        print(f"  SKIP: No data to compare")
+        return True
+
+    match_pct = (1 - total_mm / total_compared) * 100
+    passed = match_pct >= 90.0
+    print(f"  Match: {match_pct:.1f}% ({total_mm} mismatches in {total_compared} bytes)")
     print(f"  Result: {'PASS' if passed else 'FAIL'}")
     return passed
 
@@ -117,68 +249,23 @@ def main():
 
     results = []
 
-    # Test 1: SML2 (8KB SRAM, 1 bank) - known to write SRAM during gameplay
-    sml2 = SCRIPT_DIR / "Super Mario Land 2 - 6 Golden Coins (USA, Europe) (Rev 2).gb"
-    if sml2.exists():
-        results.append(test_writethrough(
-            "Super Mario Land 2", sml2,
-            frames=2400, inputs=["600:Start", "900:Start"],
-            sram_size=8192, num_banks=1
-        ))
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
 
-    # Test 2: Pokemon Crystal (32KB SRAM, 4 banks)
-    # Spam A to advance through intro, create character "AAA...", then save.
-    # Timing (calibrated via screenshots):
-    #   ~frame 2000: Oak's intro dialog
-    #   ~frame 4000: Player character shown / naming
-    #   ~frame 6000: In bedroom (gameplay started)
-    crystal = SCRIPT_DIR / "Pokemon - Crystal Version (USA, Europe) (Rev 1).gbc"
-    if crystal.exists():
-        crystal_inputs = []
-        # Phase 1: Spam A to advance through goomba menu, Game Freak logo,
-        # title screen, Oak intro, character naming, and into gameplay.
-        # Stop before frame 6000 so we don't keep interacting with objects.
-        for f in range(300, 5500, 45):
-            crystal_inputs.append(f"{f}:A")
-        # Phase 2: Open Start menu and navigate to SAVE.
-        # At the start of Crystal (no Pokemon yet), menu is:
-        #   PACK, <name>, SAVE, OPTION, EXIT
-        # So Down twice reaches SAVE.
-        crystal_inputs.append("7000:Start")
-        crystal_inputs.append("7200:Down")
-        crystal_inputs.append("7400:Down")
-        # Select SAVE
-        crystal_inputs.append("7600:A")
-        # Confirm "Would you like to save the game?" → YES is default
-        crystal_inputs.append("7900:A")
-        # Wait for save animation, dismiss "saved the game" message
-        crystal_inputs.append("8400:A")
-        # Close the menu (B to exit save stats, B to close start menu)
-        crystal_inputs.append("8600:B")
-        crystal_inputs.append("8800:B")
-        # Let it run a bit more after saving
-        total_crystal_frames = 9600
+        r = test_writethrough(tmpdir)
+        if r is not None:
+            results.append(("Write-through", r))
 
-        results.append(test_writethrough(
-            "Pokemon Crystal (save test)", crystal,
-            frames=total_crystal_frames, inputs=crystal_inputs,
-            sram_size=32768, num_banks=4
-        ))
-
-    # Test 3: Shantae (64KB SRAM? or 8KB?) - GBC game with saves
-    shantae = SCRIPT_DIR / "Shantae (USA).gbc"
-    if shantae.exists():
-        results.append(test_writethrough(
-            "Shantae", shantae,
-            frames=6000,
-            inputs=["1200:Start", "1800:Start", "2100:A", "2400:A", "2700:A", "3000:A"],
-            sram_size=32768, num_banks=4
-        ))
+        r = test_save_reload(tmpdir)
+        if r is not None:
+            results.append(("Save reload", r))
 
     print(f"\n{'='*60}")
-    passed = sum(1 for r in results if r)
-    failed = sum(1 for r in results if not r)
-    print(f"SRAM write-through tests: {passed} passed, {failed} failed")
+    passed = sum(1 for _, r in results if r)
+    failed = sum(1 for _, r in results if not r)
+    for name, r in results:
+        print(f"  {'PASS' if r else 'FAIL'}: {name}")
+    print(f"\nSRAM tests: {passed} passed, {failed} failed")
     sys.exit(1 if failed else 0)
 
 

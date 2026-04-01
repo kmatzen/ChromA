@@ -1,5 +1,9 @@
 #include "includes.h"
 
+// Save type identification string for GBA emulators (e.g., mGBA).
+// Emulators scan the ROM binary for this marker to detect SRAM support.
+static const char sram_id[] __attribute__((used)) = "SRAM_V113";
+
 //#define UI_TILEMAP_NUMBER 30
 //#define SCREENBASE (u16*)(MEM_VRAM+UI_TILEMAP_NUMBER*2048)
 //#define FONT_MEM (u16*)(MEM_VRAM+0x4000)
