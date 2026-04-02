@@ -6,6 +6,13 @@
         "screenshots": [],
         "expected_fail": false
     },
+    "timer_accuracy_test": {
+        "description": "DIV sub-scanline accuracy - reads DIV before/after 256 cycles, expects delta=1",
+        "frames": 600,
+        "inputs": [],
+        "screenshots": [],
+        "expected_fail": false
+    },
     "cpu_instrs": {
         "description": "Blargg's CPU instruction tests - all 11 should pass",
         "frames": 7200,
