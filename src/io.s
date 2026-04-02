@@ -1234,7 +1234,33 @@ _FF56W:@		RP - Infrared Port
 @----------------------------------------------------------------------------
 _FF04W:@		DIV - Divider Register
 @----------------------------------------------------------------------------
-	mov r0,#0		@any write resets the reg.
+	@ Writing any value resets the 16-bit internal counter to 0.
+	@ If the timer is enabled and the selected bit of the old counter
+	@ was 1, this falling edge increments TIMA (real GB behavior).
+	ldrb_ r1,timerctrl
+	tst r1,#0x4
+	beq 1f				@timer disabled, just clear
+	@ Check if the selected counter bit was set before reset
+	ldr_ r0,dividereg
+	ands r1,r1,#3			@frequency select
+	moveq r1,#4
+	mov r2,#18
+	sub r1,r2,r1,lsl#1		@shift amount for selected bit
+	movs r0,r0,lsr r1		@test if selected bit was set
+	bcc 1f				@bit was 0, no falling edge
+	@ Falling edge → increment TIMA
+	ldr_ r0,timercounter
+	adds r0,r0,#0x01000000		@increment high byte (TIMA)
+	strcc r0,[globalptr,#timercounter]	@store if no overflow
+	bcc 1f
+	@ TIMA overflow → set timer IRQ, reload TMA
+	ldrb_ r0,gb_if
+	orr r0,r0,#0x04
+	strb_ r0,gb_if
+	ldrb_ r0,timermodulo
+	mov r0,r0,lsl#24
+	str_ r0,timercounter
+1:	mov r0,#0
 	str_ r0,dividereg
 	mov pc,lr
 @----------------------------------------------------------------------------
@@ -1250,7 +1276,34 @@ _FF06W:@		TMA - Timer Modulo
 @----------------------------------------------------------------------------
 _FF07W:@		TAC - Timer Control
 @----------------------------------------------------------------------------
-	strb_ r0,timerctrl
+	@ If the timer was enabled and is now being disabled, check if the
+	@ selected counter bit is currently 1.  If so, the falling edge
+	@ increments TIMA (real GB behavior).
+	ldrb_ r1,timerctrl
+	tst r1,#0x4				@was timer enabled?
+	beq 1f					@no, just store
+	tst r0,#0x4				@is it still enabled?
+	bne 1f					@yes, no edge
+	@ Timer being disabled.  Check selected bit of dividereg.
+	ands r1,r1,#3
+	moveq r1,#4
+	mov r2,#18
+	sub r1,r2,r1,lsl#1
+	ldr_ r2,dividereg
+	movs r2,r2,lsr r1			@C = selected bit
+	bcc 1f					@bit was 0, no edge
+	@ Falling edge → increment TIMA
+	ldr_ r2,timercounter
+	adds r2,r2,#0x01000000
+	strcc r2,[globalptr,#timercounter]
+	bcc 1f
+	ldrb_ r2,gb_if
+	orr r2,r2,#0x04
+	strb_ r2,gb_if
+	ldrb_ r2,timermodulo
+	mov r2,r2,lsl#24
+	str_ r2,timercounter
+1:	strb_ r0,timerctrl
 	mov pc,lr
 @----------------------------------------------------------------------------
 _FF0FW:
