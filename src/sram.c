@@ -19,8 +19,11 @@ int get_saved_sram(void)
 #endif
 #else
 
-#define SAVE_START_32K 0x6000
-#define SAVE_START_64K 0xE000
+// Reserve the top 32KB of GBA SRAM for game save write-through (max GB
+// SRAM is 32KB).  Config and savestates live below this boundary and can
+// never overlap with the write-through region.
+#define SAVE_START_32K 0x0000
+#define SAVE_START_64K 0x8000
 
 #if SRAM_SIZE==32
 	#define SAVE_START SAVE_START_32K
@@ -1036,10 +1039,18 @@ int get_saved_sram(void)
 	if(!(g_cartflags&MBC_SAV))
 		return 0;
 
-	// Restore emulated SRAM from the write-through region in GBA cart
-	// SRAM.  The offset matches the sram_W2 assembly calculation.
+	// Clamp save_start so the config/savestate area never overlaps the
+	// write-through region.  The write-through occupies GBA SRAM from
+	// wt_offset to GBA_SRAM_SIZE.  Without this, savestates for 32KB
+	// SRAM games would be corrupted by write-through.
 	u32 game_sram_size = g_rammask + 1;
 	u32 wt_offset = GBA_SRAM_SIZE - game_sram_size;
+	if (wt_offset < save_start) {
+		save_start = wt_offset;
+		sram_copy = NULL;  // force getsram to re-read with new boundary
+	}
+
+	// Restore emulated SRAM from the write-through region in GBA cart SRAM.
 	bytecopy(XGB_SRAM, MEM_SRAM + wt_offset, game_sram_size);
 	return 1;
 }
