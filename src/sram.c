@@ -438,6 +438,7 @@ int updatestates(int index,int erase,int type)
 	totalstatesize = newSaveEnd - sram_copy;
 	bytecopy(MEM_SRAM, sram_copy, totalstatesize + 8);
 	memset8(MEM_SRAM + totalstatesize + 8, 0, save_start - (totalstatesize + 8));
+
 	return 1;
 	/*
 	
@@ -812,7 +813,7 @@ void savestatemenu() {
 	SAVE_FORBIDDEN;
 
 	i = savestate2();
-	if (i <= 0 || i >= 57344 - 64)
+	if (i <= 0 || i >= save_start - 64)
 	{
 		writeerror();
 		return;
@@ -946,7 +947,6 @@ void quickload() {
 void quicksave() {
 	stateheader *sh;
 	int i;
-	
 	SAVE_FORBIDDEN;
 
 	if(!using_flashcart())
@@ -962,7 +962,7 @@ void quicksave() {
 	scrolll(1);
 	
 	i=savestate2();
-	if (i == 0 || i >= 57344 - 64)
+	if (i == 0 || i >= save_start - 64)
 	{
 		writeerror();
 		scrollr(2);
