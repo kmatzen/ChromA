@@ -640,68 +640,7 @@ _EC_bionic:     @Bionic Commando memcpy
 	mov r2,r2,lsl#5
 	bl_long memcpy
 	b_long _C9
-	
-#if 0
 
-	mov r11,r11
-	@391B:
-	@ldi a,(hl)
-	@ld (de),a
-	@inc de
-	@deb b
-	@ld a,b
-	@or a
-	@jr nz, 391B
-	
-	@B is always 32
-	@DE is always in page C000
-	@HL is always in page D000
-	adr_ r2,memmap_tbl
-	and r0,gb_de,#0xF0000000
-	and r1,gb_hl,#0xF0000000
-
-	cmp r0,#0xC0000000
-	beq 0f
-	mov r11,r11
-	0:
-	
-	cmp r1,#0xD0000000
-	beq 0f
-	mov r11,r11
-	0:
-
-	ldr r0,[r2,r0,lsr#26]
-	ldr r1,[r2,r1,lsr#26]
-	add r0,r0,gb_de,lsr#16
-	add r1,r1,gb_hl,lsr#16
-	mov r2,gb_bc,lsr#24
-	
-	ands r12,r2,#3
-	beq 0f
-	mov r11,r11
-	0:
-	
-	bl_long memcpy
-
-	mov r2,gb_bc,lsr#24
-	@advance hl, de, bc
-	add gb_hl,gb_hl,r2,lsl#16
-	add gb_de,gb_de,r2,lsl#16
-	and gb_bc,gb_bc,#0x00FF0000
-	
-	@multiply b by 3
-	add r2,r2,r2,lsl#1
-	@consume cycles
-	sub cycles,cycles,r2,lsl#(CYC_SHIFT + 2)    @r2 = iterations * 3, want CYCLE (16) * 4 * iterations * 3
-	add gb_pc,gb_pc,#8-1
-	
-	
-	fetch -8
-#endif
-	
-	
-	
-	
 .text
 
 game_specific_hacks_reset:
