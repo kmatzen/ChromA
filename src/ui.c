@@ -228,18 +228,7 @@ void ui()
 		if(key&(A_BTN+UP+DOWN+LEFT+RIGHT))
 			drawui1();
 	} while(!(key&(B_BTN+R_BTN+L_BTN)));
-	// Note: get_saved_sram() removed from menu close path.
-	// With write-through, SRAM is always in sync — reloading it here
-	// is unnecessary and was corrupting state via sram_copy invalidation.
 	scrolll(2);
-	/*
-	for(i=1;i<9;i++)
-	{
-		setdarkness(8-i);	//Lighten screen
-		ui_x=i*32;
-		move_ui_wait();
-	}
-	*/
 	while(key&(B_BTN)) {
 		waitframe();		//(polling REG_P1 too fast seems to cause problems)
 		key=~REG_P1;

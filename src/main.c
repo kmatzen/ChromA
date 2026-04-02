@@ -2,7 +2,9 @@
 
 // Save type identification string for GBA emulators (e.g., mGBA).
 // Emulators scan the ROM binary for this marker to detect SRAM support.
-static const char sram_id[] __attribute__((used)) = "SRAM_V113";
+// Aligned to 4 bytes with null padding to avoid adjacent data confusing
+// the scanner.
+static const char sram_id[] __attribute__((used, aligned(4))) = "SRAM_Vnnn";
 
 //#define UI_TILEMAP_NUMBER 30
 //#define SCREENBASE (u16*)(MEM_VRAM+UI_TILEMAP_NUMBER*2048)
@@ -514,7 +516,6 @@ void rommenu(void)
 		cls(3);
 		
 		loadcart(0,g_emuflags&0x300);
-//		get_saved_sram_CF(SramName);
 	}
 	else
 #endif
@@ -523,9 +524,6 @@ void rommenu(void)
 	if(pogoshell)
 	{
 		loadcart(0,g_emuflags&0x300);
-//#if CARTSRAM
-//		get_saved_sram();
-//#endif
 	}
 	else
 #endif
@@ -541,9 +539,6 @@ void rommenu(void)
 		if(romz>1){
 			i=drawmenu(sel);
 			loadcart(sel,i|(g_emuflags&0x300));  //(keep old gfxmode)
-//#if CARTSRAM
-//			get_saved_sram();
-//#endif
 			lastselected=sel;
 			for(i=0;i<8;i++)
 			{
@@ -571,9 +566,6 @@ void rommenu(void)
 			if(lastselected!=sel) {
 				i=drawmenu(sel);
 				loadcart(sel,i|(g_emuflags&0x300));  //(keep old gfxmode)
-//#if CARTSRAM
-//				get_saved_sram();
-//#endif
 				lastselected=sel;
 			}
 			run(0);
