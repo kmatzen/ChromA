@@ -228,15 +228,9 @@ void ui()
 		if(key&(A_BTN+UP+DOWN+LEFT+RIGHT))
 			drawui1();
 	} while(!(key&(B_BTN+R_BTN+L_BTN)));
-#if CARTSRAM
-	if (get_sram_owner()==0)
-	{
-		get_saved_sram();
-	}
-#ifndef EZFLASH_OMEGA_BUILD
-	writeconfig();			//save any changes
-#endif
-#endif
+	// Note: get_saved_sram() removed from menu close path.
+	// With write-through, SRAM is always in sync — reloading it here
+	// is unnecessary and was corrupting state via sram_copy invalidation.
 	scrolll(2);
 	/*
 	for(i=1;i<9;i++)
