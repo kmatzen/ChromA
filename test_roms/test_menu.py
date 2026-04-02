@@ -263,6 +263,98 @@ def test_restart(tmpdir):
     return passed
 
 
+def test_speed_hacks_submenu(tmpdir):
+    """Speed Hacks submenu opens and closes."""
+    print("Test: Speed Hacks submenu")
+    gba = tmpdir / "t.gba"
+    if not compile_sml2(gba):
+        return False
+    menu = str(tmpdir / "menu.bmp")
+    submenu = str(tmpdir / "sub.bmp")
+
+    t = 2000
+    inputs = ["600:Start", "900:Start", f"{t}:L+R"]
+    t += 200
+    inputs += menu_down(4, t)  # Down×4 → Speed Hacks
+    t += 4 * MENU_GAP
+    inputs += [f"{t}:A"]
+    t += 200
+    inputs += [f"{t}:B"]
+
+    run(gba, t + 500, inputs,
+        screenshots=[f"2200:{menu}",
+                     f"{2000 + 200 + 4 * MENU_GAP + 100}:{submenu}"])
+
+    d = pixel_diff_pct(menu, submenu)
+    passed = d > 3
+    print(f"  Submenu diff: {d:.1f}% {'PASS' if passed else 'FAIL'}")
+    return passed
+
+
+def test_autofire_toggle(tmpdir):
+    """B autofire cycles through OFF/Hold/Toggle on A press."""
+    print("Test: Autofire toggle")
+    gba = tmpdir / "t.gba"
+    if not compile_sml2(gba):
+        return False
+    before = str(tmpdir / "before.bmp")
+    after = str(tmpdir / "after.bmp")
+
+    # Item 0 = B autofire. Open menu, screenshot, press A to toggle, screenshot again.
+    t = 2000
+    inputs = ["600:Start", "900:Start", f"{t}:L+R"]
+    before_frame = t + 300
+    t += 400
+    # Cursor starts at item 0 (B autofire). Press A to toggle.
+    inputs += [f"{t}:A"]
+    after_frame = t + 300
+
+    run(gba, after_frame + 500, inputs,
+        screenshots=[f"{before_frame}:{before}", f"{after_frame}:{after}"])
+
+    # The menu text should change (autofire OFF → Hold)
+    d = pixel_diff_pct(before, after)
+    passed = d > 0.1  # text change is only a few pixels
+    print(f"  Menu diff after toggle: {d:.1f}% {'PASS' if passed else 'FAIL'}")
+    return passed
+
+
+def test_manage_sram(tmpdir):
+    """Manage SRAM submenu opens (may show empty if no compressed saves)."""
+    print("Test: Manage SRAM submenu")
+    gba, sav = tmpdir / "t.gba", tmpdir / "t.sav"
+    if not compile_sml2(gba):
+        return False
+    menu = str(tmpdir / "menu.bmp")
+    submenu = str(tmpdir / "sub.bmp")
+    back = str(tmpdir / "back.bmp")
+
+    # First quicksave so there's an SRAM entry to manage
+    t = 2000
+    inputs = ["600:Start", "900:Start", f"{t}:R+Select"]
+    t += 400
+    # Open menu, Down×7 → Manage SRAM
+    inputs += [f"{t}:L+R"]
+    t += 200
+    inputs += menu_down(7, t)
+    t += 7 * MENU_GAP
+    inputs += [f"{t}:A"]
+    t += 300
+    inputs += [f"{t}:B"]
+
+    run(gba, t + 500, inputs,
+        screenshots=[f"{2400}:{menu}",
+                     f"{2000 + 400 + 200 + 7 * MENU_GAP + 150}:{submenu}",
+                     f"{t + 300}:{back}"],
+        savefile=sav)
+
+    # Submenu should differ from main menu (even if empty, header text changes)
+    d = pixel_diff_pct(menu, submenu)
+    passed = d > 2
+    print(f"  Submenu diff: {d:.1f}% {'PASS' if passed else 'FAIL'}")
+    return passed
+
+
 def test_sram_persistence(tmpdir):
     """SRAM write-through persists across sessions."""
     print("Test: SRAM persistence")
@@ -288,6 +380,9 @@ def main():
         results.append(("Menu save/load state", test_menu_save_load_state(tmpdir)))
         results.append(("Display submenu", test_display_submenu(tmpdir)))
         results.append(("Other Settings submenu", test_other_settings_submenu(tmpdir)))
+        results.append(("Speed Hacks submenu", test_speed_hacks_submenu(tmpdir)))
+        results.append(("Autofire toggle", test_autofire_toggle(tmpdir)))
+        results.append(("Manage SRAM", test_manage_sram(tmpdir)))
         results.append(("Restart", test_restart(tmpdir)))
     results.append(("SRAM persistence", test_sram_persistence(None)))
 
