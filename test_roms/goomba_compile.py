@@ -4,22 +4,15 @@ import argparse
 from pathlib import Path
 
 
-def build_goomba_rom(emulator_path: Path, rom_paths: list[Path], output_path: Path):
+def build_goomba_rom(emulator_path: Path, rom_path: Path, output_path: Path):
     if not emulator_path.exists():
         raise FileNotFoundError(f"Missing emulator: {emulator_path}")
+    if not rom_path.exists():
+        raise FileNotFoundError(f"Missing ROM: {rom_path}")
 
-    emulator_data = emulator_path.read_bytes()
-
-    combined = bytearray(emulator_data)
-
-    print(f"Adding {len(rom_paths)} ROM(s)...")
-
-    for rom in rom_paths:
-        if not rom.exists():
-            raise FileNotFoundError(f"Missing ROM: {rom}")
-
-        print(f"  -> {rom.name}")
-        combined += rom.read_bytes()
+    combined = bytearray(emulator_path.read_bytes())
+    print(f"  -> {rom_path.name}")
+    combined += rom_path.read_bytes()
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -31,7 +24,7 @@ def build_goomba_rom(emulator_path: Path, rom_paths: list[Path], output_path: Pa
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Simple Goomba ROM builder (concat mode)")
+    parser = argparse.ArgumentParser(description="Goomba ROM builder")
 
     parser.add_argument(
         "-e", "--emulator",
@@ -46,16 +39,15 @@ def main():
     )
 
     parser.add_argument(
-        "roms",
-        nargs="+",
-        help="GB/GBC ROM(s)"
+        "rom",
+        help="GB/GBC ROM"
     )
 
     args = parser.parse_args()
 
     build_goomba_rom(
         Path(args.emulator),
-        [Path(r) for r in args.roms],
+        Path(args.rom),
         Path(args.output)
     )
 

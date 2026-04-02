@@ -12,19 +12,10 @@ static const char sram_id[] __attribute__((used, aligned(4))) = "SRAM_Vnnn";
 #define COLOR_ZERO_TILES (u16*)(MEM_VRAM+0xC000)
 
 
-#if MOVIEPLAYER
-int usinggbamp;
-int usingcache;
-//File rom_file=NO_FILE;
-char save_slot;
-#endif
-
-//EWRAM_BSS int ui_y;
 EWRAM_BSS u32 oldinput;
 EWRAM_BSS u8 *textstart;//points to first GB rom (initialized by boot.s)
 EWRAM_BSS u8 *ewram_start;//points to first NES rom (initialized by boot.s)
 EWRAM_BSS int roms;//total number of roms
-EWRAM_BSS int selectedrom=0;
 #if POGOSHELL
 EWRAM_BSS char pogoshell_romname[32];	//keep track of rom name (for state saving, etc)
 EWRAM_BSS char pogoshell=0;
@@ -249,15 +240,6 @@ void C_entry()
 	SerialIn = 0;
 	#endif
 
-	// The maximal space
-	#if CARTSRAM
-	{
-		//buffer1=(ewram_start);
-		//buffer2=(ewram_start+0x10000);
-		//buffer3=(ewram_start+0x20000);
-	}
-	#endif
-
 	#if POGOSHELL
 	if(!pogoshell)
 	#endif
@@ -266,10 +248,6 @@ void C_entry()
 		u8 *p;
 		u8 *q;
 
-		#if MOVIEPLAYER
-		if (!disc_IsInserted())
-		{
-		#endif
 		#if SPLASH
 		bool wantToSplash = false;
 		const u16 *splashImage = NULL;
@@ -281,44 +259,24 @@ void C_entry()
 		if(*(u32*)(p+0x104)!=gbx_id) {
 			wantToSplash = true;
 			splashImage = (const u16*)textstart;
-			//splash();
 			textstart+=76800;
 		}
-		#endif	
+		#endif
 
-		i=-1;
+		roms=1;
 		p=textstart;
-		//count roms
-		do
-		{
-			#if USETRIM
-			if(*((u32*)p)==TRIM)
-			{
-				q=p+((u32*)p)[2];
-				p=p+((u32*)p)[1];
-			}
-			else
-			#endif
-			{
-				q=p;
-				p+=(0x8000<<(*(p+0x148)));
-			}
-			i++;
-		} while (*(u32*)(q+0x104)==gbx_id);
-		roms=i;
-		if(!i)roms=1;					//Stop Goomba from crashing if there are no ROMs
-		
-		if (i == 0)
+		#if USETRIM
+		if(*((u32*)p)==TRIM) q=p+((u32*)p)[2];
+		else
+		#endif
+		q=p;
+		if(*(u32*)(q+0x104)!=gbx_id)
 		{
 			get_ready_to_display_text();
 			cls(3);
 			ui_x=0;
 			move_ui();
-			drawtext(0,"No ROMS found!",0);
-			drawtext(1,"Use Goomba Front",0);
-			drawtext(2,"to build a compilation ROM,",0);
-			drawtext(3,"or use Pogoshell with a",0);
-			drawtext(4,"supported flash cartridge.",0);
+			drawtext(0,"No ROM found!",0);
 			drawtext(19,"Goomba Color " VERSION,0);
 			while (1)
 			{
@@ -329,10 +287,6 @@ void C_entry()
 		{
 			splash(splashImage);
 		}
-		
-		#if MOVIEPLAYER
-		}
-		#endif
 	}
 	
 	//Fade either from white, or from whatever bitmap is visible
@@ -421,53 +375,6 @@ void splash(const u16 *splashImage)
 }
 #endif
 
-#if MOVIEPLAYER
-int get_saved_sram()
-{
-	return get_saved_sram_CF(SramName);
-}
-
-int get_saved_sram_CF(char* sramname)
-{
-	if(g_cartflags&2 && g_rammask!=0)
-	{	//if rom uses SRAM
-		File file;
-		file=FAT_fopen(sramname,"r");
-		if (file!=NO_FILE)
-		{
-#if !RESIZABLE
-#define XGB_sram XGB_SRAM
-#endif
-			FAT_fread(XGB_sram,1,g_rammask+1,file);
-			FAT_fclose(file);
-			return 1;
-		}
-		return 2;
-	}
-	else
-	{
-		return 0;
-	}
-}
-int save_sram_CF(char* sramname)
-{
-	if(g_cartflags&2 && g_rammask!=0)
-	{	//if rom uses SRAM
-		File file;
-		file=FAT_fopen(sramname,"r+");
-		if (file==NO_FILE)
-			file=FAT_fopen(sramname,"w");
-		if (file!=NO_FILE)
-		{
-			FAT_fwrite(XGB_sram,1,g_rammask+1,file);
-			FAT_fclose(file);
-		}
-		return 1;
-	}
-	return 0;
-}
-#endif
-
 void jump_to_rommenu(void)
 {
 #if GCC
@@ -502,88 +409,7 @@ void rommenu(void)
 	backup_gb_sram(0); //includes emergency delete menu
 #endif
 
-#if MOVIEPLAYER
-	if (disc_IsInserted())
-	{
-		File file;
-		usinggbamp=1;
-		if (rom_file!=NO_FILE)
-		{
-			FAT_fclose(rom_file);
-		}
-		file=cfmenu();
-		rom_file=file;
-		cls(3);
-		
-		loadcart(0,g_emuflags&0x300);
-	}
-	else
-#endif
-
-#if POGOSHELL
-	if(pogoshell)
-	{
-		loadcart(0,g_emuflags&0x300);
-	}
-	else
-#endif
-	{
-		int i,lastselected=-1;
-		int key;
-
-		int romz=roms;	//globals=bigger code :P
-		int sel=selectedrom;
-
-		oldinput=AGBinput=~REG_P1;
-
-		if(romz>1){
-			i=drawmenu(sel);
-			loadcart(sel,i|(g_emuflags&0x300));  //(keep old gfxmode)
-			lastselected=sel;
-			for(i=0;i<8;i++)
-			{
-				ui_x=224-i*32;
-				move_ui_wait();
-			}
-			waitframe();
-			setdarkness(7);			//Lighten screen
-		}
-		do {
-			key=getinput();
-			if(key&RIGHT) {
-				sel+=10;
-				if(sel>romz-1) sel=romz-1;
-			}
-			if(key&LEFT) {
-				sel-=10;
-				if(sel<0) sel=0;
-			}
-			if(key&UP)
-				sel=sel+romz-1;
-			if(key&DOWN)
-				sel++;
-			selectedrom=sel%=romz;
-			if(lastselected!=sel) {
-				i=drawmenu(sel);
-				loadcart(sel,i|(g_emuflags&0x300));  //(keep old gfxmode)
-				lastselected=sel;
-			}
-			run(0);
-		} while(romz>1 && !(key&(A_BTN+B_BTN+START)));
-		for(i=1;i<9;i++)
-		{
-			setdarkness(8-i);		//Lighten screen
-			ui_x=i*32;
-			move_ui_scroll();
-			run(0);
-			move_ui_expose();
-		}
-		cls(3);	//leave BG2 on for debug output
-		while(AGBinput&(A_BTN+B_BTN+START)) {
-			AGBinput=0;
-			run(0);
-		}
-	}
+	loadcart(0,g_emuflags&0x300);
 #if CARTSRAM
 	if(autostate)quickload();
 #endif
@@ -593,41 +419,11 @@ void rommenu(void)
 	//run(1);
 }
 
-#if MOVIEPLAYER
-u8 *findrom(int n)
-{
-	return cache_location[0];
-}
-
-u8 *findrom2(int n)
-{
-	return cache_location[0];
-}
-#else
-
 //returns the start address of the ROM (including TRIM header)
 u8 *findrom2(int n)
 {
-	u8 *p=textstart;
-#if POGOSHELL
-	if (pogoshell) return p;
-#endif
-	while(n--)
-	{
-#if USETRIM
-		if (*((u32*)p)==TRIM) //trimmed
-		{
-			p+=((u32*)p)[1];
-		}
-		else
-		{
-			p+=(0x8000<<(*(p+0x148)));
-		}
-#else
-		p+=(0x8000<<(*(p+0x148)));
-#endif
-	}
-	return p;
+	(void)n;
+	return textstart;
 }
 
 //returns the first page of the ROM
@@ -642,179 +438,6 @@ u8 *findrom(int n)
 #endif
 	return p;
 }
-#endif
-
-char *getcartname(u8 *rom_base)
-{
-	//assigns cartridge name (with gamecode removed) to global variable, str
-	bool gbcmode;
-	char *cartname;
-	int i;
-	bool anyzeroes;
-
-	cartname=str;
-	strncpy(cartname,(char*)(rom_base+0x134),16);
-	cartname[16]=0;
-	gbcmode=rom_base[0x143] >= 0x80;
-	if (gbcmode)
-	{
-		cartname[15]=0;
-		anyzeroes=false;
-		for (i=11;i<=14;i++)
-		{
-			if (cartname[i]==0)
-			{
-				anyzeroes=true;
-				break;
-			}
-		}
-		if (!anyzeroes)
-		{
-			for (i=11;i<=14;i++)
-			{
-				cartname[i]=0;
-			}
-		}
-	}
-	return cartname;
-}
-
-//returns options for selected rom
-int drawmenu(int sel)
-{
-	int i,j,topline,toprow,romflags=0;
-	int top_displayed_line=0;
-	u8 *p;
-//	romheader *ri;
-
-	if(roms>20) {
-		topline=8*(roms-20)*sel/(roms-1);
-		toprow=topline/8;
-		j=(toprow<roms-20)?21:20;
-
-		ui_y=topline%8;
-	} else {
-		int ui_row;
-		
-		ui_row = (160-roms*8)/2;
-		ui_row/=4;
-		if (ui_row&1)
-		{
-			ui_y=4;
-			ui_row++;
-		}
-		ui_row/=2;
-		top_displayed_line=ui_row;
-
-		toprow=0;
-		j=roms;
-	}
-
-	move_ui_wait();
-
-	for(i=0;i<j;i++)
-	{
-		char *cartname;
-		p=findrom(toprow+i);
-		cartname=getcartname(p);
-		if(roms>1)drawtextl(i+top_displayed_line,cartname,i==(sel-toprow)?1:0,16);
-		if(i==sel-toprow) {
-			//ri=(romheader*)p;
-			//romflags=(*ri).flags|(*ri).spritefollow<<16;
-		}
-	}
-	return romflags;
-}
-
-int getinput()
-{
-	static int lastdpad,repeatcount=0;
-	int dpad;
-	int keyhit=(oldinput^AGBinput)&AGBinput;
-	oldinput=AGBinput;
-
-	dpad=AGBinput&(UP+DOWN+LEFT+RIGHT);
-	if(lastdpad==dpad) {
-		repeatcount++;
-		if(repeatcount<25 || repeatcount&3)	//delay/repeat
-			dpad=0;
-	} else {
-		repeatcount=0;
-		lastdpad=dpad;
-	}
-	EMUinput=0;	//disable game input
-	return dpad|(keyhit&(A_BTN+B_BTN+START));
-}
-/*
-void move_ui()
-{
-	ui_y_real = ui_y;
-	move_ui_asm();
-}
-
-void cls(int chrmap)
-{
-	int i,len;
-	u32 *scr=(u32*)SCREENBASE;
-	if (chrmap&1)
-	{
-		len=0x540/4;
-		for(i=0;i<len;i++)				//512x256
-		{
-			scr[i]=0x00000000;
-		}
-	}
-	if(chrmap&2)
-	{
-		len=0x540/4+0x200;
-		for(i=0x200;i<len;i++)				//512x256
-		{
-			scr[i]=0x00000000;
-		}
-	}
-	ui_y=0;
-	move_ui();
-}
-*/
-
-/*
-void drawtext(int row,char *str,int hilite)
-{
-	drawtextl(row,str,hilite,29);
-}
-void drawtextl(int row,char *str,int hilite,int len)
-{
-	u16 *here=SCREENBASE+row*32;
-	int i=0;
-
-	*here=hilite?0x500a:0x5000;
-	hilite=(hilite<<12)+0x5000;
-	here++;
-	while(str[i]>=' ' && i<len) {
-		here[i]=(str[i]-32)|hilite;
-		i++;
-	}
-	for(;i<31;i++)
-		here[i]=0x5000;
-}
-*/
-/*
-void setdarkness(int dark)
-{
-	darkness=dark;
-	//int ui_layer_bit=(ui_border_visible==3 ? 4 : 8);
-	//REG_BLDMOD=0x1FF ^ ui_layer_bit;
-	//REG_BLDY=dark;					//Darken screen
-	//REG_BLDALPHA=(0x10-dark)<<8;	//set blending for OBJ affected BG0
-}
-
-void setbrightnessall(int light)
-{
-	darkness=light|0x80;
-//	REG_BLDMOD=0x00bf;				//brightness increase all
-//	REG_BLDY=light;
-}
-*/
 
 #if 0
 void make_ui_visible()

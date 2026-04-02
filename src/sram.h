@@ -31,8 +31,6 @@ void getsram(void);
 
 u32 checksum_this(void);
 u32 checksum_mem(u8 *p);
-u32 checksum_romnum(int romNumber);
-//u32 checksum(u8 *p);
 
 void writeerror(void);
 int updatestates(int index,int erase,int type);
@@ -50,7 +48,6 @@ int get_saved_sram(void);
 void register_sram_owner(void);
 void no_sram_owner(void);
 void setup_sram_after_loadstate(void);
-int find_rom_number_by_checksum(u32 sum);
 void loadstatemenu(void);
 void writeconfig(void);
 void readconfig(void);
