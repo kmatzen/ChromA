@@ -632,13 +632,6 @@ int findstate(u32 checksum,int type,stateheader **stateptr)
 }
 
 int using_flashcart() {
-#if MOVIEPLAYER
-	if (usingcache)
-	{
-		return 0;
-	}
-#endif
-
 	return (u32)textstart&0x8000000;
 }
 

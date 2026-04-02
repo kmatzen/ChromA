@@ -9,9 +9,6 @@
 
 #define VERSION "v0.5"
 
-//#define LITTLESOUNDDJ 0
-//Little Sound DJ Hack requires M3/G6/Supercard
-
 //DEFAULT settings
 #define RTCSUPPORT 1
 #define ROMVERSION 1

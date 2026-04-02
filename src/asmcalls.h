@@ -46,16 +46,6 @@ extern u8 Image$$RW$$Limit[];
 extern u32 max_multiboot_size;
 
 //gbz80.s
-#if SPEEDHACKS_OLD
-extern u32 SPEEDHACK_FIND_JR_Z_BUF[16];
-extern u32 SPEEDHACK_FIND_JR_NZ_BUF[16];
-extern u32 SPEEDHACK_FIND_JR_C_BUF[16];
-extern u32 SPEEDHACK_FIND_JR_NC_BUF[16];
-extern u8 g_hackflags;
-extern u8 g_hackflags2;
-
-#endif
-
 void update_doublespeed_ui(void);
 
 void emu_reset(void);
