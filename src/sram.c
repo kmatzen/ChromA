@@ -928,16 +928,7 @@ int savestate2()
 	sh->uncompressed_size=stateSize + sramSize;	//size of compressed state
 	sh->framecount=frametotal;
 	sh->checksum=checksum_this();	//checksum
-#if POGOSHELL
-    if(pogoshell)
-    {
-		strcpy(sh->title,pogoshell_romname);
-    }
-    else
-#endif
-    {
-		strncpy(sh->title,(char*)findrom(romnum)+0x134,15);
-    }
+	strncpy(sh->title,(char*)findrom(romnum)+0x134,15);
 	uncompressed_save = NULL;
 	lzo_workspace = NULL;
 
