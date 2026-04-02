@@ -157,6 +157,8 @@ thumbcall_r1: bx r1
 @----------------------------------------------------------------------------
 gettime:	@called from ui.c and mappers.s
 @----------------------------------------------------------------------------
+	@ Try hardware RTC first (flash carts with RTC at 0x080000C4).
+	@ If the result looks invalid, fall back to software RTC (rtc.c).
 	ldr r3,=0x080000c4		@base address for RTC
 	mov r1,#1
 	strh r1,[r3,#4]			@enable RTC
@@ -211,10 +213,26 @@ RTCLoop3:
 	orr r0,r0,r1,lsl#22
 	subs addy,addy,#1
 	bne RTCLoop3
+
+	@ r2 = date word, r0 = time word.
+	@ Validate: if both are 0 or 0xFFFFFFFF, no hardware RTC present.
+	cmp r2,#0
+	cmpeq r0,#0
+	beq gettime_software		@all zeros → no RTC
+	mvn r1,#0
+	cmp r2,r1
+	cmpeq r0,r1
+	beq gettime_software		@all ones → no RTC
+
+	@ Hardware RTC valid — store and return
 	str_ r2,mapperdata+24
 	str_ r0,mapperdata+28
-
 	bx lr
+
+gettime_software:
+	@ No hardware RTC — delegate to software RTC in rtc.c
+	ldr r0,=gettime_sw
+	bx r0
 
  .section .iwram.1, "ax", %progbits
 

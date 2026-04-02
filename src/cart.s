@@ -29,6 +29,7 @@
 	.global g_emuflags
 	.global g_sramsize
 	.global g_rammask
+	.global mapperstate
 	.if RESIZABLE
 	.else
 	.global XGB_SRAM
