@@ -101,6 +101,16 @@ debugwait:
 @	b _GO
 
 @----------------------------------------------------------------------------
+jr_fixup:@	JR crossed out of current bank — re-encode PC
+@		gb_pc is the wrong ARM pointer (below lastbank).
+@		Decode to 16-bit logical address and re-encode.
+@----------------------------------------------------------------------------
+	sub gb_pc,gb_pc,r1		@logical addr (negative, wraps in 16-bit)
+	mov gb_pc,gb_pc,lsl#16
+	mov gb_pc,gb_pc,lsr#16		@mask to 16 bits (e.g., -8 → 0xFFF8)
+	encodePC
+	fetch 0				@cycles already accounted for by caller
+@----------------------------------------------------------------------------
 _xx:@	???					;invalid opcode
 @----------------------------------------------------------------------------
 	.if DEBUG
@@ -253,6 +263,9 @@ _18:@	JR *	relative jump
 @----------------------------------------------------------------------------
 	ldrsb r0,[gb_pc],#1
 	add gb_pc,gb_pc,r0
+	ldr_ r1,lastbank
+	cmp gb_pc,r1
+	blo jr_fixup
 	fetch 12
 #if SPEEDHACKS_NEW
 @----------------------------------------------------------------------------
@@ -310,8 +323,12 @@ _20:@	JR NZ,*	jump if not zero
 @----------------------------------------------------------------------------
 	tst gb_flg,#PSR_Z
 	ldrsb r0,[gb_pc],#1
-	addeq gb_pc,gb_pc,r0
-	subeq cycles,cycles,#4*CYCLE
+	bne nobranch			@Z set → don't jump
+	add gb_pc,gb_pc,r0
+	sub cycles,cycles,#4*CYCLE
+	ldr_ r1,lastbank
+	cmp gb_pc,r1
+	blo jr_fixup
 nobranch:
 	fetch 8
 #if SPEEDHACKS_NEW
@@ -387,11 +404,12 @@ _28:@	JR Z,*	jump if zero
 @----------------------------------------------------------------------------
 	tst gb_flg,#PSR_Z
 	ldrsb r0,[gb_pc],#1
-@	beq _28_
-	addne gb_pc,gb_pc,r0
-	subne cycles,cycles,#4*CYCLE
-@	cmp r0,#-4
-@	andeq cycles,cycles,#CYC_MASK
+	beq _28_
+	add gb_pc,gb_pc,r0
+	sub cycles,cycles,#4*CYCLE
+	ldr_ r1,lastbank
+	cmp gb_pc,r1
+	blo jr_fixup
 _28_:
 	fetch 8
 
@@ -557,9 +575,13 @@ _30:@	JR NC,*	jump if no carry
 @----------------------------------------------------------------------------
 	tst gb_flg,#PSR_C
 	ldrsb r0,[gb_pc],#1
-	addeq gb_pc,gb_pc,r0
-	subeq cycles,cycles,#4*CYCLE
-	fetch 8
+	bne 1f
+	add gb_pc,gb_pc,r0
+	sub cycles,cycles,#4*CYCLE
+	ldr_ r1,lastbank
+	cmp gb_pc,r1
+	blo jr_fixup
+1:	fetch 8
 #if SPEEDHACKS_NEW
 @----------------------------------------------------------------------------
 _30x:@	JR NC,*	jump if no carry - speedhack version
@@ -624,9 +646,13 @@ _38:@	JR C,*	jump if carry
 @----------------------------------------------------------------------------
 	tst gb_flg,#PSR_C
 	ldrsb r0,[gb_pc],#1
-	addne gb_pc,gb_pc,r0
-	subne cycles,cycles,#4*CYCLE
-	fetch 8
+	beq 1f
+	add gb_pc,gb_pc,r0
+	sub cycles,cycles,#4*CYCLE
+	ldr_ r1,lastbank
+	cmp gb_pc,r1
+	blo jr_fixup
+1:	fetch 8
 #if SPEEDHACKS_NEW
 @----------------------------------------------------------------------------
 _38x:@	JR C,*	jump if carry - speedhack version
