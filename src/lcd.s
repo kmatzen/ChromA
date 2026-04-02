@@ -3829,31 +3829,23 @@ FF41_W:@		LCD Status
 	bxeq lr
 	strb r2,lcdstat
 	strb r2,lcdstat2
-	b lcdyc_check
 
-#if 0	
-	ands r1,r2,r0       @which bits have changed from 0 to 1?
-	ldrb_ r0,lcdyc
-	tst r1,#0x28		@turned on HBLANK or MODE 2 interrupt?
-	beq lcdyc_check
-0:	
-	@TODO: real hblank interrupts
-	@in hblank time?  No HBLANK or MODE 2 interrupt now.
-	and r1,r2,#3
+	@ Check if mode 0/2 interrupt bits just became enabled (0→1).
+	@ If so and we're not in VBlank, fire STAT interrupt immediately
+	@ (real GB behavior: writing STAT can trigger the interrupt line).
+	ands r1,r2,r0		@r1 = bits that are now 1 AND changed
+	tst r1,#0x28		@mode 0 (bit 3) or mode 2 (bit 5) enabled?
+	beq lcdyc_check		@no → just check LYC
+	and r1,r2,#0x03		@current mode from STAT
 	cmp r1,#0x01
-	beq lcdyc_check
-	
+	beq lcdyc_check		@mode 1 (VBlank) → no trigger
 	ldrb_ r1,gb_if
-	orr r1,r1,#0x02
+	orr r1,r1,#0x02		@set LCD STAT interrupt
 	strb_ r1,gb_if
-	
 	stmfd sp!,{lr}
 	bl lcdyc_check
-	bl immediate_check_irq
+	bl_long immediate_check_irq
 	ldmfd sp!,{pc}
-	
-@	mov pc,lr
-#endif
 
 FF41_R_vblank_hack:
 	sub cycles,cycles,#21*CYCLE
