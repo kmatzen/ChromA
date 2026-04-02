@@ -50,6 +50,7 @@ What this GB/GBC emulator implements, what it's missing, and why.
 - Per-scanline rendering with HBlank DMA for mid-frame register changes
 - LCDC all bits including mid-frame sprite size/enable tracking
 - STAT mode flags (cycle-based thresholds, self-modifying for double speed)
+- STAT mode 0/2 interrupts (HBlank and OAM, fired per-scanline when enabled)
 - LYC=LY coincidence interrupt with 0→1 edge detection
 - LY (FF44) sub-scanline correction (+1 when near scanline boundary)
 - Window rendering (WX, WY) with per-scanline buffering
@@ -68,11 +69,6 @@ What this GB/GBC emulator implements, what it's missing, and why.
 > cgb-acid2 shows minor "eye artifacts." GBA priority system doesn't map
 > 1:1 to CGB rules. Would need per-pixel software compositing — too slow
 > on the 16MHz ARM7.
-
-**STAT mode 0/2 interrupts disabled** — UNCLEAR
-> HBlank and OAM mode-change interrupt code is disabled (`#if 0` in lcd.s).
-> Only LYC=LY and VBlank STAT interrupts are active. Most games use VBlank
-> and LYC, not mode 0/2 interrupts.
 
 **Per-scanline palette flicker** — NOT FEASIBLE
 > Games that update palettes every scanline (e.g., Hercules GBC) get
@@ -195,7 +191,6 @@ No link cable multiplayer or printer support.
 |-----|--------|-----|
 | RST 38h timing | UNCLEAR | No test ROM, may not be a real bug |
 | CGB BG/OBJ priority | NOT FEASIBLE | Needs per-pixel compositing |
-| STAT mode 0/2 interrupts | UNCLEAR | Disabled intentionally, low impact |
 | Per-scanline palette desync | NOT FEASIBLE | Fundamental cycle ratio |
 | Per-dot rendering | NOT FEASIBLE | Complete rewrite |
 | Software audio | NOT FEASIBLE | No CPU budget |
