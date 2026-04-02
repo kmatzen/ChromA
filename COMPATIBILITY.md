@@ -7,7 +7,7 @@ What this GB/GBC emulator implements, what it's missing, and why.
 | Test | Result | Notes |
 |------|--------|-------|
 | Blargg cpu_instrs | **PASS** | All 11 instruction tests |
-| Blargg instr_timing | FAIL | RST 38h timing (cause unclear) |
+| Blargg instr_timing | FAIL | TIMA interpolation drift, not an RST bug (same root cause as mem_timing) |
 | Blargg mem_timing | FAIL | TIMA overflow detection still per-scanline |
 | Blargg mem_timing2 | FAIL | Same |
 | cgb-acid2 | **PASS** | Minor BG/OBJ priority eye artifacts |
@@ -15,6 +15,7 @@ What this GB/GBC emulator implements, what it's missing, and why.
 | Sprite limit test | **PASS** | Custom ROM validates 10/line limit |
 | Timer accuracy test | **PASS** | Custom ROM validates sub-scanline DIV reads |
 | JR HRAM test | **PASS** | Custom ROM validates cross-bank JR |
+| RST timing test | **PASS** | Custom ROM validates all 8 RST variants match (16 cycles) |
 | 16 game regression tests | **PASS** | Crystal, Shantae, Zelda DX, Kirby, etc. |
 
 ---
@@ -37,10 +38,14 @@ What this GB/GBC emulator implements, what it's missing, and why.
 > attempted but hangs games at boot (games use STOP during init without
 > interrupts enabled). No known game depends on exact STOP wait behavior.
 
-**RST 38h timing** — UNCLEAR
-> Blargg's instr_timing test fails on RST 38h. The instruction uses
-> `fetch 16` which matches documentation. No test ROM available to
-> investigate. May be a cycle-counting methodology difference.
+**Blargg instr_timing fails on RST 38h** — NOT AN RST BUG
+> A custom test ROM confirms all 8 RST variants have identical timing
+> (16 T-cycles) matching native mGBA. Blargg's test uses TIMA at
+> 262144 Hz (4 T-cycle granularity) for measurement, but jagoomba
+> updates TIMA per-scanline with sub-scanline interpolation on reads.
+> The synchronization loop in Blargg's test misaligns with interpolated
+> TIMA values, causing accumulated error that manifests at opcode 0xFF
+> (tested last). Same root cause as mem_timing failures.
 
 ---
 
@@ -189,7 +194,7 @@ No link cable multiplayer or printer support.
 
 | Gap | Status | Why |
 |-----|--------|-----|
-| RST 38h timing | UNCLEAR | No test ROM, may not be a real bug |
+| Blargg instr_timing | NOT AN RST BUG | TIMA interpolation drift, same as mem_timing |
 | CGB BG/OBJ priority | NOT FEASIBLE | Needs per-pixel compositing |
 | Per-scanline palette desync | NOT FEASIBLE | Fundamental cycle ratio |
 | Per-dot rendering | NOT FEASIBLE | Complete rewrite |
