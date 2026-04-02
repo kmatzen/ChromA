@@ -1854,20 +1854,7 @@ _10:@	STOP	stops the processor until an (joypad) interrupt.
 	ldrb_ r0,doublespeed
 	tst r0,#1
 	blne_long speedswitch
-	
-@	b _noStop
-@@	b _76 ;halt instead?
-@	ldrb r1,gb_ime
-@	tst r1,#1			;no Halt if IRQ disabled.
-@	beq _noStop
-@	ldrb r0,gb_ic		;interrupt confirm
-@	cmp r0,#0
-@	movne r0,#0
-@	strneb r0,gb_ic
-@	subeq gb_pc,gb_pc,#1
-@	moveq cycles,#0
-@_noStop
-	add gb_pc,gb_pc,#1
+	add gb_pc,gb_pc,#1		@skip the byte after STOP
 	fetch 4
 
 	.ltorg
