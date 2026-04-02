@@ -60,23 +60,13 @@ int text2_str(int row)
 #define print_2_1(xxxx) row=text2(row,(xxxx));
 
 const fptr multifnlist[]={autoBset,autoAset,ui3,ui2,ui4,
-#if MULTIBOOT
-multiboot,
-#endif
 sleep_,restart,exit_};
 
 const fptr fnlist1[]={autoBset,autoAset,ui3,ui2,ui4,
-#if MULTIBOOT
-multiboot,
-#endif
 #if CARTSRAM
 savestatemenu,loadstatemenu,managesram,
 #endif
-sleep_,
-#if GOMULTIBOOT
-go_multiboot,
-#endif
-restart,exit_};
+sleep_,restart,exit_};
 
 const fptr fnlist2[]={vblset,fpsset,sleepset,swapAB,autostateset,
 gbtype,changeautoborder,gbatype};
@@ -356,9 +346,6 @@ void drawui1()
 	print_1_1("Display->");
 	print_1_1("Other Settings->");
 	print_1_1("Speed Hacks->");
-#if MULTIBOOT
-	print_1_1("Link Transfer");
-#endif
 	if(mainmenuitems==ARRSIZE(multifnlist)) {
 		print_1_1("Sleep");
 	} else {
@@ -368,9 +355,6 @@ void drawui1()
 		print_1_1("Manage SRAM->");
 #endif
 		print_1_1("Sleep");
-#if GOMULTIBOOT
-		print_1_1("Go Multiboot");
-#endif
 	}
 	print_1_1("Restart");
 	print_1_1("Exit");
@@ -502,25 +486,6 @@ void brightset()
 	g_update_border_palette=1;
 	transfer_palette();				//make new palette visible
 }
-
-#if MULTIBOOT
-void multiboot()
-{
-	int i;
-	cls(1);
-	drawtext(9,"          Sending...",0);
-	i=SendMBImageToClient();
-	if(i) {
-		if(i<3)
-			drawtext(9,"         Link error.",0);
-		else
-			drawtext(9,"  Game is too big to send.",0);
-		if(i==2) drawtext(10,"       (Check cable?)",0);
-		for(i=0;i<90;i++)			//wait a while
-			waitframe();
-	}
-}
-#endif
 
 void restart()
 {
@@ -667,96 +632,3 @@ void changelcdhack()
 	if (g_lcdhack>=4) g_lcdhack=0;
 	update_lcdhack();
 }
-#if GOMULTIBOOT
-void go_multiboot()
-{
-#if ROMVERSION
-	u8* rom_addr;
-	u32 max_mb_size=128*1024;
-	u32 romsize;
-	u8 *emu_src=(u8*)goomba_mb_gba;
-	u8 *emu_dest=(u8*)0x02000000;
-	u32 emu_size=GOOMBA_MB_GBA_SIZE;
-	int i;
-	int key;
-	
-	rom_addr=(u8*)findrom(0);
-	romsize = (0x8000 << (*(rom_addr+0x148)));
-	if (romsize>max_mb_size)
-	{
-		cls(1);
-		drawtext(8, "Game is too big to multiboot",0);
-		for(i=0;i<90;i++)			//wait a while
-		{
-			waitframe();
-		}
-		return;
-	}
-	else
-	{
-		cls(1);
-		drawtext(8, "This will reset the emulator!",0);
-		drawtext(9, "       Are you sure?",0);
-		drawtext(10,"        A=YES, B=NO",0);
-		oldkey=~REG_P1;			//reset key input
-		do {
-			key=getmenuinput(10);
-			if(key&(B_BTN + R_BTN + L_BTN ))
-				return;
-		} while(!(key&(A_BTN)));
-		oldkey=~REG_P1;			//reset key input
-	}
-	REG_IME=0;
-	REG_DM0CNT_H=0;
-	REG_DM1CNT_H=0;
-	REG_DM2CNT_H=0;
-	REG_DM3CNT_H=0;
-	memcpy(emu_dest,emu_src,emu_size);
-	memcpy(emu_dest+emu_size,rom_addr,romsize);
-	jump_r0(0x02000000);
-#else
-	u8 *src, *dest;
-	int size;
-	int key;
-	int romsize;
-	int i;
-
-	src=(u8*)findrom(0);
-	dest=ewram_start;
-	romsize = (0x8000 << (*(src+0x148)));
-	
-	size=max_multiboot_size;
-	if (romsize>size)
-	{
-		cls(1);
-		drawtext(8, "Game is too big to multiboot",0);
-		for(i=0;i<90;i++)			//wait a while
-		{
-			waitframe();
-		}
-		return;
-	}
-	else
-	{
-		cls(1);
-		drawtext(8, "This will reset the emulator!",0);
-		drawtext(9, "       Are you sure?",0);
-		drawtext(10,"        A=YES, B=NO",0);
-		oldkey=~REG_P1;			//reset key input
-		do {
-			key=getmenuinput(10);
-			if(key&(B_BTN + R_BTN + L_BTN ))
-				return;
-		} while(!(key&(A_BTN)));
-		oldkey=~REG_P1;			//reset key input
-	}
-
-	memcpy (dest,src,size);
-	textstart=dest;	
-	loadcart(0,g_emuflags&0x300);
-	mainmenuitems=MENUXITEMS[1];
-#endif
-}
-#endif
-
-

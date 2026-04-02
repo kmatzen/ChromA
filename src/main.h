@@ -7,8 +7,6 @@
 
 #define TRIM 0x4D495254
 
-extern u32 max_multiboot_size;
-
 extern u32 oldinput;
 extern u8 *textstart;//points to first GB rom (initialized by boot.s)
 extern u8 *ewram_start;//points to first NES rom (initialized by boot.s)

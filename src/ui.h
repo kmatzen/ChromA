@@ -32,7 +32,6 @@ void sleepset(void);
 void vblset(void);
 void fpsset(void);
 void brightset(void);
-void multiboot(void);
 void restart(void);
 void exit_(void);
 void sleep_(void);
@@ -44,7 +43,6 @@ void gbtype(void);
 void gbatype(void);
 void sgbpalnum(void);
 void timermode(void);
-void go_multiboot(void);
 void changeautoborder(void);
 void changelcdhack(void);
 
