@@ -4,9 +4,7 @@ EWRAM_BSS u8 autoA,autoB;				//0=off, 1=on, 2=R
 EWRAM_BSS u8 stime=0;
 EWRAM_BSS u8 autostate=0;
 EWRAM_BSS int main_ui_selection;
-//EWRAM_BSS int selected;//selected menuitem.  used by all menus.
-EWRAM_BSS int mainmenuitems;//? or CARTMENUITEMS, depending on whether saving is allowed
-//EWRAM_BSS u32 oldkey;//init this before using getmenuinput
+EWRAM_BSS int mainmenuitems;
 
 #ifndef ARRSIZE
 #define ARRSIZE(xxxx) (sizeof((xxxx))/sizeof((xxxx)[0]))
@@ -16,11 +14,7 @@ int savestate(void* dest){return 0;}
 void loadstate(int foo, void* dest){}
 
 #if !CARTSRAM
-//void savestatemenu(){} void loadstatemenu(){} void managesram(){}
 void quicksave(){} void quickload(){}
-#endif
-#if !MULTIBOOT
-//void multiboot(){}
 #endif
 
 EWRAM_BSS char str[32]; //ZOMG global variable!
@@ -29,9 +23,6 @@ int print_1_func(int row, const char *src1, const char *src2);
 int strmerge_str(int unused, const char *src1, const char *src2);
 int text2_str(int row);
 int text1_str(int row);
-//#if CHEATFINDER
-//int print_cheatfinder_line_func(int row, const char *oper, int value);
-//#endif
 
 int print_1_func(int row,const char *src1,const char *src2)
 {
@@ -68,15 +59,6 @@ int text2_str(int row)
 #define print_1_1(xxxx) row=text(row,(xxxx));
 #define print_2_1(xxxx) row=text2(row,(xxxx));
 
-//#define MENU2ITEMS 8+SPEEDHACKS_OLD			//othermenu items
-//#define MENU3ITEMS 3			//displaymenu items
-//
-////mainmenuitems when running from cart (not multiboot)
-//#define CARTMENUITEMS 7+MULTIBOOT+GOMULTIBOOT+(CARTSRAM*3)
-//#define MULTIBOOTMENUITEMS 7+MULTIBOOT	//"" when running from multiboot
-//
-//const char MENUXITEMS[]={CARTMENUITEMS,MULTIBOOTMENUITEMS,MENU2ITEMS,MENU3ITEMS};
-
 const fptr multifnlist[]={autoBset,autoAset,ui3,ui2,ui4,
 #if MULTIBOOT
 multiboot,
@@ -97,17 +79,10 @@ go_multiboot,
 restart,exit_};
 
 const fptr fnlist2[]={vblset,fpsset,sleepset,swapAB,autostateset,
-#if SPEEDHACKS_OLD
-autodetect_speedhack,
-#endif
 gbtype,changeautoborder,gbatype};
 const fptr fnlist3[]={chpalette,brightset,sgbpalnum};
 
-const fptr fnlist4[]={
-#if SPEEDHACKS_OLD
-autodetect_speedhack,
-#endif
-timermode,changelcdhack}; //,changedmamode};
+const fptr fnlist4[]={timermode,changelcdhack};
 
 const fptr *const fnlistX[]={fnlist1,multifnlist,fnlist2,fnlist3,fnlist4};
 const fptr drawuiX[]={drawui1,drawui1,drawui2,drawui3,drawui4};
@@ -115,36 +90,6 @@ const char MENUXITEMS[]=
 {
 	ARRSIZE(fnlist1),ARRSIZE(multifnlist),ARRSIZE(fnlist2),ARRSIZE(fnlist3),ARRSIZE(fnlist4)
 };
-
-/*
-u32 getmenuinput(int menuitems)
-{
-	u32 keyhit;
-	u32 tmp;
-	int sel=selected;
-
-	waitframe();		//(polling REG_P1 too fast seems to cause problems)
-	tmp=~REG_P1;
-	keyhit=(oldkey^tmp)&tmp;
-	oldkey=tmp;
-	if(keyhit&UP)
-		sel=(sel+menuitems-1)%menuitems;
-	if(keyhit&DOWN)
-		sel=(sel+1)%menuitems;
-	if(keyhit&RIGHT) {
-		sel+=10;
-		if(sel>menuitems-1) sel=menuitems-1;
-	}
-	if(keyhit&LEFT) {
-		sel-=10;
-		if(sel<0) sel=0;
-	}
-	if((oldkey&(L_BTN+R_BTN))!=L_BTN+R_BTN)
-		keyhit&=~(L_BTN+R_BTN);
-	selected=sel;
-	return keyhit;
-}
-*/
 
 void ui()
 {
@@ -169,35 +114,12 @@ void ui()
 	tm0cnt=REG_TM0CNT;
 	REG_TM0CNT=0;				//stop sound (directsound)
 
-#if MOVIEPLAYER
-	if (usinggbamp)
-	{
-		if(g_cartflags&2 && g_rammask!=0)
-		{
-			ui_x=0;
-			move_ui();
-			cls(3);
-			drawtext(9,"         Saving...",0);
-			usefade=0;
-			setdarkness(7);
-			save_sram_CF(SramName);	
-		}
-	}
-#endif
 	selected=0;
 	main_ui_selection = selected;
 	drawui1();
 	if (usefade)
 	{
 		scrollr(1);
-		/*
-		for(i=0;i<8;i++)
-		{
-			setdarkness(i);		//Darken game screen
-			ui_x=224-i*32;
-			move_ui_wait();
-		}
-		*/
 	}
 #if CARTSRAM
 	savesuccess=backup_gb_sram(1);
@@ -414,10 +336,6 @@ char *const lcdhacktxt[]={"OFF","Low","Medium","High"};
 //char *const emuname = "Goomba Color ";
 char *const palnumtxt[]={"0","1","2","3"};
 
-#if SPEEDHACKS_OLD
-char *const hacknames[]={"jr nz","jr z", "jr nc", "jr c"};
-#endif
-
 void drawui1()
 {
 	int oldsel = selected;
@@ -491,20 +409,8 @@ void drawui4()
 	cls(2);
 	/////////////0123456789ABCDEF0123456789ABCD
 	drawtext(32, "        Speed Hacks",0);
-#if SPEEDHACKS_OLD
-	if (g_hackflags==0)
-	{
-		print_2_1("Autodetect Speed Hack");
-	}
-	else
-	{
-		print_2("Speed Hack: ",hacknames[(g_hackflags-2)&3]);
-	}
-#endif
 	print_2("Double Speed: ",clocktxt[doubletimer==1]);
 	print_2("LCD scanline hack: ", lcdhacktxt[g_lcdhack]);
-    // Maybe we should add an option here for our HDMA experiment
-//	print_2("DMA Mode: ", dmamodetxt[_dmamode]);
 }
 
 
@@ -618,11 +524,6 @@ void multiboot()
 
 void restart()
 {
-#if MOVIEPLAYER
-	restart_rommenu();
-	return;
-#endif
-
 #if CARTSRAM
 	writeconfig();					//save any changes
 #endif
@@ -666,29 +567,6 @@ void fadetowhite()
 		waitframe();
 	}
 }
-
-/*
-void scrolll(int f)
-{
-	int i;
-	for(i=0;i<9;i++)
-	{
-		if(f) setdarkness(8+i);	//Darken screen
-		ui_x=i*32;
-		move_ui_wait();
-	}
-}
-void scrollr()
-{
-	int i;
-	for(i=8;i>=0;i--)
-	{
-		ui_x=i*32;
-		move_ui_wait();
-	}
-	cls(2);							//Clear BG2
-}
-*/
 
 void swapAB()
 {
@@ -789,16 +667,6 @@ void changelcdhack()
 	if (g_lcdhack>=4) g_lcdhack=0;
 	update_lcdhack();
 }
-#if 0
-void changedmamode()
-{
-	if (_dmamode < 2)
-	{
-		_dmamode ^= 1;
-	}
-}
-#endif
-
 #if GOMULTIBOOT
 void go_multiboot()
 {
@@ -892,110 +760,3 @@ void go_multiboot()
 #endif
 
 
-#if SPEEDHACKS_OLD
-u32*const speedhack_buffers[]=
-{
-	SPEEDHACK_FIND_JR_NZ_BUF,
-	SPEEDHACK_FIND_JR_Z_BUF,
-	SPEEDHACK_FIND_JR_NC_BUF,
-	SPEEDHACK_FIND_JR_C_BUF
-};
-const int num_speedhack_buffers=4;
-const int MAX_SPEEDHACK_LENGTH=16;
-
-__inline void clear_speedhack_find_buffers(void)
-{
-	int i;
-	for (i=0;i<num_speedhack_buffers;i++)
-	{
-		memset (speedhack_buffers[i],0,64);
-	}
-}
-void autodetect_speedhack(void)
-{
-	int oldvblank;
-	if (g_hackflags==0)
-	{
-		clear_speedhack_find_buffers();
-		g_hackflags=1;
-		cpuhack_reset();
-		oldvblank=novblankwait;  //preserve vblank
-		
-#if CARTSRAM
-		//Ensure that game has SRAM before running
-		if (get_sram_owner()==0)
-		{
-			get_saved_sram();
-		}
-		writeconfig();			//save any changes
-#endif
-		
-		run(0);
-		
-#if CARTSRAM
-		{
-			//If game changed sram, save it now.
-			int savesuccess=backup_gb_sram(1);
-			if (!savesuccess)
-			{
-				drawui1();
-				REG_BG2HOFS=0;
-			}
-		}
-#endif		
-		
-		
-		
-		novblankwait=oldvblank;
-		dontstop=1;
-		find_best_speedhack();
-	}
-	else // if (g_hackflags!=1)  //no more deleayed searches
-	{
-		g_hackflags=0;
-		cpuhack_reset();
-	}
-}
-
-
-void find_best_speedhack(void)
-{
-	unsigned int max=0,val,branchlength;
-	int hacktype=-1;
-	int h;
-	u32 *arr;
-	int i,maxindex=-1;
-	for (h=0;h<num_speedhack_buffers;h++)
-	{
-		arr=speedhack_buffers[h];
-		for (i=0;i<MAX_SPEEDHACK_LENGTH;i++)
-		{
-			val=arr[i];
-			if (val>max)
-			{
-				maxindex=i;
-					hacktype=h;
-				max=val;
-			}
-		}
-	}
-	
-	if (hacktype>=0)
-	{
-		branchlength=maxindex+2;
-//		hacktype=hacktypes[hacktype];
-//		if (hacktype==0x4C)
-//		{
-//			branchlength-=2;
-//		}
-		g_hackflags=hacktype+2;
-		g_hackflags2=branchlength;
-		cpuhack_reset();
-	}
-	else
-	{
-		g_hackflags=0;
-		cpuhack_reset();
-	}
-}
-#endif

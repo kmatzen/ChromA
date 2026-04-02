@@ -73,117 +73,9 @@ int main()
 
 	C_entry();
 	return 0;
-	/*
-	u32 end_addr=(u32)(&__load_stop_iwram9);
-	
-	extern u32 MULTIBOOT_LIMIT;
-	bool is_multiboot = (copiedfromrom==0)&&(end_addr<0x08000000);
-	
-	if (is_multiboot)
-	{
-		//copy appended data to __iwram_lma
-		u8* append_src=(u8*)end_addr;
-		u8* append_dest=(u8*)(&__iwram_lma);
-		u8* EWRAM_end=(u8*)0x02040000;
-		memmove(append_dest,append_src,EWRAM_end-append_src);
-		textstart=append_dest;
-		ewram_start=append_dest;
-		max_multiboot_size=((u32)(MULTIBOOT_LIMIT))-((u32)(ewram_start));
-	}
-	else //running from cart
-	{
-		//is it compiled for multiboot?
-		if (end_addr<0x08000000)
-		{
-			textstart=(u8*)((end_addr)-0x02000000+0x08000000);
-			ewram_start=(u8*)(((u32)__iwram_lma));
-			max_multiboot_size=((u32)(MULTIBOOT_LIMIT))-((u32)(ewram_start));
-		}
-		else
-		{
-			textstart=(u8*)(end_addr);
-			ewram_start=(u8*)0x02000000;
-			max_multiboot_size=0;
-		}
-	}
-	max_multiboot_size=((u32)(MULTIBOOT_LIMIT))-((u32)(ewram_start));
-	C_entry();
-	return 0;
-	*/
 }
 
 #endif
-
-/*
-void loadfont()
-{
-	LZ77UnCompVram(&font_lz77,FONT_MEM);
-}
-*/
-
-#if LITTLESOUNDDJ
-EWRAM_BSS vu16 *const SC_UNLOCK = (vu16*)0x09FFFFFE;
-EWRAM_BSS vu16 *const M3_UNLOCK = (vu16*)0x09FFEFFE;
-
-bool test_mem()
-{
-	u32 oldbyte;
-	u32 deadbeef=0xDEADBEEF;
-	vu32* address=(u32*)0x09876540;
-	bool success;
-	oldbyte=*address;
-	*address=deadbeef;
-	success=*address==deadbeef;
-	*address=oldbyte;
-	return success;
-}
-
-__inline bool unlock_sc()
-{
-	//unlock SuperCard
-	*SC_UNLOCK = 0xA55A;
-	*SC_UNLOCK = 0xA55A;
-	*SC_UNLOCK = 0x0005;
-	*SC_UNLOCK = 0x0005;
-	return test_mem();
-}
-__inline bool unlock_g6()
-{
-	//unlock G6
-	*SC_UNLOCK = 0xAA55;
-	return test_mem();
-}
-__inline bool unlock_m3()
-{
-	//unlock M3
-	*M3_UNLOCK = 0xAA55;
-	return test_mem();
-}
-
-int enable_ram()
-{
-	int cardtype;
-	cardtype=0;
-	if (test_mem())
-	{
-		cardtype=4;
-	}
-	else if (unlock_sc())
-	{
-		cardtype=1;
-	}
-	else if (unlock_g6())
-	{
-		cardtype=2;
-	}
-	else if (unlock_m3())
-	{
-		cardtype=3;
-	}
-	return cardtype;
-}
-#endif
-
 
 
 void C_entry()
@@ -219,10 +111,6 @@ void C_entry()
 	#endif
 
 
-
-	#if LITTLESOUNDDJ
-	enable_ram();
-	#endif
 
 	#if RTCSUPPORT
 	*timeregs=1;
@@ -397,12 +285,6 @@ void rommenu(void)
 	ui_x=0x100;
 
 	setdarkness(16);
-//	resetSIO((joycfg&~0xff000000) + 0x40000000);//back to 1P
-	
-#if MOVIEPLAYER
-	usingcache=MOVIEPLAYERDEBUG;
-	usinggbamp=0;
-#endif
 	cls(3);
 	make_ui_visible();
 #if CARTSRAM
@@ -457,26 +339,3 @@ u8 *findrom(int n)
 	return p;
 }
 
-#if 0
-void make_ui_visible()
-{
-	ui_border_visible|=1;
-	
-	loadfont();
-	cls(3);
-//	REG_WININ=0x3D3A;  //BG3 visible regardless of window
-//	REG_WINOUT=0x3F28; //BG3 visible outside of window
-	move_ui();
-}
-
-void make_ui_invisible()
-{
-	ui_border_visible&=~1;
-//	REG_WININ=0x353A;  //settings back to normal
-//	REG_WINOUT=0x3F20; 
-//#if MOVIEPLAYER
-//	reload_vram_page1();
-//#endif
-	move_ui();
-}
-#endif
