@@ -22,7 +22,7 @@ int get_saved_sram(void)
 // Reserve the top 32KB of GBA SRAM for game save write-through (max GB
 // SRAM is 32KB).  Config and savestates live below this boundary and can
 // never overlap with the write-through region.
-#define SAVE_START_32K 0x0000
+#define SAVE_START_32K 0x6000
 #define SAVE_START_64K 0x8000
 
 #if SRAM_SIZE==32
@@ -962,6 +962,8 @@ void quicksave() {
 	scrolll(1);
 	
 	i=savestate2();
+
+
 	if (i == 0 || i >= save_start - 64)
 	{
 		writeerror();
@@ -1229,8 +1231,11 @@ void clean_gb_sram() {
 
 */
 
+// Debug: store diagnostic values at EWRAM[0..15]
+
 int savestate2()
 {
+
 	//if successful, updates compressed_save and current_save_file
 	sram_copy = NULL;
 	lzo_workspace = ewram_start;
@@ -1242,8 +1247,10 @@ int savestate2()
 	u8 *uncompressedState = uncompressed_save; //+ savestate_size_estimate * 17 / 16;
 	
 	int stateSize = SaveState(uncompressedState);
+
 	if (stateSize == 0) //does not happen for now
 	{
+
 		goto fail;
 	}
 	
@@ -1339,6 +1346,7 @@ int savestate2()
     }
 	uncompressed_save = NULL;
 	lzo_workspace = NULL;
+
 	cleanup_ewram();
 	return total_size;
 fail:  //does not happen for now
