@@ -152,8 +152,10 @@ echo_W:
 	tst addy,#0x1000
 	beq wram_W
 	b_long wram_W_2
- .section .iwram.2, "ax", %progbits
-
+@ Utility functions: moved to ROM to free IWRAM for CPU emulation code.
+@ These are called a few times per frame (not per-instruction), so the
+@ ROM access penalty is negligible.
+ .text
 
 memset32:
 @word aligned only
@@ -302,6 +304,7 @@ memset32_:
 	b_long memset32
 memcpy32_:
 	b_long memcpy32
+
 
  
 @filler_ ;r0=data r1=dest r2=word count

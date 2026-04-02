@@ -1644,7 +1644,7 @@ canary_value_doesnt_match:
 	mov r0,#1
 	strb_ r0,vblank_happened
 	
-	bl display_frame
+	bl_long display_frame
 
 	@enforce 10 sprites per scanline limit (real GB hardware behavior)
 	ldr_ r0,gb_oam_buffer_screen
@@ -1679,7 +1679,8 @@ canary_value_doesnt_match:
 	bl_long force_ui_at_top
 	
 	ldr r0,=pal_hdma_wrapper
-	str r0,vcountfptr
+	ldr r1,=vcountfptr
+	str r0,[r1]
 
 	bl_long showfps_
 
@@ -2291,55 +2292,50 @@ _move_ui_2_core:
 	bne 0b
 	bx lr
 
-add_ui_border:
+	.pushsection .text
+	.align 2
+add_ui_border:	@moved to ROM — runs once per frame
 	@Check if state of UI and border is correct
+	ldr globalptr,=GLOBAL_PTR_BASE
 	ldr_ r1,_ui_border_screen
 	ldr_ r0,_ui_border_request
 	str_ r0,_ui_border_screen
-	
+
 	and r12,r0,#3
-	@update WININ and WINOUT registers
 	cmp r12,#2
-	ldrle r2,=0xFFE8FFFA @one layer
+	ldrle r2,=0xFFE8FFFA
 	cmp r12,#3
-	ldreq r2,=0xFFECFFFE @two layers
+	ldreq r2,=0xFFECFFFE
 	cmp r12,#0
-	ldreq r2,=0xFFE0FFFA @no extra layers
+	ldreq r2,=0xFFE0FFFA
 	mov r3,#REG_BASE
 	str r2,[r3,#REG_WININ]
 
-	@set BLDY
 	ldrb_ r2,_darkness
 	strh r2,[r3,#REG_BLDY]
 	tst r2,#0x1F
-	moveq r2,#0x0000
-	bne_long _add_ui_border_2
+	bne _add_ui_border_2
+	mov r2,#0x0000
 _add_ui_border_3:
 	str r2,[r3,#REG_BLDMOD]
-	
-	@now check if UI or border has moved
 	cmp r1,r0
 	bxeq lr
 
-	.pushsection .text
+	b_long _add_ui_border_4
 _add_ui_border_2:
 	beq 0f
-	tst r2,#0x80	@if set the MSBit, brightness up instead of down
-
-	@Set BLDMOD
-	moveq r2,#0x00DF	@brightness down, all layers + obj
-	movne r2,#0x00BF	@brightness up, all layers+obj+backdrop
-	bne 0f			@brightness up applies to all layers
-	cmp r12,#3	@UI and Border visible?
-	biceq r2,r2,#0x0004 @no dark for BG2
-	cmp r12,#1	@only UI visible?
-	biceq r2,r2,#0x0008 @no dark for BG3
+	tst r2,#0x80
+	moveq r2,#0x00DF
+	movne r2,#0x00BF
+	bne 0f
+	cmp r12,#3
+	biceq r2,r2,#0x0004
+	cmp r12,#1
+	biceq r2,r2,#0x0008
 0:
-	b_long _add_ui_border_3
+	b _add_ui_border_3
 	.popsection
 
-	
-	b_long _add_ui_border_4
 	.pushsection .text
 _add_ui_border_4:
 	@now apply the settings to the active (to be displayed) scanline buffers
@@ -2417,7 +2413,9 @@ update_ui_border_masks_2:
 	.popsection
 
 
-display_frame:	@called at vblank
+	.pushsection .text
+	.align 2
+display_frame:	@called at vblank (moved to ROM — runs once per frame)
 	stmfd sp!,{globalptr,lr}
 	@init windows
 	mov r1,#REG_BASE
@@ -2428,14 +2426,16 @@ display_frame:	@called at vblank
 
 	@fill line buffers
 @	bl fill_line_buffers
-	bl add_ui_border
+	bl_long add_ui_border
+	ldr globalptr,=GLOBAL_PTR_BASE
 	ldrb_ r0,bg_cache_updateok
 	movs r0,r0
 	beq no_bg_wait
 
-	bl transfer_palette_
+	bl_long transfer_palette_
 
 	@ No wait needed if gamma is already using the slow path.
+	ldr globalptr,=GLOBAL_PTR_BASE
 	ldrb_ r0,_gammavalue
 	movs r0,r0
 	bne no_bg_wait
@@ -2457,9 +2457,10 @@ df_wait_line:
 	blo  df_wait_line
 
 no_bg_wait:
-	bl display_bg
+	bl_long display_bg
 
 	ldmfd sp!,{globalptr,pc}
+	.popsection
 
 display_bg:
 	ldrb_ r0,bg_cache_updateok
@@ -2579,8 +2580,10 @@ no_dirty_remaining:
 	bne update_whole_map_2
 	bx lr
 	
+	.pushsection .text
+	.align 2
 @----------------------------------------------------------------------------
-transfer_palette_:
+transfer_palette_:	@moved to ROM — runs once per frame
 @----------------------------------------------------------------------------
 	stmfd sp!,{r0-r9,globalptr,lr}
 	ldr globalptr,=GLOBAL_PTR_BASE
@@ -2610,7 +2613,7 @@ transfer_palette_:
 pal_loop1:
 	mov r9,#4
 pal_loop11:
-	bl gamma_convert_one
+	bl_long gamma_convert_one
 	
 	subs r9,r9,#1
 	bne pal_loop11
@@ -2759,15 +2762,19 @@ gamma_split_outer:
 	mov r9,#32			@ 32 colors per split (8 palettes × 4 colors)
 gamma_split_inner:
 	mov r4,r5			@ gamma_convert_one reads [r5] and writes [r4]
-	bl gamma_convert_one
+	bl_long gamma_convert_one
 	mov r5,r4			@ r4 advanced past written color, sync r5
 	subs r9,r9,#1
 	bne gamma_split_inner
 	subs r8,r8,#1
 	bne gamma_split_outer
 	ldmfd sp!,{r4-r9,pc}
+	.pool
+	.popsection
 
-gamma_convert_one:
+	.pushsection .text
+	.align 2
+gamma_convert_one:	@moved to ROM — called per palette entry, once per frame
 	@r5 = src, r4 = dest
 	stmfd sp!,{lr}
 
@@ -2791,7 +2798,7 @@ gamma_convert_one:
 	bl gammaconvert
 	orr r7,r7,r0,lsl#10 @all combined
 	strh r7,[r4],#2
-	
+
 	ldmfd sp!,{pc}
 @----------------------------------------------------------------------------
 gammaconvert:@	takes value in r0(0-0xFF), gamma in r1(0-4),returns new value in r0=0x1F
@@ -2805,6 +2812,7 @@ gammaconvert:@	takes value in r0(0-0xFF), gamma in r1(0-4),returns new value in 
 	mla r0,r3,r0,r2
 	mov r0,r0,lsr#13
 	bx lr
+	.popsection
 
 	.pushsection .text
 @----------------------------------------------------------------------------
@@ -3135,8 +3143,10 @@ dm_ps_next:
 	bx lr
 
 
+	.pushsection .text
+	.align 2
 @----------------------------------------------------------------------------
-vcountinterrupt:
+vcountinterrupt:	@moved to ROM — runs once per VCount
 @----------------------------------------------------------------------------
 
 do_gba_hdma:
@@ -3144,59 +3154,56 @@ do_gba_hdma:
 	ldr globalptr,=GLOBAL_PTR_BASE
 	ldr r0,=REG_BASE+REG_DM0SAD
 	ldr_ r1,bigbufferbase2
-@	add r1,r1,#24  ;because first scanline was already displayed
 	ldr r2,=REG_BASE+REG_BG0CNT
 	ldr r3,=0xA6600006
 	stmia r0!,{r1-r3}
 	ldr_ r1,dispcntbase2
-@	add r1,r1,#2   ;because first scanline was already displayed
 	ldr r2,=REG_BASE+REG_DISPCNT
 	ldr r3,=0xA2600001
 	stmia r0!,{r1-r3}
-@	ldr_ r1,dispcntbase2
 	add r1,r1,#288
-@	add r1,r1,#2   ;because first scanline was already displayed
 	ldr r2,=REG_BASE+REG_WIN0H
 	ldr r3,=0xA2600001
 	stmia r0!,{r1-r3}
 
-	adr r0,end_gba_hdma
-	str r0,vcountfptr
+	ldr r0,=end_gba_hdma
+	ldr r1,=vcountfptr
+	str r0,[r1]
 
 	mov r2,#REG_BASE
-	ldr r0,=0x28 + 256*(SCREEN_Y_START+144-1) @scanline 144+8-1, enable vblank+vcount interrupts
+	ldr r0,=0x28 + 256*(SCREEN_Y_START+144-1)
 	strh r0,[r2,#REG_DISPSTAT]
 
 	ldr_ r0,_ui_border_screen
 	and r0,r0,#3
-	@update WININ and WINOUT registers
 	cmp r0,#2
-	ldrle r1,=0xFFE8FFFA @one layer
+	ldrle r1,=0xFFE8FFFA
 	cmp r0,#3
-	ldreq r1,=0xFFECFFFE @two layers
+	ldreq r1,=0xFFECFFFE
 	cmp r0,#0
-	ldreq r1,=0xFFE0FFFA @no extra layers
+	ldreq r1,=0xFFE0FFFA
 	str r1,[r2,#REG_WININ]
-
-
 
 	mov globalptr,r12
 	bx lr
-	
+
 end_gba_hdma:
 	mov r2,#REG_BASE
-	strh r2,[r2,#REG_DM0CNT_H]	@DMA stop
+	strh r2,[r2,#REG_DM0CNT_H]
 	strh r2,[r2,#REG_DM1CNT_H]
 	strh r2,[r2,#REG_DM2CNT_H]
 	strh r2,[r2,#REG_DM3CNT_H]
 
 	ldr r0,=vbldummy
-	str r0,vcountfptr
+	ldr r1,=vcountfptr
+	str r0,[r1]
 
-	mov r0,#0x0008 @scanline 0, enable vblank interrupt
+	mov r0,#0x0008
 	strh r0,[r2,#REG_DISPSTAT]
 
 	bx lr
+	.pool
+	.popsection
 	
 	
 
@@ -4789,7 +4796,9 @@ FF47_W_:
 	ldr addy,=SGB_PALETTE+16
 	b_long dopalette
 	.popsection
-dopalette:
+	.pushsection .text
+	.align 2
+dopalette:	@moved to ROM — called during palette init
 	and r1,r0,#0x03
 	add r1,addy,r1,lsl#1
 	ldrh r1,[r1]
@@ -4807,7 +4816,8 @@ dopalette:
 	ldrh r1,[r1]
 	strh r1,[r2,#6]		@store in agb palette
 
-	bx lr	
+	bx lr
+	.popsection
 
 @dopalette_invert
 @	and r1,r0,#0x03
