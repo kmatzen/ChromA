@@ -1667,19 +1667,53 @@ _FA:@	LD A,(nnnn)	load A from (nnnn)
 	mov gb_a,r0,lsl#24
 	fetch 16
 @----------------------------------------------------------------------------
-_D9:@	RETI, return and enable interrupt
+_D9:@	RETI, return and enable interrupt (immediate, no delay)
 @----------------------------------------------------------------------------
 	pop16 gb_pc
 	encodePC
-	sub cycles,cycles,#12*CYCLE		@total of 16 cycles
-@----------------------------------------------------------------------------
-_FB:@	EI, enable interrupt
-@----------------------------------------------------------------------------
 	orr cycles,cycles,#CYC_IE
-@	mov r0,#1
-@	strb_ r0,gb_ime
-	sub cycles,cycles,#4*CYCLE
+	sub cycles,cycles,#16*CYCLE
 	b checkIRQ
+@----------------------------------------------------------------------------
+_FB:@	EI, enable interrupt (delayed: takes effect after next instruction)
+@----------------------------------------------------------------------------
+	@ Real hardware: EI enables interrupts AFTER the next instruction.
+	@ Peek at the next opcode to decide:
+	@  - HALT (76): enable immediately (EI;HALT is the standard wait-for-
+	@               interrupt pattern and must be atomic)
+	@  - DI (F3): EI;DI cancels out — don't enable
+	@  - EI (FB): redundant — enable immediately
+	@  - anything else: defer via nexttimeout trick
+	sub cycles,cycles,#4*CYCLE
+	ldrb r0,[gb_pc]
+	cmp r0,#0x76				@HALT?
+	cmpne r0,#0xFB				@or another EI?
+	beq ei_immediate
+	cmp r0,#0xF3				@DI?
+	beq ei_skip				@EI;DI = no change
+	@ Defer: force timeout after next instruction, then enable.
+	ldr_ r0,nexttimeout
+	str_ r0,nexttimeout_alt
+	adr r0,ei_finish
+	str_ r0,nexttimeout
+	stmfd sp!,{cycles}
+	ands cycles,cycles,#CYC_MASK		@zero cycle count, update flags for PL dispatch
+	ldrplb r0,[gb_pc],#1
+	ldrpl pc,[gb_optbl,r0,lsl#2]
+	ldr_ pc,nexttimeout
+ei_finish:
+	ldmfd sp!,{cycles}
+	orr cycles,cycles,#CYC_IE
+	ldr_ r0,nexttimeout_alt
+	str_ r0,nexttimeout
+	b checkIRQ
+ei_immediate:
+	orr cycles,cycles,#CYC_IE
+	b checkIRQ
+ei_skip:
+	ldrplb r0,[gb_pc],#1
+	ldrpl pc,[gb_optbl,r0,lsl#2]
+	ldr_ pc,nexttimeout
 @----------------------------------------------------------------------------
 _FE:@	CP #nn
 @----------------------------------------------------------------------------
