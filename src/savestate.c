@@ -1,9 +1,5 @@
 #include "includes.h"
 
-//extern int SaveState(u8 *dest);
-//extern int LoadState(u8 *source, int maxLength);
-
-
 void AfterLoadState(void);
 
 typedef int(*saveFuncPtr)(u8*);

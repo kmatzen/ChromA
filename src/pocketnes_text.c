@@ -1,9 +1,4 @@
-//#if 0
-
 #include "includes.h"
-
-//extern const u8 font[];
-//extern const u8 fontpal[];
 
 EWRAM_BSS u32 oldkey;
 EWRAM_BSS int selected;
@@ -204,18 +199,6 @@ void cls(int chrmap)
 	ui_y=0;
 	move_ui();
 }
-
-#if 0
-void cls_primary()
-{
-	cls(8);
-}
-
-void cls_secondary()
-{
-	cls(4);
-}
-#endif
 
 void drawtext_primary(int row, const char *str, int hilite)
 {
