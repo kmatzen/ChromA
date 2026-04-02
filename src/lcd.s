@@ -847,14 +847,14 @@ render_dirty_tiles:
 
 	ldr decodePtr,=CHR_DECODE
 	@mov mask,#0xFF
-	bl GetNextTileAndLength_dirty_first
+	bl_long GetNextTileAndLength_dirty_first
 	beq render_dirty_tiles_done2
 0:
 	bl render_tiles_vram
 	bl GetNextTileAndLength_dirty
 	bne 0b
 render_dirty_tiles_done:
-	bl ClearDirtyTiles
+	bl_long ClearDirtyTiles
 render_dirty_tiles_done2:
 	ldmfd sp!,{r10,pc}
 
@@ -864,13 +864,15 @@ render_dirty_tiles_done2:
 	recentTilenumLimit	.req r6
 	recentTilesBase .req r7
 
-store_recent_tiles:
+	.pushsection .text
+	.align 2
+store_recent_tiles:	@moved to ROM
 	stmfd sp!,{r3-r11,lr}
 	ldr recentTilenumPointer,=RECENT_TILENUM
 	add recentTilenumLimit,recentTilenumPointer,#RECENT_TILENUM_SIZE - 4
 	ldr recentTilesBase,=RECENT_TILES
 	mov recentTileNumber,#0
-	bl GetNextTileAndLength_dirty_first
+	bl_long GetNextTileAndLength_dirty_first
 	beq store_recent_tiles_done
 0:
 	add r3,recentTileNumber,byteCount,lsr#4
@@ -891,13 +893,13 @@ store_recent_tiles:
 	bl memcpy32
 	mov tileNumber,r3
 	mov byteCount,#0
-	bl GetNextTileAndLength_dirty
+	bl_long GetNextTileAndLength_dirty
 	bne 0b
 
 store_recent_tiles_done:
 	mov r1,#0
 	str r1,[recentTilenumPointer]
-	bl ClearDirtyTiles
+	bl_long ClearDirtyTiles
 store_recent_tiles_abort:
 	ldmfd sp!,{r3-r11,pc}
 
@@ -913,7 +915,7 @@ recent_tiles_full:
 	strb_ r0,consume_dirty
 	bx lr
 	b store_recent_tiles_abort
-
+	.popsection
 
 	.unreq recentTileNumber
 	.unreq recentTilenumPointer
