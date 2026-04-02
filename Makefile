@@ -188,8 +188,8 @@ $(OUTPUT).elf	:	$(OFILES)	gba_crt0_my.o
 	@python3 ../scripts/validate_timing.py
 	@$(OBJCOPY) -O binary $< $@
 	@echo CUSTOM built ... $(notdir $@)
-	@echo gbafix $@ -t GOOMBA COLOR -c GMBC
-	@gbafix $@ "-tGOOMBA COLOR" "-cGMBC"
+	@echo gbafix $@ -t GOOMBA COLOR -c JGBC
+	@gbafix $@ "-tGOOMBA COLOR" "-cJGBC"
 
 
 
