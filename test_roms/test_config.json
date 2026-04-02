@@ -1,4 +1,11 @@
 {
+    "ei_delay_test": {
+        "description": "EI delay test - verifies EI enables interrupts after next instruction",
+        "frames": 600,
+        "inputs": [],
+        "screenshots": [],
+        "expected_fail": false
+    },
     "cpu_instrs": {
         "description": "Blargg's CPU instruction tests - all 11 should pass",
         "frames": 7200,
