@@ -16,10 +16,6 @@ EWRAM_BSS u32 oldinput;
 EWRAM_BSS u8 *textstart;//points to first GB rom (initialized by boot.s)
 EWRAM_BSS u8 *ewram_start;//points to first NES rom (initialized by boot.s)
 EWRAM_BSS int roms;//total number of roms
-#if POGOSHELL
-EWRAM_BSS char pogoshell_romname[32];	//keep track of rom name (for state saving, etc)
-EWRAM_BSS char pogoshell=0;
-#endif
 #if RTCSUPPORT
 EWRAM_BSS char rtc=0;
 #endif
@@ -84,24 +80,6 @@ void C_entry()
 	#if RTCSUPPORT
 	vu16 *timeregs=(u16*)0x080000c8;
 	#endif
-	#if POGOSHELL
-	u32 temp=(u32)(*(u8**)0x0203FBFC);
-	pogoshell=((temp & 0xFE000000) == 0x08000000)?1:0;
-
-	if(pogoshell)
-	{
-		char *d=(char*)0x203fc08;
-		do d++; while(*d);
-		do d++; while(*d);
-		do d--; while(*d!='/');
-		d++;			//d=GB rom name
-
-		roms=1;
-		textstart=(*(u8**)0x0203FBFC);
-		memcpy(pogoshell_romname,d,32);
-	}
-	#endif
-
 	#if !GCC
 	ewram_start=(u8*)&Image$$RO$$Limit;
 	if (ewram_start>=(u8*)0x08000000)
@@ -128,9 +106,6 @@ void C_entry()
 	SerialIn = 0;
 	#endif
 
-	#if POGOSHELL
-	if(!pogoshell)
-	#endif
 	{
 		int gbx_id=0x6666edce;
 		u8 *p;

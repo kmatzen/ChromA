@@ -32,9 +32,6 @@ extern u8 Image$$ZI$$Base[];
 extern u32 romnum;	//from cart.s
 extern u8 *textstart;	//from main.c
 
-
-//extern char pogoshell;
-
 typedef struct {
   u32 reserve1[5];      //
   u8 hs_data;           // 20 ($14) Needed by BIOS

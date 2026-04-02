@@ -21,7 +21,7 @@
 #define RUMBLE 1
 #define RESIZABLE 0
 #define GOMULTIBOOT 0
-#define POGOSHELL 1
+#define POGOSHELL 0
 #define VISOLY 1
 #define SHANTAE_HACK 1
 #define REDUCED_FONT 1
