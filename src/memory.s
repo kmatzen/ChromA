@@ -232,6 +232,10 @@ memcpy32:
 	@trailing bytes
 	@fall thru to bytecopy_plus4
 
+ .section .iwram.2, "ax", %progbits
+@ bytecopy and memset8 MUST stay in IWRAM — they write to GBA cart SRAM
+@ (0x0E000000) which shares the cartridge bus with ROM. Code in ROM
+@ cannot reliably strb to SRAM on GBA hardware.
 global_func bytecopy
 bytecopy_plus4:
 	add r2,r2,#4
@@ -248,6 +252,7 @@ memset8:
 	subs r2,r2,#1
 	bgt memset8
 	bx lr
+ .text
 	
 
 
@@ -324,3 +329,7 @@ memcpy32_:
 @	bx lr
 
 	@.end
+
+ .section .iwram.2, "ax", %progbits
+ 
+ 
