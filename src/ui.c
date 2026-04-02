@@ -812,7 +812,7 @@ void go_multiboot()
 	int i;
 	int key;
 	
-	rom_addr=(u8*)findrom(selectedrom);
+	rom_addr=(u8*)findrom(0);
 	romsize = (0x8000 << (*(rom_addr+0x148)));
 	if (romsize>max_mb_size)
 	{
@@ -853,7 +853,7 @@ void go_multiboot()
 	int romsize;
 	int i;
 
-	src=(u8*)findrom(selectedrom);
+	src=(u8*)findrom(0);
 	dest=ewram_start;
 	romsize = (0x8000 << (*(src+0x148)));
 	
@@ -885,10 +885,8 @@ void go_multiboot()
 
 	memcpy (dest,src,size);
 	textstart=dest;	
-	selectedrom=0;
-	loadcart(selectedrom,g_emuflags&0x300);
+	loadcart(0,g_emuflags&0x300);
 	mainmenuitems=MENUXITEMS[1];
-	roms=1;
 #endif
 }
 #endif

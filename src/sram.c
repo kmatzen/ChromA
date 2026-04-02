@@ -186,40 +186,6 @@ u32 checksum_mem(u8 *p)
 	return sum;
 }
 
-u32 checksum_romnum(int romNumber)
-{
-	u8 *romBase = findrom2(romNumber);
-	u32 *rom32 = (u32*)romBase;
-	if (*rom32 == TRIM)
-	{
-		u8 *page0_start = romBase + rom32[2];
-		u8 *page0_end = romBase + rom32[3];
-		u8 *p = page0_start;
-
-		u32 sum=0;
-		int i;
-		
-		u8 endchar=page0_end[-1];
-		for (i = 0; i < 128; i++)
-		{
-			if (p < page0_end)
-			{
-				sum += *p | (*(p + 1) << 8) | (*(p + 2) << 16) | (*(p + 3) << 24);
-			}
-			else
-			{
-				sum += endchar | (endchar << 8) | (endchar << 16) | (endchar << 24);
-			}
-			p+=128;
-		}
-		return sum;
-	}
-	else
-	{
-		return checksum_mem(romBase);
-	}
-}
-
 #else
 //quick & dirty rom checksum
 u32 checksum(u8 *p) {
@@ -788,27 +754,13 @@ void setup_sram_after_loadstate() {
 	backup_gb_sram(0);
 }
 
-//returns a rom number, or -1
-int find_rom_number_by_checksum(u32 sum)
-{
-	int i;
-	for (i=0;i<roms;i++)
-	{
-		if(sum==checksum_romnum(i))
-			return i;
-	}
-	return -1;
-}
-
-
 void loadstatemenu() {
 	stateheader *sh;
 	u32 key;
 	int i;
 	int offset=0;
 	int menuitems;
-	u32 sum;
-	
+
 	SAVE_FORBIDDEN;
 
 	getsram();
@@ -822,21 +774,7 @@ void loadstatemenu() {
 	do {
 		key=getmenuinput(menuitems);
 		if(key&(A_BTN)) {
-			sum=sh->checksum;
-			i=0;
-			do {
-				if(sum==checksum_romnum(i)) {	//find rom with matching checksum
-					loadstate2(i,sh);
-					i=8192;
-				}
-				i++;
-			} while(i<roms);
-			if(i<8192) {
-				cls(2);
-				drawtext(32+9,"       ROM not found.",0);
-				for(i=0;i<60;i++)	//(1 second wait)
-					waitframe();
-			}
+			loadstate2(romnum,sh);
 		} else if(key&SELECT) {
 			updatestates(selected,1,STATESAVE);
 			if(selected==menuitems-1) selected--;	//deleted last entry? move up one
