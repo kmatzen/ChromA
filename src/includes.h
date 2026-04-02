@@ -20,7 +20,6 @@
 #include "main.h"
 #include "ui.h"
 #include "sram.h"
-#include "rumble.h"
 #include "mbclient.h"
 #include "cache.h"
 #include "dma.h"

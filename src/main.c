@@ -21,13 +21,8 @@ EWRAM_BSS char rtc=0;
 #endif
 EWRAM_BSS char gameboyplayer=0;
 EWRAM_BSS char gbaversion;
-EWRAM_BSS u32 max_multiboot_size;		//largest possible multiboot transfer (init'd by boot.s)
 
 #define TRIM 0x4D495254
-
-//82048 is an upper bound on the save state size
-//The formula is an upper bound LZO estimate on worst case compression
-//#define WORSTCASE ((82048)+(82048)/64+16+4+64)
 
 #if GCC
 EWRAM_BSS u32 copiedfromrom=0;
@@ -41,10 +36,6 @@ int main()
 	textstart = (u8*)(end_addr);
 	u32 heap_addr = (u32)(&__eheap_start);
 	ewram_start = (u8*)heap_addr;
-	
-	extern u8 MULTIBOOT_LIMIT[];
-	u32 multiboot_limit = (u32)(&MULTIBOOT_LIMIT);
-	max_multiboot_size = multiboot_limit - heap_addr;
 	
 	if (end_addr < 0x08000000 && copiedfromrom)
 	{
@@ -61,7 +52,6 @@ int main()
 		memmove(append_dest,append_src,EWRAM_end-append_src);
 		textstart=append_dest;
 		ewram_start=append_dest;
-		max_multiboot_size=((u32)(MULTIBOOT_LIMIT))-((u32)(ewram_start));
 	}
 	
 	ewram_canary_1 = 0xDEADBEEF;
@@ -101,10 +91,6 @@ void C_entry()
 	vblankfptr=&vbldummy;
 	
 	GFX_init_irq();
-//	vcountfptr=&vbldummy;
-	#if RUMBLE
-	SerialIn = 0;
-	#endif
 
 	{
 		int gbx_id=0x6666edce;
