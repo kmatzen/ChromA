@@ -409,7 +409,25 @@ void rommenu(void)
 	backup_gb_sram(0); //includes emergency delete menu
 #endif
 
-	loadcart(0,g_emuflags&0x300);
+	{
+		int i;
+		oldinput=AGBinput=~REG_P1;
+		loadcart(0,g_emuflags&0x300);
+		run(0);
+		for(i=1;i<9;i++)
+		{
+			setdarkness(8-i);		//Lighten screen
+			ui_x=i*32;
+			move_ui_scroll();
+			run(0);
+			move_ui_expose();
+		}
+		cls(3);
+		while(AGBinput&(A_BTN+B_BTN+START)) {
+			AGBinput=0;
+			run(0);
+		}
+	}
 #if CARTSRAM
 	if(autostate)quickload();
 #endif
