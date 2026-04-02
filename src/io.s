@@ -1335,13 +1335,37 @@ _FF56R:@		RP - Infrared Port
 	mov r0,#0
 	mov pc,lr
 @----------------------------------------------------------------------------
-_FF04R:@		DIV - Divider Register
+_FF04R:@		DIV - Divider Register (sub-scanline accurate)
 @----------------------------------------------------------------------------
-	ldrb_ r0,dividereg+3
+	@ Compute elapsed cycles this scanline and add to stored dividereg.
+	@ dividereg is incremented by cyclesperscanline<<12 each scanline.
+	@ Sub-scanline: dividereg + elapsed<<12, then read bits 31-24.
+	ldr_ r1,cyclesperscanline
+	bic r0,cycles,#CYC_MASK		@r0 = cycles without flag bits
+	sub r1,r1,r0			@r1 = elapsed cycles this scanline
+	ldr_ r0,dividereg
+	add r0,r0,r1,lsl#12		@add sub-scanline increment
+	mov r0,r0,lsr#24		@extract DIV byte (bits 31-24)
 	mov pc,lr
 @----------------------------------------------------------------------------
-_FF05R:@		TIMA - Timer counter
+_FF05R:@		TIMA - Timer counter (sub-scanline accurate)
 @----------------------------------------------------------------------------
+	ldrb_ r1,timerctrl
+	tst r1,#0x4
+	beq _FF05R_disabled		@timer disabled → return stored value
+	@ Compute sub-scanline TIMA: timercounter + elapsed<<shift
+	ldr_ r0,cyclesperscanline
+	bic r2,cycles,#CYC_MASK
+	sub r0,r0,r2			@r0 = elapsed cycles
+	ands r1,r1,#3			@frequency select
+	moveq r1,#4
+	mov r2,#18
+	sub r1,r2,r1,lsl#1		@shift amount (same as timeout.s)
+	ldr_ r2,timercounter
+	add r0,r2,r0,lsl r1		@timercounter + elapsed<<shift
+	mov r0,r0,lsr#24		@extract TIMA byte (bits 31-24)
+	mov pc,lr
+_FF05R_disabled:
 	ldrb_ r0,timercounter+3
 	mov pc,lr
 @----------------------------------------------------------------------------
