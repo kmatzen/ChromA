@@ -1645,8 +1645,19 @@ canary_value_doesnt_match:
 	strb_ r0,vblank_happened
 	
 	bl display_frame
-		
+
+	@enforce 10 sprites per scanline limit (real GB hardware behavior)
+	ldr_ r0,gb_oam_buffer_screen
+	ldrb_ r1,lcdctrl0frame
+	tst r1,#0x04
+	movne r1,#16
+	moveq r1,#8
+	blx_long sprite_limit_save
+
 	bl display_sprites
+
+	ldr_ r0,gb_oam_buffer_screen
+	blx_long sprite_limit_restore
 
 	@reset sprite size tracking for next frame (after OAMfinish used it)
 	mov r0,#0
@@ -2898,7 +2909,7 @@ OAMfinish:@		transfer OAM from GB to GBA
 	ldr_ addy,gb_oam_buffer_screen
 	add r9,addy,#0xA0
 	mov r2,#AGB_OAM
- 	
+
 	ldrb_ r5,gbcmode
 
 	@check if sprite size changed mid-frame
