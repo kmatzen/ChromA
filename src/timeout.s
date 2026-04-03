@@ -264,14 +264,24 @@ line144: @------------------------
 	adrl r1,lcdstat
 	ldrb r0,[r1]		@vbl flag
 	and r0,r0,#0x7C
-	orr r0,r0,#0x01
-	strb r0,[r1]		@vbl flag
-	strb r0,[r1,#-12] @FIXME
+	orr r2,r0,#0x01		@set mode 1 (VBlank)
+	strb r2,[r1]		@vbl flag
+	strb r2,[r1,#-12] @FIXME
 
-
-	ldrb_ r0,gb_if
-	orr r0,r0,#0x01		@1=VBL
-	strb_ r0,gb_if
+	ldrb_ r2,gb_if
+	orr r2,r2,#0x01		@1=VBL
+	@ Fire STAT interrupt if mode 1 (VBlank) STAT IE is enabled (bit 4).
+	@ Also apply IRQ blocking: skip if LYC is already holding line high.
+	ldrb r1,[r1]		@re-read lcdstat (now has mode 1 set)
+	tst r1,#0x10		@mode 1 STAT IE enabled?
+	beq .noVblStat
+	@ Check IRQ blocking: if LYC=LY holds line high, block
+	tst r1,#0x40		@LYC IE enabled?
+	tstne r1,#0x04		@AND coincidence flag set?
+	bne .noVblStat		@blocked
+	orr r2,r2,#0x02		@2=LCD STAT
+.noVblStat:
+	strb_ r2,gb_if
 novbirq:
 	mov r0,#24*CYCLE
 	add cycles,cycles,r0
