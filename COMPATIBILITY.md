@@ -183,7 +183,7 @@ No link cable multiplayer or printer support.
 
 | Constraint | Impact |
 |------------|--------|
-| **IWRAM: 32KB, ~93.9% used** | ~2,004 bytes free (code=29,496 bss=1,268) |
+| **IWRAM: 32KB, ~93.2% used** | ~2,228 bytes free (code=29,272 bss=1,268) |
 | **All 4 GBA DMA channels allocated** | No spare DMA |
 | **ARM/GBC cycle ratio ~3:1** | GBC frame spans ~2 GBA frames |
 | **16MHz ARM7TDMI** | No room for software audio or per-pixel compositing |
