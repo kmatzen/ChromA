@@ -275,7 +275,11 @@ line144: @------------------------
 	ldrb r1,[r1]		@re-read lcdstat (now has mode 1 set)
 	tst r1,#0x10		@mode 1 STAT IE enabled?
 	beq .noVblStat
-	@ Check IRQ blocking: if LYC=LY holds line high, block
+	@ Check IRQ blocking: if STAT line was already high, no rising edge
+	@ Block if mode 0 (HBlank) IE held line high from preceding scanline
+	tst r1,#0x08		@mode 0 STAT IE enabled?
+	bne .noVblStat		@blocked: HBlank held line high
+	@ Block if LYC=LY coincidence holds line high
 	tst r1,#0x40		@LYC IE enabled?
 	tstne r1,#0x04		@AND coincidence flag set?
 	bne .noVblStat		@blocked
