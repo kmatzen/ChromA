@@ -370,5 +370,85 @@
             }
         ],
         "expected_fail": false
+    },
+    "POKEMON RED": {
+        "description": "Pokemon Red (Gen 1) - DMG, boot to title screen",
+        "frames": 3600,
+        "inputs": [],
+        "screenshots": [
+            {"frame": 1200, "name": "gamefreak"},
+            {"frame": 3000, "name": "title"}
+        ],
+        "expected_fail": false
+    },
+    "POKEMON BLUE": {
+        "description": "Pokemon Blue (Gen 1) - DMG, boot to title screen",
+        "frames": 3600,
+        "inputs": [],
+        "screenshots": [
+            {"frame": 1200, "name": "gamefreak"},
+            {"frame": 3000, "name": "title"}
+        ],
+        "expected_fail": false
+    },
+    "POKEMON YELLOW": {
+        "description": "Pokemon Yellow (Gen 1) - DMG with SGB, boot to title screen",
+        "frames": 3600,
+        "inputs": [],
+        "screenshots": [
+            {"frame": 1200, "name": "gamefreak"},
+            {"frame": 3000, "name": "title"}
+        ],
+        "expected_fail": false
+    },
+    "POKEMON_GLDAAUJ": {
+        "description": "Pokemon Gold (Gen 2) - GBC with MBC3 RTC, boot to title",
+        "frames": 3600,
+        "inputs": [],
+        "screenshots": [
+            {"frame": 1200, "name": "gamefreak"},
+            {"frame": 3000, "name": "title"}
+        ],
+        "expected_fail": false
+    },
+    "ZELDA": {
+        "description": "Zelda: Link's Awakening (DMG) - boot to title screen",
+        "frames": 3600,
+        "inputs": [],
+        "screenshots": [
+            {"frame": 1200, "name": "intro"},
+            {"frame": 3000, "name": "title"}
+        ],
+        "expected_fail": false
+    },
+    "Legend of Zelda, The - Oracle of Ages (USA, Australia)": {
+        "description": "Zelda: Oracle of Ages (GBC) - boot to title screen",
+        "frames": 4800,
+        "inputs": [],
+        "screenshots": [
+            {"frame": 1200, "name": "capcom"},
+            {"frame": 3600, "name": "title"}
+        ],
+        "expected_fail": false
+    },
+    "Legend of Zelda, The - Oracle of Seasons (USA, Australia)": {
+        "description": "Zelda: Oracle of Seasons (GBC) - boot to title screen",
+        "frames": 4800,
+        "inputs": [],
+        "screenshots": [
+            {"frame": 1200, "name": "capcom"},
+            {"frame": 3600, "name": "title"}
+        ],
+        "expected_fail": false
+    },
+    "POKEPINBALLVPHJ": {
+        "description": "Pokemon Pinball (DMG with rumble) - boot to title screen",
+        "frames": 3600,
+        "inputs": [],
+        "screenshots": [
+            {"frame": 1200, "name": "nintendo"},
+            {"frame": 3000, "name": "title"}
+        ],
+        "expected_fail": false
     }
 }
