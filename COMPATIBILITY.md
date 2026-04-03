@@ -57,6 +57,7 @@ What this GB/GBC emulator implements, what it's missing, and why.
 - LCDC all bits including mid-frame sprite size/enable tracking
 - STAT mode flags (cycle-based thresholds, self-modifying for double speed)
 - STAT mode 0/2 interrupts (HBlank and OAM, fired per-scanline when enabled)
+- STAT IRQ blocking (LYC=LY holding line high suppresses mode 0/2 re-trigger)
 - LYC=LY coincidence interrupt with 0→1 edge detection
 - LY (FF44) sub-scanline correction (+1 when near scanline boundary)
 - Window rendering (WX, WY) with per-scanline buffering
