@@ -23,6 +23,11 @@
 
  DEBUG		= 0
  PROFILE		= 0
+#ifdef TRACE_MODE
+ TRACE		= 1
+#else
+ TRACE		= 0
+#endif
 // LITTLESOUNDDJ   = 0
 
  SAVESTATES	= 0
@@ -519,6 +524,12 @@ RECENT_TILENUM_SIZE = 128
 
  SINGLE_SPEED = 456*CYCLE
  DOUBLE_SPEED = 912*CYCLE
+
+@--- Trace buffer (TRACE=1 builds only) ---
+ TRACE_BUF_ADDR	= 0x02010000	@start of trace ring buffer in EWRAM
+ TRACE_BUF_HDR	= 8		@header: 4 bytes write_index + 4 bytes max_entries
+ TRACE_ENTRY_SIZE	= 12		@per entry: pc(2) + a(1) + f(1) + bc(2) + de(2) + hl(2) + sp(2)
+ TRACE_MAX_ENTRIES	= 10000		@~117KB buffer (10000 * 12 = 120000)
  SINGLE_SPEED_SCANLINE_OAM_POSITION = 204*CYCLE  @should be 204
  DOUBLE_SPEED_SCANLINE_OAM_POSITION = 204*2*CYCLE
 

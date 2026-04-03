@@ -46,6 +46,10 @@
 	subs cycles,cycles,#\count*CYCLE
 	b_long fetch_profile
 	.pool
+ .elseif TRACE
+	subs cycles,cycles,#\count*CYCLE
+	b_long fetch_trace
+	.pool
  .else
 	subs cycles,cycles,#\count*CYCLE
 	ldrplb r0,[gb_pc],#1
