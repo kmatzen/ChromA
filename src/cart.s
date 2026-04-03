@@ -11,10 +11,6 @@
 	@IMPORT make_instant_pages
 	@IMPORT init_cache
 	
-	.if MOVIEPLAYER
-	@IMPORT update_cache
-	.endif
-
 	global_func loadcart
 	global_func loadcart_after_sgb_border
 @	EXPORT mapBIOS_
@@ -39,15 +35,6 @@
 	.global END_OF_EXRAM
 	
 	.global INSTANT_PAGES
-	.if MOVIEPLAYER
-	.global SramName
-	.global fatBuffer
-	.global fatWriteBuffer
-	.global globalBuffer
-	.global openFiles
-	.global lfnName
-	.endif
-	
 	.global ewram_canary_1
 	.global ewram_canary_2
 	
@@ -630,9 +617,6 @@ map0123_:
 	ldr r1,=INSTANT_PAGES
 	ldr r0,[r1,r0,lsl#2]
 	subs r0,r0,#0x0000
-	.if MOVIEPLAYER
-	bmi need_to_use_cache
-	.endif
 	str_ r0,memmap_tbl
 	str_ r0,memmap_tbl+4
 	str_ r0,memmap_tbl+8
@@ -679,9 +663,6 @@ map4567_:
 	ldr r1,=INSTANT_PAGES
 	ldr r0,[r1,r0,lsl#2]
 	subs r0,r0,#0x4000
-	.if MOVIEPLAYER
-	bmi need_to_use_cache
-	.endif
 	str_ r0,memmap_tbl+16
 	str_ r0,memmap_tbl+20
 	str_ r0,memmap_tbl+24
@@ -702,18 +683,6 @@ flush:		@update gb_pc & lastbank
 	sub gb_pc,gb_pc,r1
 	encodePC
 	mov pc,lr
-
-	.if MOVIEPLAYER
-call_update_cache:
-	ldr r0,=update_cache
-	bx r0
-
-need_to_use_cache:
-	stmfd sp!,{r0-addy,lr}
-	bl call_update_cache
-	ldmfd sp!,{r0-addy,lr}
-	b flush
-	.endif
 
 @@----------------------------------------------------------------------------
 @map01234567_

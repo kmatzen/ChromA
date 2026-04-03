@@ -51,10 +51,6 @@
 	.global g_writemem_tbl
 
 
-	.if MOVIEPLAYER
-	.ascii "WRAM"
-	.endif
-
 #if SPEEDHACKS_NEW
 	global_func install_speedhack
 	global_func speedhack_reset
