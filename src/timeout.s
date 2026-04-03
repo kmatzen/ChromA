@@ -405,7 +405,7 @@ tick_hdma:
 _checkScanlineIRQ:
 	tst cycles,#CYC_LCD_ENABLED
 	beq noScanlineIRQ
-	
+
 	@do LC==LYC test
 	ldrb_ r1,scanline
 	ldrb_ r0,lcdyc
@@ -419,21 +419,26 @@ _checkScanlineIRQ:
 	@ne if LYC bit has changed
 	strneb r2,[r1]
 	strneb r2,[r1,#-12] @FIXME
-@	beq 0f
 	@has it turned on, and interrupts are enabled?
 	tstne r2,#4
 	tstne r2,#0x40
-	bne ScanlineIRQ
-@	ldrb r2,lcdstat
-@0:
+	bne ScanlineIRQ_fromLYC
+
 	@in vblank?  no Hblank or Mode 2 IRQ
 	tst r2,#0x01
 	bne noScanlineIRQ
 	@Hblank IRQ or Mode 2 IRQ enabled?
-	@TODO: real Hblank IRQ
 	tst r2,#0x28
 	beq noScanlineIRQ
-ScanlineIRQ:
+
+	@ STAT IRQ blocking: if LYC=LY is active on this scanline (coincidence
+	@ flag set AND LYC IE enabled), the STAT line is already high from LYC.
+	@ Mode 0/2 transitions cannot cause a new rising edge, so block.
+	tst r2,#0x40			@LYC interrupt enabled?
+	tstne r2,#0x04			@AND coincidence flag set?
+	bne noScanlineIRQ		@blocked: LYC holds line high
+
+ScanlineIRQ_fromLYC:
 	ldrb_ r0,gb_if
 	orr r0,r0,#0x02		@2=LCD STAT
 	strb_ r0,gb_if
