@@ -438,11 +438,11 @@ _checkScanlineIRQ:
 	tstne r2,#0x40
 	bne ScanlineIRQ_fromLYC
 
-	@in vblank?  no Hblank or Mode 2 IRQ
+	@in vblank?  no Mode 2 IRQ
 	tst r2,#0x01
 	bne noScanlineIRQ
-	@Hblank IRQ or Mode 2 IRQ enabled?
-	tst r2,#0x28
+	@Mode 2 (OAM) IRQ enabled? (mode 0 handled by GBA HBlank IRQ)
+	tst r2,#0x20
 	beq noScanlineIRQ
 
 	@ STAT IRQ blocking: if LYC=LY is active on this scanline (coincidence

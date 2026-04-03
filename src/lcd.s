@@ -231,17 +231,14 @@ GFX_init_irq:
 	str r2,[r1]
 
 	mov r1,#REG_BASE
-	mov r0,#0x0008
-@	mov r0,#0x0028
-	strh r0,[r1,#REG_DISPSTAT]	@vblank en
+	mov r0,#0x0018			@vblank + hblank IRQ enable
+	strh r0,[r1,#REG_DISPSTAT]
 
 	add r2,r1,#REG_IE
 	mov r0,#-1
 	strh r0,[r2,#2]		@stop pending interrupts
-@	ldr r0,=0x1081
-@	strh r0,[r2]		;key,vblank,serial interrupt enable
-	ldr r0,=0x1085
-	strh r0,[r2]		@key,vcount,vblank,serial interrupt enable
+	ldr r0,=0x1087			@key,vcount,hblank,vblank,serial interrupt enable
+	strh r0,[r2]
 	mov r0,#1
 	strh r0,[r2,#8]		@master irq enable
 
@@ -1528,8 +1525,11 @@ flush_recent_tiles:
 @ 	.unreq agbptr_3
 
  .section .iwram.1, "ax", %progbits
-irqhandler:	@r0-r3,r12 are safe to use
+irqhandler:	@r0-r3,r12 are safe to use (ARM ABI), BUT r3=gb_flg in GB emu.
 @----------------------------------------------------------------------------
+	@ Save r0-r3 immediately — HBlank IRQ fires during active GB execution
+	@ and the dispatch code below clobbers these registers.
+	stmfd sp!,{r0-r3}
 	mov r2,#REG_BASE
 	mov r3,#REG_BASE
 	ldr r1,[r2,#REG_IE]!
@@ -1541,9 +1541,20 @@ irqhandler:	@r0-r3,r12 are safe to use
 		@---this CAN'T be interrupted
 		ands r0,r1,#0x80
 		strneh r0,[r2,#2]		@IF clear
+		ldmnefd sp!,{r0-r3}		@restore GB regs before serial
 		ldrne r12,serialfptr
 		bxne r12
+
+		@--- HBlank: lightweight, return with GB regs restored.
+		tst r1,#0x02			@HBlank?
+		bne hblank_irq_handler
 		@---
+		@--- VBlank/VCount need dispatch values in r0-r2, so pop saved
+		@ regs into scratch positions and put dispatch values back.
+		@ r0 = interrupt bit(s) for IF clear
+		@ r1 = IE&IF
+		@ r2 = REG_IE pointer
+		add sp,sp,#16			@discard saved r0-r3 (VBlank saves its own)
 		adr r12,irq0
 
 		@---this CAN be interrupted
@@ -1553,7 +1564,7 @@ irqhandler:	@r0-r3,r12 are safe to use
 		ands r0,r1,#0x04
 		ldrne r12,vcountfptr
 		bne jmpintr
-		
+
 		@----
 		moveq r0,r1				@if unknown interrupt occured clear it.
 jmpintr:
@@ -1580,6 +1591,47 @@ irq0:
 	ldmfd sp!,{r0,lr}
 	msr spsr_cf,r0
 vbldummy:
+	bx lr
+@----------------------------------------------------------------------------
+@----------------------------------------------------------------------------
+@ HBlank IRQ handler: fires at every GBA HBlank (228 times/frame).
+@ Checks if GB mode 0 (HBlank) STAT IE is enabled and fires the
+@ STAT interrupt. Runs in IRQ mode — only r0-r3, r12 are safe.
+@ This achieves hardware-timed mode 0 IRQ with zero emulation overhead.
+@----------------------------------------------------------------------------
+hblank_irq_handler:
+	@ Save ALL registers we'll touch. The HBlank IRQ fires asynchronously
+	@ during GB instruction execution — we must not corrupt any live state.
+	@ r0-r3 were already clobbered by irqhandler dispatch above.
+	@ We need to restore them to their pre-IRQ values.
+	@ The pre-IRQ r0-r3 are on the IRQ exception stack frame — but ARM7TDMI
+	@ doesn't auto-save them. We must save them ourselves.
+	@ Problem: r0-r3 are already clobbered by irqhandler. We can't recover them.
+	@ Solution: clear the IF bit and return. The register corruption from
+	@ irqhandler dispatch (r0-r3) already happened — we can only minimize
+	@ further damage by returning quickly.
+	mov r0,#0x02
+	strh r0,[r2,#2]			@IF clear HBlank
+	ldr r1,=lcdstat
+	ldrb r0,[r1]
+	@ Quick exit if in vblank or mode 0 IE not set
+	tst r0,#0x08			@mode 0 HBlank IRQ enabled?
+	beq .hblank_irq_done
+	tst r0,#0x01			@in vblank mode? skip
+	bne .hblank_irq_done
+	@ IRQ blocking: LYC=LY or mode 2 holding line high
+	tst r0,#0x40			@LYC IE enabled?
+	tstne r0,#0x04			@AND coincidence flag set?
+	bne .hblank_irq_done		@blocked: LYC holds line high
+	tst r0,#0x20			@mode 2 OAM IE also enabled?
+	bne .hblank_irq_done		@blocked: mode 2 held line high
+	@ Fire STAT interrupt
+	ldr r1,=GLOBAL_PTR_BASE
+	ldrb r0,[r1,#gb_if]
+	orr r0,r0,#0x02		@2=LCD STAT
+	strb r0,[r1,#gb_if]
+.hblank_irq_done:
+	ldmfd sp!,{r0-r3}		@restore GB registers from IRQ stack
 	bx lr
 @----------------------------------------------------------------------------
 vblankfptr: .word vbldummy			@later switched to vblankinterrupt
