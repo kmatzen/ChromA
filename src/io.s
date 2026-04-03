@@ -41,9 +41,6 @@
 	.global FF41_R_ptr
 	.global FF44_R_ptr
 	global_func jump_r0
- .if RESIZABLE
-	@IMPORT add_exram
- .endif
 
 	global_func doReset
 
@@ -103,28 +100,12 @@ doReset:
 	add r1,r1,#0x200
 	str r0,[r1,#8]		@interrupts off
 	
-	#if VISOLY
-
-	@copy code to EWRAM and execute it	
-	ldr r0,=XGB_VRAM		@temporary buffer for reset code
-	ldr r1,=VISOLY_START	@source address
-	ldr r2,=VISOLY_END	@end
-	sub r2,r2,r1		@subtract to get size
-	mov lr,r0
-	b memcpy32_  @and jump to code too
-
-	#include "visoly.s"
-
-	#else
-
 	mov		r0, #0
 	ldr		r1,=0x3007ffa	@must be 0 before swi 0x00 is run, otherwise it tries to start from 0x02000000.
 	strh		r0,[r1]
 	mov		r0, #8		@VRAM clear
 	swi		0x010000
 	swi		0x000000
-
-	#endif
 
 @----------------------------------------------------------------------------
 suspend:	@called from ui.c and 6502.s
@@ -712,13 +693,7 @@ wram_remap_pc:
 	mov pc,lr
 
 select_gbc_ram:
- .if RESIZABLE
-	ldr_ r1,gbc_exram
-	subs r1,r1,#0xD000+0x2000
-	bmi add_exram_
- .else	
 	ldr r1,=GBC_EXRAM-0xD000-0x2000
- .endif
 	add r1,r1,r0,lsl#12
 	@D000
 	str_ r1,memmap_tbl+52
@@ -727,21 +702,6 @@ select_gbc_ram:
 
 	@mov pc,lr
     b wram_remap_pc
- .if RESIZABLE
-add_exram_:
-	stmfd sp!,{r0-addy,lr}
-	ldr r1,=add_exram
-	mov lr,pc
-	bx r1
-@	bl thumbcall_r1
-	ldmfd sp!,{r0-addy,lr}
-	ldr_ r1,lastbank
-	sub gb_pc,gb_pc,r1
-	stmfd sp!,{r0}
-	encodePC
-	ldmfd sp!,{r0}
-	b select_gbc_ram
- .endif
 
 @----------------------------------------------------------------------------
 _FF70R:@		SVBK - CGB Mode Only - WRAM Bank

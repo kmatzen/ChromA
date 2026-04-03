@@ -499,9 +499,7 @@ void restart()
 void exit_()
 {
 #if CARTSRAM
-#ifndef EZFLASH_OMEGA_BUILD
 	writeconfig();					//save any changes
-#endif
 #endif
 	fadetowhite();
 	REG_DISPCNT=FORCE_BLANK;		//screen OFF

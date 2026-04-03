@@ -23,11 +23,8 @@
 	.global CHR_DECODE
 	.global XGB_RAM
 	.global XGB_HRAM
- .if RESIZABLE
- .else
 	.global XGB_VRAM
 	.global GBC_EXRAM
- .endif
 	global_func update_doublespeed_ui
 	
 	global_func emu_reset
@@ -53,17 +50,6 @@
 	.global g_readmem_tbl
 	.global g_writemem_tbl
 
-	.if RESIZABLE
-	.global XGB_sram
-	.global XGB_sramsize
-	.global XGB_vram
-	.global XGB_vramsize
-	.global GBC_exram
-	.global GBC_exramsize
-	.global END_of_exram
-	.global XGB_vram_1800
-	.global XGB_vram_1C00
-	.endif
 
 	.if MOVIEPLAYER
 	.ascii "WRAM"
@@ -2869,22 +2855,6 @@ novblankwait:
 	.byte 0 @novblankwait_
 
 
- .if RESIZABLE
-XGB_sram:	.word 0
-XGB_sramsize:	.word 0
-XGB_vram:	.word 0
-XGB_vramsize:	.word 0
-GBC_exram:	.word 0
-GBC_exramsize:	.word 0
-END_of_exram:	.word 0
-XGB_vram_1800:	.word 0
-XGB_vram_1C00:	.word 0
-SGB_pals:	.word 0
-SGB_atfs:	.word 0
-SGB_packet:	.word 0
-SGB_attributes:	.word 0
-	.skip 12	@padding
- .endif
 @----------------------------------------------------------------------------
  .section .iwram.end.107, "ax", %progbits
 XGB_RAM: .skip 0x2000

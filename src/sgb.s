@@ -94,20 +94,6 @@ sgb_reset:
 	strb_ r0,joy0serial
 	
 	mov r1,#0
-	.if RESIZABLE
-	ldr_ r0,sgb_pals
-	mov r2,#4096
-	movs r0,r0
-	blne memset32_
-	ldr_ r0,sgb_atfs
-	mov r2,#4096
-	movs r0,r0
-	blne memset32_
-	ldr_ r0,sgb_attributes
-	mov r2,#360
-	movs r0,r0
-	blne memset32_
-	.else
 	ldr r0,=SGB_PALS
 	mov r2,#4096
 	bl memset32_
@@ -117,7 +103,6 @@ sgb_reset:
 	ldr r0,=SGB_ATTRIBUTES
 	mov r2,#360
 	bl memset32_
-	.endif
 	
 	@don't remove border after we went through everything to add it
 	ldrb_ r0,autoborderstate
@@ -145,18 +130,10 @@ sgb_reset:
 	str_ r0,auto_border_reboot_frame
 	
 	@erase SGB packet for no reason
-	.if RESIZABLE
-	mov r1,#0
-	ldr_ r0,sgb_packet
-	mov r2,#112
-	movs r0,r0
-	blne memset32_
-	.else
 	mov r1,#0
 	ldr r0,=SGB_PACKET
 	mov r2,#112
 	bl memset32_
-	.endif
 	
 	ldmfd sp!,{pc}
 
@@ -245,11 +222,7 @@ SGB_transfer_bit:
 	cmp r1,#0x30
 	bne invalidpacket
 	tst r0,#0x20 @write a zero, otherwise write a 1
-	.if RESIZABLE
-	ldr_ addy,sgb_packet
-	.else
 	ldr addy,=SGB_PACKET
-	.endif
 	ldr_ r0,packetcursor
 	ldr_ r1,packetbitcursor
 	ldr r2,[addy,r0]
@@ -418,11 +391,7 @@ SOU_TRN:   @Transfer Sound PRG/DATA
 PAL_SET:   @Set SGB Palette Indirect
 	stmfd sp!,{r3-r4,lr}
 	ldr r2,=SGB_PALETTE
-	.if RESIZABLE
-	ldr_ r3,sgb_pals
-	.else
 	ldr r3,=SGB_PALS
-	.endif
 	mov r4,#4
 0:
 	ldrb r0,[addy,#1]!
@@ -453,11 +422,7 @@ PAL_SET:   @Set SGB Palette Indirect
 	bl update_sgb_palette
 	ldmfd sp!,{r3-r4,pc}
 PAL_TRN:   @Set System Color Palette Data
-	.if RESIZABLE
-	ldr_ r1,sgb_pals
-	.else
 	ldr r1,=SGB_PALS
-	.endif
 sgb_vram_transfer:
 	mov r2,#4096
 sgb_vram_transfer2:
@@ -475,15 +440,9 @@ sgb_vram_transfer2:
 	mov r7,#20
 	ldrb_ r3,lcdctrl
 	tst r3,#0x08
-	.if RESIZABLE
-	ldr_ r4,xgb_vram
-	ldreq_ r5,xgb_vram_1800
-	ldrne_ r5,xgb_vram_1C00
-	.else
 	ldr r4,=XGB_VRAM
 	ldreq r5,=XGB_VRAM+0x1800
 	ldrne r5,=XGB_VRAM+0x1C00
-	.endif
 1:
 	ldrb r0,[r5],#1
 	@correct for the messed up tile numbers thing on the GB
@@ -558,11 +517,7 @@ PCT_TRN:   @Set Screen Data Color Data
 	bl draw_sgb_border
 	ldmfd sp!,{pc}
 ATTR_TRN:  @Set Attribute from ATF
-	.if RESIZABLE
-	ldr_ r1,sgb_atfs
-	.else
 	ldr r1,=SGB_ATFS
-	.endif
 	b sgb_vram_transfer
 ATTR_SET:  @Set Data to ATF
 	ldrb r0,[addy,#1]!
@@ -575,15 +530,9 @@ set_atf:
 	stmfd sp!,{r3-r4,lr}
 	@r0 = atf #
 	mov r1,#90
-	.if RESIZABLE
-	ldr_ r3,sgb_atfs
-	mla r2,r0,r1,r3
-	ldr_ r3,sgb_attributes
-	.else
 	ldr r3,=SGB_ATFS
 	mla r2,r0,r1,r3
 	ldr r3,=SGB_ATTRIBUTES
-	.endif
 	mov r4,#5*18
 0:
 	ldrb r0,[r2],#1
