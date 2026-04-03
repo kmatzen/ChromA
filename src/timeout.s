@@ -441,68 +441,6 @@ noScanlineIRQ:
 @------------------
 	@ Mid-frame palette tracking disabled — DMA3 buffer filled from FF69_W tail
 	@ Per-scanline hook overhead (~70 cycles) disrupts GBC VBlank handler timing
-	b checkTimerIRQ
-	ldrb_ r0,scanline
-	cmp r0,#4
-	bne pal_not_scanline4
-	@ Scanline 4: snapshot BG palette and clear dirty flag
-	mov r0,#0
-	strb_ r0,pal_dirty
-	stmfd sp!,{r2-r9}
-	ldr r0,=gbc_palette
-	ldr r1,=pal_before
-	ldmia r0!,{r2-r9}
-	stmia r1!,{r2-r9}
-	ldmia r0!,{r2-r9}
-	stmia r1!,{r2-r9}
-	ldmfd sp!,{r2-r9}
-	b checkTimerIRQ
-pal_not_scanline4:
-	@ Check for mid-frame BG palette change (scanline >= 8 only)
-	ldrb_ r0,pal_dirty
-	movs r0,r0
-	beq checkTimerIRQ
-	mov r0,#0
-	strb_ r0,pal_dirty
-	ldrb_ r0,scanline
-	cmp r0,#8
-	blo checkTimerIRQ
-	cmp r0,#144
-	bge checkTimerIRQ
-	@ Count all visible palette changes (uncapped, for DMA3 mode detection)
-	ldr r2,=pal_split_count
-	ldrb r1,[r2]
-	add r1,r1,#1
-	strb r1,[r2]
-	sub r1,r1,#1			@ r1 = index (old count)
-	@ Fill DMA buffer if per-scanline mode active
-	ldr r2,=pal_scanline_active
-	ldr r2,[r2]
-	cmp r2,#0
-	bne_long pal_fill_dma_scanline
-pal_fill_dma_return:
-	@ Record VCount split (first 8 only)
-	cmp r1,#8
-	bge checkTimerIRQ
-	@ Store scanline in pal_split_lines[count]
-	ldr r2,=pal_split_lines
-	strb r0,[r2,r1]
-	@ Snapshot current BG palette (64 bytes) to pal_split_palettes[count]
-	stmfd sp!,{r2-r9}
-	ldr r0,=pal_split_palettes
-	add r0,r0,r1,lsl#6		@ r0 = &pal_split_palettes[count * 64]
-	ldr r2,=gbc_palette
-	ldmia r2!,{r3-r9,lr}
-	stmia r0!,{r3-r9,lr}
-	ldmia r2!,{r3-r9,lr}
-	stmia r0!,{r3-r9,lr}
-	ldmfd sp!,{r2-r9}
-	@ Increment split count
-	add r1,r1,#1
-	ldr r2,=pal_split_count
-	strb r1,[r2]
-@------------------
-
 @------------------
 
 	.pushsection .text
@@ -521,7 +459,7 @@ pal_fill_dma_scanline:
 	subs r4,r4,#1
 	bne 1b
 	ldmfd sp!,{r2-r6}
-	b_long pal_fill_dma_return
+	b_long checkTimerIRQ
 
 	.popsection
 
