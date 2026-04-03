@@ -23,20 +23,7 @@
 
  DEBUG		= 0
  PROFILE		= 0
-@ SPEEDHACKS_OLD		= 0
 // LITTLESOUNDDJ   = 0
-
-// .if GBAMPVERSION
-// MOVIEPLAYER		= 1
-// RESIZABLE		= 1
-// RUMBLE	= 0
-// VISOLY = 0
-// .else
-// MOVIEPLAYER		= 0
-// RESIZABLE		= 0
-// RUMBLE	= 1
-// VISOLY = 1
-// .endif
 
  SAVESTATES	= 0
 
@@ -78,25 +65,6 @@ RECENT_TILENUM_SIZE = 128
  MEM_END	= 0x02040000
 
  Next = MEM_END
-
-	.if MOVIEPLAYER
- FAT_MEM_END = MEM_END
- FAT_MEM_START = FAT_MEM_END-4096
- fatBuffer	= FAT_MEM_END-512
- fatWriteBuffer = fatBuffer
- globalBuffer    = fatBuffer-512
- lfnName			= globalBuffer-256
- SramName		= lfnName-256
- openFiles       = SramName-1200
- stateexist	= openFiles-36
- System	= stateexist-4
- PALMode = System-4
- rom_file = PALMode-4
- nocash	= rom_file-4
- rom_filesize = nocash-4
-
- Next = FAT_MEM_START
-	.endif
 
  XGB_SRAM	= Next-0x8000
  XGB_VRAM	= XGB_SRAM-0x4000

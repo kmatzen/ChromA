@@ -11,12 +11,10 @@ int loadstate2(int romNumber, stateheader *sh);
 int savestate2(void);
 
 #if !CARTSRAM
-#if !MOVIEPLAYER
 int get_saved_sram(void)
 {
 	return 0;
 }
-#endif
 #else
 
 // Reserve the top 32KB of GBA SRAM for game save write-through (max GB

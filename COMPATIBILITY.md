@@ -16,7 +16,8 @@ What this GB/GBC emulator implements, what it's missing, and why.
 | Timer accuracy test | **PASS** | Custom ROM validates sub-scanline DIV reads |
 | JR HRAM test | **PASS** | Custom ROM validates cross-bank JR |
 | RST timing test | **PASS** | Custom ROM validates all 8 RST variants match (16 cycles) |
-| 16 game regression tests | **PASS** | Crystal, Shantae, Zelda DX, Kirby, etc. |
+| 17 game regression tests | **PASS** | Crystal, Shantae, Zelda DX, Kirby, etc. |
+| 11 menu tests | **PASS** | All Goomba menu features automated |
 
 ---
 
@@ -182,7 +183,7 @@ No link cable multiplayer or printer support.
 
 | Constraint | Impact |
 |------------|--------|
-| **IWRAM: 32KB, ~97.5% used** | ~800 bytes free for new code |
+| **IWRAM: 32KB, ~93.9% used** | ~2,004 bytes free (code=29,496 bss=1,268) |
 | **All 4 GBA DMA channels allocated** | No spare DMA |
 | **ARM/GBC cycle ratio ~3:1** | GBC frame spans ~2 GBA frames |
 | **16MHz ARM7TDMI** | No room for software audio or per-pixel compositing |

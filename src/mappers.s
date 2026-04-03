@@ -232,7 +232,6 @@ MBC5map0:
 MBC5RAMB:
 @----------------------------------------------------------------------------
 	strb_ r0,mapperdata+4
-@	tst r0,#0x08		;rumble motor.
 	and r0,r0,#0x8
 	b RamSelect
 

@@ -15,12 +15,6 @@
 #define MULTIBOOT 0
 #define CARTSRAM 1
 #define USETRIM 1
-#define MOVIEPLAYER 0
-#define RUMBLE 0
-#define RESIZABLE 0
-#define GOMULTIBOOT 0
-#define POGOSHELL 0
-#define VISOLY 0
 #define SHANTAE_HACK 1
 #define REDUCED_FONT 1
 #define FAST_LDI_HL_A 1

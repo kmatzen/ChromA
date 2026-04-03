@@ -7,9 +7,6 @@ static __inline void breakpoint()
 }
 
 
-//#include "fs.h"
-//#include "cache.h"
-
 #if ROMVERSION
 	extern u8 goomba_mb_gba[];
 	#if !GCC
@@ -27,7 +24,6 @@ extern u8 auto_border;
 
 extern u8 ui_border_visible;
 extern u8 darkness;
-//extern u8 border_visible;
 extern int ui_x;
 extern int ui_y_real;
 
@@ -116,18 +112,8 @@ extern u8* romstart;
 extern u32 romnum;
 extern u32 END_OF_EXRAM;
 
-/*
-extern char lfnName[256];
-extern unsigned char globalBuffer[BYTE_PER_READ];
-extern unsigned char fatWriteBuffer[BYTE_PER_READ];
-extern unsigned char fatBuffer[BYTE_PER_READ];
-extern FAT_FILE openFiles[MAX_FILES_OPEN];
-*/
-
 extern char SramName[256];
 extern u8 mapperstate[32];
-
-//void loadstate_gfx(void);
 
 extern u8 AGB_BG[8192];
 
@@ -136,7 +122,6 @@ extern int bcolor;		//Border Color
 
 //io.s
 extern u32 joycfg;				//from io.s
-//void resetSIO(u32);				//io.s
 void vbaprint(const char *text);		//io.s
 void LZ77UnCompVram(const void *source,u16 *destination);		//io.s
 void waitframe(void);			//io.s
@@ -145,20 +130,10 @@ void suspend(void);			//io.s
 void waitframe(void);		//io.s
 int gettime(void);			//io.s
 
-/*
-//memory.s
-extern u32 sram_R[];
-extern u32 sram_W[];
-extern u32 rom_R60[];
-extern u32 empty_W[];
-*/
-
 //lcd.s
 extern u32 *vblankfptr;			//from lcd.s
-//extern u32 *vcountfptr;			//from lcd.s
 extern u32 vbldummy;			//from lcd.s
 extern u32 vblankinterrupt;		//from lcd.s
-//extern u32 vcountinterrupt;		//from lcd.s
 extern u32 AGBinput;			//from lcd.s
 extern u32 EMUinput;
 
@@ -169,11 +144,9 @@ void paletteinit(void);		//lcd.s
 void PaletteTxAll(void);	//lcd.s
 void transfer_palette(void);	//lcd.s
 void move_ui_asm(void);
-//void makeborder(void);		//lcd.s
 extern u32 FPSValue;		//from lcd.s
 extern u8 fpsenabled;		//from lcd.s
 extern u32 palettebank;		//from lcd.s palette bank
-//extern u32 bcolor;			//from lcd.s ,border color, black, grey, blue
 extern u8 gammavalue;	//from lcd.s
 
 extern u8 g_lcdhack;
@@ -191,11 +164,6 @@ extern u8* _gb_oam_buffer_screen;
 extern u8* _gb_oam_buffer_writing;
 extern u8* _gb_oam_buffer_alt;
 
-//extern u8* _dirty_tiles;
-//extern u8* _dirty_rows;
-
-//void _set_bg_cache_full(int mode);
-
 extern u8 dirty_map_words[];
 
 void memcpy32(void *dest, const void *src, int byteCount);
@@ -208,45 +176,7 @@ void copy_map_and_compare(u8 *destAddress, u8 *sourceAddress, int byteCount, u8*
 
 void update_lcdhack(void);
 
-//ppu.s
-/*
-extern u32 *vblankfptr;			//from ppu.s
-extern u32 vbldummy;			//from ppu.s
-extern u32 vblankinterrupt;		//from ppu.s
-extern u32 AGBinput;			//from ppu.s
-extern u32 EMUinput;
-
-void debug_(int,int);		//ppu.s
-void paletteinit(void);		//ppu.s
-void PaletteTxAll(void);	//ppu.s
-
-void PPU_reset(void);
-void PPU_init(void);
-
-extern u32 FPSValue;		//from ppu.s
-extern char fpsenabled;		//from ppu.s
-extern char gammavalue;		//from ppu.s
-extern char twitch;			//from ppu.s
-extern char flicker;		//from ppu.s
-extern u32 wtop;			//from ppu.s
-
-extern u32 ppustate[8];
-extern u16 agb_pal[48];
-extern u32 agb_nt_map[4];
-
-*/
-
-//sound.s
-/*
-void make_freq_table(void);
-extern u16* freqtbl;
-extern u16 FREQTBL2[2048];
-*/
-
-/*
-*/
-
-//visoly.s
+//io.s
 void doReset(void);
 
 //sgb.s
