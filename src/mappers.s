@@ -6,9 +6,6 @@
 @	#include "cart.h"
 @	#include "io.h"
 
- .if RUMBLE
-	@IMPORT DoRumble
- .endif
 	global_func mbc0init
 	global_func mbc1init
 	global_func mbc2init
@@ -237,43 +234,6 @@ MBC5RAMB:
 	strb_ r0,mapperdata+4
 @	tst r0,#0x08		;rumble motor.
 	and r0,r0,#0x8
- .if RUMBLE
-	ldr r1,=DoRumble
-	str r0,[r1]
- .if EZFLASH_DE_BUILD
-    cmp r0,#0x8
-	bne no_Rumble
-	STMFD   SP!, {R1-R3}
-	ldr 	r1,=0xD200
-	ldr 	r2,=0x1500
-	ldr 	r3,=0x9fe0000
-	strh 	r1,[r3]
-	ldr 	r3,=0x8000000
-	strh  r2,[r3]
-	ldr 	r3,=0x8020000
-	strh 	r1,[r3]
-	ldr 	r3,=0x8040000
-	strh  r2,[r3]
-	ldr 	r3,=0x9E20000
-	mov 	r1,#0xF1
-	strh  r1,[r3]
-	ldr 	r3,=0x9FC0000
-	strh  r2,[r3]
-	
-	mov		R2, #0x8000000
-	add r2,#0x1000
-	
-	mov		r3,#2
-	strh  r3,[r2]
-	
-set_off:
-	mov		r3,#0
-	strh  r3,[r2]
-	LDMFD   SP!, {R1-R3}
-no_Rumble:
-	@--
- .endif
- .endif
 	b RamSelect
 
 	.pushsection .text

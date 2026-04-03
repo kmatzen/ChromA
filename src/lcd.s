@@ -77,10 +77,6 @@
 @	DEBUGSCREEN = VRAM_BASE+(UI_TILEMAP+1)*2048
 	DEBUGSCREEN = VRAM_BASE+(UI_TILEMAP)*2048 + UI_ROW*64
 
- .if RUMBLE
-	@IMPORT RumbleInterrupt
-	@IMPORT StartRumbleComs
- .endif
  	global_func update_ui_border_masks
  	
  	global_func lcdstat
@@ -392,16 +388,10 @@ GFX_reset:	@called with CPU reset
 @	mov r2,#MAX_RECENT_TILES*16
 @	bl memset32_
 	
-	.if RESIZABLE
-	ldr_ r0,xgb_vram
-	ldr_ r2,xgb_vramsize
-	bl memset32_
-	.else
 	@clear XGB_VRAM
 	ldr r0,=XGB_VRAM
 	mov r2,#0x4000   @maybe this needs to change for 'resizable'
 	bl memset32_
-	.endif
 	
 	@clear GBA vram corresponding to XGB_VRAM
 	ldr r0,=VRAM_BASE
@@ -679,17 +669,6 @@ showfps_:		@fps output, r0-r3=used.
 	movmi r0,#59
 	strb r0,[r2,#1]
 	bxpl lr					@End if not 60 frames has passed
-
- .if RUMBLE
-	str lr,[sp,#-4]!
-	ldr r1,=StartRumbleComs
-	adr lr,ret_
-	bx r1
-ret_:
-	ldr lr,[sp],#4
-	ldr r2,=fpsenabled
- .endif
-
 
 	ldrb r0,[r2,#0]
 	tst r0,#1
@@ -1388,11 +1367,7 @@ flush_recent_tiles:
 @
 @render_dirty_tile:
 @	bl get_agb_vram_address
-@	.if RESIZABLE
-@	ldr_ gbcptr,xgb_vram
-@	.else
 @	ldr gbcptr,=XGB_VRAM
-@	.endif
 @	add gbcptr,gbcptr,r0,lsl#4
 @	cmp tilenum,#384
 @	addge gbcptr,gbcptr,#0x2000
@@ -1400,11 +1375,11 @@ flush_recent_tiles:
 @render_dirty_tile_loop:
 @	ldrb r0,[gbcptr],#1  @first plane
 @	ldrb r1,[gbcptr],#1  @second plane
-@	
+@
 @	ldr r0,[decodeptr,r0,lsl#2]
 @	ldr r1,[decodeptr,r1,lsl#2]
 @	orr r0,r0,r1,lsl#1
-@	
+@
 @	str r0,[agbptr_1],#4
 @	str r0,[agbptr_2],#4
 @	str r0,[agbptr_3],#4
@@ -1422,11 +1397,7 @@ flush_recent_tiles:
 @	b render_dirty_tile
 @
 @store_recent_tile:
-@	.if RESIZABLE
-@	ldr_ gbcptr,xgb_vram
-@	.else
 @	ldr gbcptr,=XGB_VRAM
-@	.endif
 @	subs r0,tilenum,#384
 @	movlt r0,tilenum
 @	add gbcptr,gbcptr,r0,lsl#4
@@ -1612,12 +1583,7 @@ vbldummy:
 	bx lr
 @----------------------------------------------------------------------------
 vblankfptr: .word vbldummy			@later switched to vblankinterrupt
-@serialfptr DCD serialinterrupt
- .if RUMBLE
-serialfptr: .word RumbleInterrupt
- .else
 serialfptr: .word vbldummy
- .endif
 vcountfptr: .word vcountinterrupt
 vcountstate: .word 0
 vblankinterrupt:@
@@ -2476,24 +2442,14 @@ render_dirty_bg:
 	ldr r9,=0xFDFF
 	
 	stmfd sp!,{lr}
-	.if RESIZABLE
-	ldr addy,=XGB_vram_1800
-	ldr addy,[addy]
-	.else
 	ldr addy,=XGB_VRAM+0x1800
-	.endif
 	
 	ldr r1,=dirty_map_words
 	str r1,dirty_map_base
 
 	ldr r11,=VRAM_BASE+TILEMAP1*2048 @0x06005000
 	bl update_whole_map_2
-	.if RESIZABLE
-	ldr addy,=XGB_vram_1C00
-	ldr addy,[addy]
-	.else
 	ldr addy,=XGB_VRAM+0x1800+0x400
-	.endif
 	
 	ldr r1,=dirty_map_words + 32
 	str r1,dirty_map_base
@@ -4901,12 +4857,7 @@ FF4F_W_:
 	
 	
 	
- .if RESIZABLE
- 	ldr_ addy,xgb_vram
- 	sub addy,addy,#0x8000
- .else
 	ldr addy,=XGB_VRAM-0x8000
- .endif
 	addne addy,addy,r0,lsl#13	
 	str_ addy,memmap_tbl+32	@8000
 	str_ addy,memmap_tbl+36	@9000

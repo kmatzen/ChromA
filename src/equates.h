@@ -15,16 +15,7 @@
 		@GBLL DEBUG
 		@GBLL SAFETY
 		@GBLL PROFILE
-		@GBLL SPEEDHACKS_OLD
-		@GBLL MOVIEPLAYER
-		@GBLL RESIZABLE
-		@GBLL RUMBLE
-        @GBLL EZFLASH_DE_BUILD
-		@GBLL SAVESTATES
-
 		@GBLL SRAM_32
-
-		@GBLL VISOLY
 
 		@GBLL LITTLESOUNDDJ
 
@@ -107,13 +98,10 @@ RECENT_TILENUM_SIZE = 128
  Next = FAT_MEM_START
 	.endif
 
-	.if RESIZABLE
-	.else
  XGB_SRAM	= Next-0x8000
  XGB_VRAM	= XGB_SRAM-0x4000
  GBC_EXRAM	= XGB_VRAM-0x6000
  Next = GBC_EXRAM
-	.endif
 
 @ INSTANT_PAGES	= 0x06004c00 @SGB_PACKET-1024		;formerly 0x0600CC00
 
@@ -129,15 +117,12 @@ RECENT_TILENUM_SIZE = 128
 
 @ Next	= RECENT_TILENUM
 
-	.if RESIZABLE
-	.else
  SGB_PALS	= Next-4096
  SGB_ATFS	= SGB_PALS-4096
  SGB_PACKET	= SGB_ATFS-112
  SGB_ATTRIBUTES = SGB_PACKET-360
 
  Next	= SGB_ATTRIBUTES
-	.endif
 
 
 
@@ -355,22 +340,6 @@ RECENT_TILENUM_SIZE = 128
  _m_ request_gb_type_,1
  _m_ novblankwait_,1
 
- .if RESIZABLE
- _m_ xgb_sram,4
- _m_ xgb_sramsize,4
- _m_ xgb_vram,4
- _m_ xgb_vramsize,4
- _m_ gbc_exram,4
- _m_ gbc_exramsize,4
- _m_ end_of_exram,4
- _m_ xgb_vram_1800,4
- _m_ xgb_vram_1C00,4
- _m_ sgb_pals,4
- _m_ sgb_atfs,4
- _m_ sgb_packet,4
- _m_ sgb_attributes,4
- _m_ ,12 @padding
- .endif
 @#6 word (of 8)
 			@lcd.s (wram_globals1)
  _m_ fpsvalue,4

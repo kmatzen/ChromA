@@ -30,10 +30,7 @@
 	.global g_sramsize
 	.global g_rammask
 	.global mapperstate
-	.if RESIZABLE
-	.else
 	.global XGB_SRAM
-	.endif
 	.global romstart
 	.global romnum
 	.global g_cartflags
@@ -239,12 +236,6 @@ loadcart: @called from C:  r0=rom number, r1=emuflags
         strb_ r4,gbcmode
         strb_ r5,sgbmode
        	
- .if RESIZABLE
- 	cmp r1,#0x00
-	moveq r0,#0x2000
-	movne r0,#0x4000
-	str_ r0,xgb_vramsize
- .endif
 
 	mov r2,#0x8000
 	ldrb r1,[r3,#0x148]	@get size in 32kByte chunks.
@@ -264,46 +255,6 @@ loadcart: @called from C:  r0=rom number, r1=emuflags
 	ldr r0,[r1,r0,lsl#2]
 	str_ r0,rammask
 	
- .if RESIZABLE
-	@build the dynamic memory!
-	cmp r0,#0
-	addne r0,r0,#1
-	str_ r0,xgb_sramsize
-	ldr r1,=END_OF_EXRAM
-	sub r0,r1,r0
-	str_ r0,xgb_sram
-	ldr_ r1,xgb_vramsize
-	sub r0,r0,r1
-	str_ r0,xgb_vram
-
-	add r2,r0,#0x1800
-	str_ r2,xgb_vram_1800
-	add r2,r0,#0x1C00
-	str_ r2,xgb_vram_1C00
-	
-	ldrb_ r2,sgbmode
-	movs r2,r2
-	moveq r2,#0
-	movne r2,r0
-
-	@if SGB mode, these grow down
-	@otherwise, set 0 for these
-	subne r2,r2,#4096
-	str_ r2,sgb_pals
-	subne r2,r2,#4096
-	str_ r2,sgb_atfs
-	subne r2,r2,#112
-	str_ r2,sgb_packet
-	subne r2,r2,#360
-	str_ r2,sgb_attributes
-	movne r0,r2
-
-	str_ r0,end_of_exram
-		
-	mov r0,#0
-	str_ r0,gbc_exram
-	str_ r0,gbc_exramsize
- .endif
 
 	stmfd sp!,{r0-addy,lr}
 	@ldr r1,=init_cache
@@ -361,21 +312,9 @@ dont_use_true_sram:
 	ldr r0,=XGB_RAM
 	mov r2,#0x2080
 	bl memset32_
- .if RESIZABLE
-	mov r1,#0
-
-	ldr_ r0,xgb_vram
-	ldr_ r2,xgb_vramsize
-	blne memset32_		@clear GB VRAM
-
-	ldr_ r0,xgb_sram		@clear gb sram, it will be loaded later anyway
-	ldr_ r2,xgb_sramsize
-	blne memset32_
- .else
 	ldr r0,=XGB_SRAM	@clear gb sram, it will be loaded later anyway
 	mov r2,#0x8000
 	bl memset32_
- .endif
 
 	ldr r0,=mapperstate	@clear mapperdata so we don't have to do that in every MapperInit.
 	mov r2,#32
@@ -390,24 +329,12 @@ dont_use_true_sram:
 	ldr_ r1,sramwptr		@could be used for RTC?
 	str_ r1,writemem_tbl+40
 	str_ r1,writemem_tbl+44
- .if RESIZABLE
-	ldr_ r1,xgb_vram
-	sub r1,r1,#0x8000
-	str_ r1,memmap_tbl+32
-	str_ r1,memmap_tbl+36
-	
-	ldr_ r1,xgb_sram
-	sub r1,r1,#0xA000
-	str_ r1,memmap_tbl+40
-	str_ r1,memmap_tbl+44
- .else
 	ldr r1,=XGB_VRAM-0x8000
 	str_ r1,memmap_tbl+32
 	str_ r1,memmap_tbl+36
 	ldr r1,=XGB_SRAM-0xA000
 	str_ r1,memmap_tbl+40
 	str_ r1,memmap_tbl+44
- .endif
 	ldr r1,=XGB_RAM-0xC000
 	str_ r1,memmap_tbl+48
 	str_ r1,memmap_tbl+52
@@ -828,12 +755,7 @@ need_to_use_cache:
 @----------------------------------------------------------------------------
 mapAB_:
 	str_ r0,srambank
- .if RESIZABLE
-	ldr_ r1,xgb_sram
-	sub r1,r1,#0xA000
- .else
 	ldr r1,=XGB_SRAM-0xA000
- .endif
 	ldr_ r2,rammask
 	and r0,r2,r0,lsl#13
 	add r0,r1,r0
