@@ -19,6 +19,9 @@
 #include <mgba/core/config.h>
 #include <mgba/core/log.h>
 #include <mgba/internal/gb/gb.h>
+#include <mgba/internal/gb/io.h>
+#include <mgba/internal/gb/video.h>
+#include <mgba/internal/gb/memory.h>
 #include <mgba/gb/interface.h>
 #include <mgba/internal/sm83/sm83.h>
 #include <mgba-util/image.h>
@@ -289,13 +292,8 @@ int main(int argc, char** argv) {
     cpu->sp = 0xFFFE;
     cpu->pc = 0x100;
 
-    /* Sync I/O register state to match jagoombacolor's GFX_reset / IO_reset.
-     * Without this, the reference core's LCD is in a different mode/scanline
-     * causing early divergence on STAT/LY reads. */
-    /* Note: mGBA's LY (FF44) may start at a different scanline than
-     * jagoombacolor (which always starts at LY=0). Games that read LY
-     * early will diverge — these are classified as timing gaps or
-     * hard divergences depending on whether the code paths reconverge. */
+    /* Note: mGBA's LCD starts mid-VBlank after GBSkipBIOS while jagoombacolor
+     * starts at LY=0. LY reads will differ — handled by I/O patching in Phase 3. */
 
     if (ref_only) {
         fprintf(stderr, "  Stepping %d instructions...\n", max_insns);
@@ -527,35 +525,25 @@ int main(int argc, char** argv) {
         }
 
         if (jgbc->sp > ref.sp) {
-            /* SP increased in jagoombacolor but not ref — ref likely has a
-             * pending interrupt that hasn't fired yet. Step the ref forward
-             * to let its interrupt fire, then try to resync. */
+            /* SP lower in ref — ref took an interrupt that jagoombacolor hasn't.
+             * Force-sync the ref to match jagoombacolor's state. */
             if (verbose) {
-                printf("  IRQ REF[    ] REF PC=%04X SP=%04X -> stepping ref (pending interrupt)\n",
-                       ref.pc, ref.sp);
+                printf("  IRQ JGC[%5d] REF SP=%04X -> JGC SP=%04X (interrupt in ref)\n",
+                       ji, ref.sp, jgbc->sp);
             }
-            /* Step the reference until its SP matches or we give up */
-            for (int step = 0; step < 1000; step++) {
-                gb_core->step(gb_core);
-                if (cpu->sp == jgbc->sp && cpu->pc == jgbc->pc)
-                    break;
-            }
-            /* Check if we synced */
-            if (cpu->sp == jgbc->sp) {
-                /* Patch remaining diffs */
-                cpu->a = jgbc->a;
-                cpu->f.packed = jgbc->f;
-                cpu->bc = jgbc->bc;
-                cpu->de = jgbc->de;
-                cpu->hl = jgbc->hl;
-                cpu->pc = jgbc->pc;
-                timing_gaps++;
-                match_count++;
-                last_pc = cpu->pc;
-                gb_core->step(gb_core);
-                ji++;
-                continue;
-            }
+            cpu->pc = jgbc->pc;
+            cpu->sp = jgbc->sp;
+            cpu->a = jgbc->a;
+            cpu->f.packed = jgbc->f;
+            cpu->bc = jgbc->bc;
+            cpu->de = jgbc->de;
+            cpu->hl = jgbc->hl;
+            timing_gaps++;
+            match_count++;
+            last_pc = cpu->pc;
+            gb_core->step(gb_core);
+            ji++;
+            continue;
         }
 
         /* Truly unrecoverable divergence */

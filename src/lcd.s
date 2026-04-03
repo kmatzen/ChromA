@@ -4427,7 +4427,11 @@ FF44_R:@      LCD Scanline
 @----------------------------------------------------------------------------
 	ands r0,cycles,#CYC_LCD_ENABLED
 	ldrneb_ r0,scanline
-#if 1
+@disabled: +1 adjustment was incorrect. scanline is already the current
+@line — it's incremented in line1_to_71 BEFORE execution resumes.
+@Adding +1 caused games to see the next scanline prematurely.
+	bx lr
+#if 0
 	cmp cycles,#CYCLE
 	addle r0,r0,#1
 
