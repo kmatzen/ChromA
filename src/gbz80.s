@@ -2436,13 +2436,13 @@ fetch_profile:
 	ldrplb r0,[gb_pc],#1
 	ldrpl pc,[gb_optbl,r0,lsl#2]
 	ldr_ pc,nexttimeout
-	
+
 profile_it:
 	ldr_ r0,lastbank
 	sub r0,gb_pc,r0
 @	sub r0,r0,#1
 	bic r0,r0,#0x8000
-	
+
 	mov r0,r0,lsl#2
 	ldr r1,=0x02008000
 	ldr r2,[r1,r0]
@@ -2457,6 +2457,76 @@ pr_loop:
 	str r2,[r0],#4
 	subs r1,r1,#1
 	bne pr_loop
+	bx lr
+ .endif
+
+ .if TRACE
+fetch_trace:
+	@ Save CPSR (the subs in fetch set N/Z/C/V flags we need to preserve)
+	mrs r0,cpsr
+	stmfd sp!,{r0,lr}		@save CPSR (in r0 slot) and lr
+
+	@ Check if buffer is full
+	ldr r1,=TRACE_BUF_ADDR
+	ldr r0,[r1]			@write_index
+	ldr r2,[r1,#4]			@max_entries
+	cmp r0,r2
+	bge .trace_skip
+
+	@ Save write_index and buf_base on stack for later
+	stmfd sp!,{r0,r1}		@push write_index, buf_base
+
+	@ Calculate entry address: base + 8 + write_index * 12
+	add r2,r0,r0,lsl#1		@write_index * 3
+	add r2,r1,r2,lsl#2		@base + write_index * 12
+	add r2,r2,#TRACE_BUF_HDR	@skip header
+
+	@ Decode GB PC: gb_pc (r9) - lastbank
+	ldr_ lr,lastbank
+	sub lr,gb_pc,lr
+	strh lr,[r2,#0]			@pc (16-bit)
+
+	@ Decode GB A: gb_a (r4) bits [31:24]
+	mov lr,gb_a,lsr#24
+	strb lr,[r2,#2]			@a
+
+	@ Decode GB F: from gb_flg (r3)
+	and lr,gb_flg,#0xA0000000	@nC bits
+	and r0,gb_flg,#0x50000000	@Zh bits
+	mov r0,r0,lsr#23
+	orr lr,r0,lr,lsr#25
+	strb lr,[r2,#3]			@f
+
+	@ Decode GB BC, DE, HL, SP: upper 16 bits
+	mov lr,gb_bc,lsr#16
+	strh lr,[r2,#4]
+	mov lr,gb_de,lsr#16
+	strh lr,[r2,#6]
+	mov lr,gb_hl,lsr#16
+	strh lr,[r2,#8]
+	mov lr,gb_sp,lsr#16
+	strh lr,[r2,#10]
+
+	@ Increment write_index
+	ldmfd sp!,{r0,r1}		@pop write_index, buf_base
+	add r0,r0,#1
+	str r0,[r1]
+
+.trace_skip:
+	@ Restore CPSR and continue with normal fetch
+	ldmfd sp!,{r0,lr}		@pop saved CPSR (into r0) and lr
+	msr cpsr_f,r0			@restore flags only (N,Z,C,V)
+	ldrplb r0,[gb_pc],#1
+	ldrpl pc,[gb_optbl,r0,lsl#2]
+	ldr_ pc,nexttimeout
+
+trace_init:
+	@ Called from emu_reset to initialize trace buffer
+	ldr r0,=TRACE_BUF_ADDR
+	mov r1,#0
+	str r1,[r0]			@write_index = 0
+	ldr r1,=TRACE_MAX_ENTRIES
+	str r1,[r0,#4]			@max_entries
 	bx lr
  .endif
 
@@ -2490,6 +2560,9 @@ cpu_reset:
 	bl game_specific_hacks_reset
  .if PROFILE
 	bl profile_reset
+ .endif
+ .if TRACE
+	bl trace_init
  .endif
 	ldrb_ r0,gbcmode
 	cmp r0,#0

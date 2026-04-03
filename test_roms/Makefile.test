@@ -25,9 +25,12 @@ LDFLAGS = -L$(MGBA_BUILD) -lmgba -Wl,-rpath,$(MGBA_BUILD)
 
 .PHONY: all test baseline clean
 
-all: test_roms/mgba_runner
+all: test_roms/mgba_runner test_roms/trace_compare
 
 test_roms/mgba_runner: test_roms/mgba_runner.c
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+
+test_roms/trace_compare: test_roms/trace_compare.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
 test: test_roms/mgba_runner
@@ -37,4 +40,4 @@ baseline: test_roms/mgba_runner
 	python3 test_roms/run_tests.py --rebaseline
 
 clean:
-	rm -f test_roms/mgba_runner
+	rm -f test_roms/mgba_runner test_roms/trace_compare

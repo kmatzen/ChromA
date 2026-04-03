@@ -68,6 +68,9 @@ CXXFLAGS := $(CFLAGS) \
  			-fno-rtti -fno-exceptions
 
 ASFLAGS	:=	$(ARCH)
+ifdef TRACE
+ASFLAGS	+=	-DTRACE_MODE=1
+endif
 LDFLAGS	=	-g $(ARCH) -Wl,-Map,$(notdir $@).map
 
 #---------------------------------------------------------------------------------
