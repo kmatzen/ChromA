@@ -16,7 +16,7 @@ What this GB/GBC emulator implements, what it's missing, and why.
 | Timer accuracy test | **PASS** | Custom ROM validates sub-scanline DIV reads |
 | JR HRAM test | **PASS** | Custom ROM validates cross-bank JR |
 | RST timing test | **PASS** | Custom ROM validates all 8 RST variants match (16 cycles) |
-| 17 game regression tests | **PASS** | Crystal, Shantae, Zelda DX, Kirby, etc. |
+| 26 game regression tests | **PASS** | Pokemon R/B/Y/Gold/Crystal, Zelda LA/DX/OoA/OoS, Shantae, etc. |
 | 11 menu tests | **PASS** | All Goomba menu features automated |
 
 ---
