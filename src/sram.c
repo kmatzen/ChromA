@@ -47,7 +47,6 @@ EWRAM_BSS int totalstatesize;		//how much SRAM is used
 EWRAM_BSS u32 sram_owner=0;
 
 EWRAM_BSS u8 *sram_copy = NULL;      //located at ewram_start
-EWRAM_BSS u8 *lzo_workspace = NULL;  //located at ewram_start or ewram_start + 0xE000
 EWRAM_BSS u8 *uncompressed_save = NULL;  //located at ewram_start + 10000
 EWRAM_BSS u8 *compressed_save = NULL;    //located around ewram_start + 1C800, moved back to + 10000 after first step
 EWRAM_BSS stateheader *current_save_file = NULL;
@@ -124,7 +123,6 @@ void getsram()	//copy GBA sram to sram_copy
 	{
 		sram_copy = ewram_start;
 		sram_copy[0] = 0;
-		lzo_workspace = NULL;
 		//uncompressed_save = NULL;
 		//compressed_save = NULL;
 	}
@@ -850,12 +848,12 @@ int savestate2()
 
 	//if successful, updates compressed_save and current_save_file
 	sram_copy = NULL;
-	lzo_workspace = ewram_start;
+	
 	uncompressed_save = ewram_start + 0x10000;
 	
 	//Save State - part 1, the system state excluding SRAM
 	
-	u8 *workspace = lzo_workspace;
+	
 	u8 *uncompressedState = uncompressed_save; //+ savestate_size_estimate * 17 / 16;
 	
 	int stateSize = SaveState(uncompressedState);
@@ -870,8 +868,8 @@ int savestate2()
 	current_save_file = (stateheader*)compressed_save;
 	
 	u8 *out = compressed_save + sizeof(stateheader) + 8;
-	lzo_uint compressedSize1;
-	lzo1x_1_compress(uncompressedState, stateSize, out, &compressedSize1, workspace);
+	int compressedSize1;
+	compressedSize1 = rle_compress(uncompressedState, stateSize, out);
 	u32 part1_size = ((compressedSize1 - 1) | 3) + 1;
 	
 	*((u32*)(out - 4)) = part1_size;
@@ -908,10 +906,10 @@ int savestate2()
 	
 	if (sramSize > 0)
 	{
-		lzo_uint compressedSize2;
+		int compressedSize2;
 		int part2_size;
 
-		lzo1x_1_compress(XGB_SRAM, sramSize, out2, &compressedSize2, workspace);
+		compressedSize2 = rle_compress(XGB_SRAM, sramSize, out2);
 		part2_size = ((compressedSize2 - 1) | 3) + 1;
 
 		*((u32*)(out2 - 4)) = part2_size;
@@ -928,7 +926,6 @@ int savestate2()
 	sh->checksum=checksum_this();	//checksum
 	strncpy(sh->title,(char*)findrom(romnum)+0x134,15);
 	uncompressed_save = NULL;
-	lzo_workspace = NULL;
 
 	cleanup_ewram();
 	return total_size;
@@ -936,7 +933,6 @@ fail:  //does not happen for now
 	uncompressed_save = NULL;
 	compressed_save = NULL;
 	current_save_file = NULL;
-	lzo_workspace = NULL;
 	cleanup_ewram();
 	return 0;
 }
@@ -1043,13 +1039,13 @@ int loadstate2(int romNumber, stateheader *sh)
 	
 	uncompressed_save = sram_copy + 0xE000;
 	
-	lzo_uint bytesDecompressed = compressedStateSize;
-	lzo1x_decompress(src, compressedStateSize, uncompressed_save, &bytesDecompressed, NULL);
+	
+	rle_decompress(src, compressedStateSize, uncompressed_save, uncompressedStateSize);
 	
 	if (uncompressedSramSize > 0)
 	{
-		lzo_uint bytesDecompressed2 = compressedStateSize;
-		lzo1x_decompress(src2, compressedSramSize, XGB_SRAM, &bytesDecompressed2, NULL);
+		
+		rle_decompress(src2, compressedSramSize, XGB_SRAM, uncompressedSramSize);
 	}
 	
 	int result = LoadState(uncompressed_save, uncompressedStateSize);
