@@ -52,3 +52,32 @@ Multiple approaches were attempted and all crash Crystalis in mGBA GUI:
 The root cause is the single-`nexttimeout_alt` architecture. Fixing this
 would require either multiple independent timeout channels or a
 fundamentally different timer interrupt mechanism.
+
+## Mid-scanline timing via GBA HBlank IRQ
+
+The GBA HBlank hardware interrupt was successfully used for mode 0 STAT
+IRQ timing (PR #49). This fires at the exact GBA HBlank boundary with
+zero drift. The handler saves/restores r0-r3 on the IRQ stack (since
+r3=gb_flg is live during GB execution) and checks lcdstat for mode 0
+STAT IE conditions.
+
+A two-phase scanline timeout split was also attempted (PR #48, closed)
+but broke Hercules GBC per-scanline palette DMA. The extra timeout
+handler overhead (~50 ARM instructions/scanline × 144 scanlines) drifted
+GB/GBA scanline alignment by ~6 GBA scanlines. The HBlank IRQ approach
+avoids this by using hardware timing instead of software timeouts.
+
+## Instruction-level trace comparison
+
+The TRACE=1 build instruments the fetch macro to record GB CPU state
+(PC, AF, BC, DE, HL, SP) per instruction into a 10K-entry EWRAM ring
+buffer. The `trace_compare` tool compares this against mGBA's native
+GB core stepped instruction-by-instruction.
+
+Results across 20 ROMs: all pass. ~73% of instructions match exactly.
+The remaining ~27% are LY (FF44) reads that return different values due
+to different frame-start positions (jagoombacolor starts at LY=0, mGBA
+at LY≈145). The tool handles these via I/O patching and state resyncs.
+
+All STAT mode bits, DIV, and other I/O registers match cycle-accurately
+between jagoombacolor and mGBA — zero patches needed for those registers.
