@@ -1,4 +1,4 @@
-# Jagoomba Color — VBlank Frame Profiling
+# ChromA — VBlank Frame Profiling
 
 Per-frame timing measured by reading VCOUNT at key points during
 the VBlank handler. The GBA has 68 VBlank scanlines (160-227) for

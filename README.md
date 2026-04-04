@@ -1,34 +1,55 @@
-Jaga's Goomba Color fork
+# ChromA
 
-A fork of Goomba Color with the goal of fixing bugs and incompatibilities in the original.  Based on the 2019-05-04 source.
+A Game Boy / Game Boy Color emulator for Game Boy Advance. Forked from Jagoomba Color by Jaga, which was based on Goomba Color by Dwedit, which was based on Goomba by FluBBa.
 
-### [▶ Try it in your browser](https://kmatzen.github.io/jagoombacolor/) — drop a .gb/.gbc ROM to play
+## License
 
-Some notable hacks and games that have had issues fixed:
-- Donkey Kong Land: New Colors Mode, https://www.romhacking.net/hacks/6076/ (file select menu accessible)
-- Faceball 2000 (menu accessible)
-- Kirby's Dream Land DX Service Repair, https://www.romhacking.net/hacks/6224/ (level 2 palette issues fixed)
-- Konami GB Collections 2 and 4 (boots)
-- Metal Gear Solid: Ghost Babel (elevator crash fixed)
-- Pokemon Crystal (graphical corruption fixed)
-- Wario Land DX, https://www.romhacking.net/hacks/6683/ (boots)
+This project is licensed under the GNU General Public License v2. See [LICENSE](LICENSE).
 
-To build:
-- Install the latest DevkitPro GBA tools
-- Navigate Msys2 to this directory
-- make
-- Rename font.lz77.o to font.o and fontpal.bin.o to fontpal.o
-- make
+## Features
 
-To test, I build a ROM with the resulting jagoombacolor.gba and the game I'm testing using goombafront.exe, then run it in mGBA.  You can find goombafront.exe as part of the Goomba Color releases.  For helpful debug symbols, take jagoombacolor.elf, put it in the same directory as the built ROM, and rename it to (ROM name).elf.  (Thanks to Endrift for the tip.)
-Also included is a simple .bat file that will use gdb to dump debug symbols to a text file.
+- Full GB/GBC CPU emulation (all opcodes, cycle-accurate STAT/DIV)
+- Per-scanline rendering with mid-frame register tracking
+- Mode 0 STAT IRQ via GBA HBlank hardware interrupt (zero-drift timing)
+- STAT IRQ blocking (LYC=LY, mode transitions)
+- GBC color palettes, VRAM banking, double-speed mode, HDMA
+- SGB border and palette support
+- 10 sprites per scanline limit
+- MBC1/2/3/5 with SRAM write-through persistence
+- MBC3 software RTC fallback
+- Instruction-level CPU trace comparison framework (TRACE=1 build)
 
-Thanks to:
-- Dwedit for the Goomba Color emulator, which you can find at https://www.dwedit.org/gba/goombacolor.php.  If you'd like to incorporate my changes into Goomba Color, you're more than welcome to.
-- FluBBa for the Goomba emulator before that: http://goomba.webpersona.com/
-- Minucce for help with ASM and pointing me in the right direction.
-- Sterophonick for code tweaks and featuring Jagoomba in the excellent Simple kernel for the EZ-Flash Omega carts: https://gbatemp.net/threads/new-theme-for-ez-flash-omega.520665/
-- EZ-Flash for releasing the source to their modified Goomba Color builds, which hopefully allows this to support the Omega Definitive Edition's rumble features
-- Nuvie for the code that saves the desired Game Boy type per game.
-- Radimerry for the MGS:Ghost Babel elevator fix, Faceball menu fix, and SMLDX SRAM fix.
-- Therealteamplayer for the default-to-grayscale code for GB games if no SGB palette is found.
+## Building
+
+```bash
+# Install DevkitPro GBA tools, then:
+make
+# Rename font.lz77.o to font.o and fontpal.bin.o to fontpal.o
+make
+```
+
+Output: `chroma.gba`
+
+## Testing
+
+```bash
+# Visual regression tests (26 ROMs)
+python3 test_roms/run_tests.py
+
+# Instruction-level trace comparison (20 ROMs)
+make clean && make TRACE=1
+make -f test_roms/Makefile.test
+# Then run trace_compare per ROM
+```
+
+## Acknowledgments
+
+- **Jaga** (EvilJagaGenius) for creating the Jagoomba Color fork: https://github.com/EvilJagaGenius/jagern
+- **Dwedit** (Dan Weiss) for the Goomba Color emulator: https://www.dwedit.org/gba/goombacolor.php
+- **FluBBa** (Fredrik Olsson) for the original Goomba emulator: http://goomba.webpersona.com/
+- **Minucce** for help with ASM
+- **Sterophonick** for code tweaks and EZ-Flash Omega integration
+- **EZ-Flash** for releasing modified Goomba Color source
+- **Nuvie** for per-game Game Boy type selection
+- **Radimerry** for MGS:Ghost Babel elevator fix, Faceball menu fix, SMLDX SRAM fix
+- **Therealteamplayer** for default-to-grayscale for GB games

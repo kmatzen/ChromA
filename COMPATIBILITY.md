@@ -1,4 +1,4 @@
-# Jagoomba Color — Compatibility Gap Analysis
+# ChromA — Compatibility Gap Analysis
 
 What this GB/GBC emulator implements, what it's missing, and why.
 

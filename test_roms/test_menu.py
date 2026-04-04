@@ -18,7 +18,7 @@ SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent
 RUNNER = SCRIPT_DIR / "mgba_runner"
 COMPILER = SCRIPT_DIR / "goomba_compile.py"
-EMULATOR = PROJECT_DIR / "jagoombacolor.gba"
+EMULATOR = PROJECT_DIR / "chroma.gba"
 SML2_ROM = SCRIPT_DIR / "Super Mario Land 2 - 6 Golden Coins (USA, Europe) (Rev 2).gb"
 
 # Menu runs ~1 iteration per 2-3 mGBA frames.

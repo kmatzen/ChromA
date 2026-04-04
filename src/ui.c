@@ -23,6 +23,7 @@ int print_1_func(int row, const char *src1, const char *src2);
 int strmerge_str(int unused, const char *src1, const char *src2);
 int text2_str(int row);
 int text1_str(int row);
+void showlicense(void);
 
 int print_1_func(int row,const char *src1,const char *src2)
 {
@@ -60,13 +61,13 @@ int text2_str(int row)
 #define print_2_1(xxxx) row=text2(row,(xxxx));
 
 const fptr multifnlist[]={autoBset,autoAset,ui3,ui2,ui4,
-sleep_,restart,exit_};
+sleep_,restart,showlicense,exit_};
 
 const fptr fnlist1[]={autoBset,autoAset,ui3,ui2,ui4,
 #if CARTSRAM
 savestatemenu,loadstatemenu,managesram,
 #endif
-sleep_,restart,exit_};
+sleep_,restart,showlicense,exit_};
 
 const fptr fnlist2[]={vblset,fpsset,sleepset,swapAB,autostateset,
 gbtype,changeautoborder,gbatype};
@@ -177,6 +178,40 @@ void subui(int menunr)
 		waitframe();		//(polling REG_P1 too fast seems to cause problems)
 		key=~REG_P1;
 	}
+}
+
+void showlicense()
+{
+	int key;
+	cls(1);
+	drawtext(0, "        ChromA License",0);
+	drawtext(2, "GNU General Public License v2",0);
+	drawtext(4, "Copyright (C) 2026",0);
+	drawtext(5, "  Kevin Blackburn-Matzen",0);
+	drawtext(6, "Copyright (C) 2021",0);
+	drawtext(7, "  EvilJagaGenius (Jaga)",0);
+	drawtext(8, "Copyright (C) 2006-2019",0);
+	drawtext(9, "  Dan Weiss (Dwedit)",0);
+	drawtext(10,"Copyright (C) 2003-2006",0);
+	drawtext(11,"  Fredrik Olsson (FluBBa)",0);
+	drawtext(13,"This is free software;",0);
+	drawtext(14,"you may redistribute it",0);
+	drawtext(15,"under the GPL v2. See the",0);
+	drawtext(16,"LICENSE file for details.",0);
+	drawtext(18,"Source: github.com/kmatzen",0);
+	drawtext(19,"        Press B to return",0);
+	scrolll(0);
+	oldkey=~REG_P1;
+	do {
+		waitframe();
+		key=~REG_P1;
+	} while(!(key&B_BTN));
+	while(key&B_BTN) {
+		waitframe();
+		key=~REG_P1;
+	}
+	drawui1();
+	scrollr(0);
 }
 
 void ui2()
@@ -322,8 +357,7 @@ char *const clocktxt[]={"Full","Half speed"};
 char *const lcdhacktxt[]={"OFF","Low","Medium","High"};
 //char *const dmamodetxt[]={"Buffered", "Direct to VRAM", "WayForward"};
 
-#define EMUNAME "Jagoomba Color"
-//char *const emuname = "Goomba Color ";
+#define EMUNAME "ChromA"
 char *const palnumtxt[]={"0","1","2","3"};
 
 void drawui1()
@@ -336,10 +370,10 @@ void drawui1()
 		return;
 	}
 	selected = main_ui_selection;
-	
+
 	strmerge(str,EMUNAME " " VERSION " on ",hostname[(u32)gbaversion]);
 	drawtext(18,str,0);
-	drawtext(19,"By FluBBa, Dwedit, Jaga",0);
+	drawtext(19,"BunBunnBunny,Jaga,Dwedit,FluBBa",0);
 
 	print_1("B autofire: ",autotxt[autoB]);
 	print_1("A autofire: ",autotxt[autoA]);
@@ -357,6 +391,7 @@ void drawui1()
 		print_1_1("Sleep");
 	}
 	print_1_1("Restart");
+	print_1_1("License");
 	print_1_1("Exit");
 	
 	selected = oldsel;

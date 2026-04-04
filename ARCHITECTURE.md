@@ -1,4 +1,4 @@
-# Jagoomba Color Architecture
+# ChromA Architecture
 
 A Game Boy / Game Boy Color emulator running on Game Boy Advance hardware. Based on Goomba Color by Dwedit, which was based on Goomba by FluBBa.
 

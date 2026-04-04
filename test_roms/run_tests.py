@@ -32,7 +32,7 @@ SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent
 RUNNER = SCRIPT_DIR / "mgba_runner"
 COMPILER = SCRIPT_DIR / "goomba_compile.py"
-EMULATOR = PROJECT_DIR / "jagoombacolor.gba"
+EMULATOR = PROJECT_DIR / "chroma.gba"
 BASELINE_DIR = SCRIPT_DIR / "baselines"
 TEST_CONFIG = SCRIPT_DIR / "test_config.json"
 
@@ -242,7 +242,7 @@ def main():
         print("Build it with: make -f test_roms/Makefile.test")
         sys.exit(1)
     if not EMULATOR.exists():
-        print(f"ERROR: jagoombacolor.gba not found at {EMULATOR}")
+        print(f"ERROR: chroma.gba not found at {EMULATOR}")
         print("Build it with: make")
         sys.exit(1)
 

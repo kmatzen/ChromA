@@ -1,11 +1,11 @@
-/* Instruction-level trace comparison for jagoombacolor.
+/* Instruction-level trace comparison for chroma.
  *
  * Compares GB CPU execution between:
  *   1. Native mGBA GB core (reference) - single-stepped instruction by instruction
  *   2. Jagoombacolor running in mGBA GBA core - trace buffer read from EWRAM
  *
  * Build: make -f test_roms/Makefile.test trace_compare
- * Usage: trace_compare <rom.gb> <jagoombacolor_trace.gba> [options]
+ * Usage: trace_compare <rom.gb> <chroma_trace.gba> [options]
  *        --frames N        Run GBA for N frames (default: 60)
  *        --max-insns N     Compare at most N instructions (default: 5440)
  *        --input F:keys    Simulate button press at frame F (same as mgba_runner)
@@ -33,7 +33,7 @@
 #include <stdbool.h>
 #include <fcntl.h>
 
-/* Must match the layout in jagoombacolor's trace buffer (equates.h / gbz80.s) */
+/* Must match the layout in chroma's trace buffer (equates.h / gbz80.s) */
 #define TRACE_BUF_ADDR    0x02010000
 #define TRACE_BUF_HDR     8
 #define TRACE_ENTRY_SIZE  12
@@ -126,7 +126,7 @@ struct InputEvent {
 
 int main(int argc, char** argv) {
     if (argc < 3) {
-        fprintf(stderr, "Usage: %s <rom.gb> <jagoombacolor_trace.gba> [options]\n", argv[0]);
+        fprintf(stderr, "Usage: %s <rom.gb> <chroma_trace.gba> [options]\n", argv[0]);
         fprintf(stderr, "  --frames N        GBA frames to run (default 60)\n");
         fprintf(stderr, "  --max-insns N     Max instructions to compare (default %d)\n", TRACE_MAX_ENTRIES);
         fprintf(stderr, "  --input F:keys    Button press at frame F\n");
@@ -221,11 +221,11 @@ int main(int argc, char** argv) {
     gb_core->init(gb_core);
     mCoreInitConfig(gb_core, NULL);
 
-    /* Skip boot ROM — start at PC=0x100 with post-boot state (matches jagoombacolor) */
+    /* Skip boot ROM — start at PC=0x100 with post-boot state (matches chroma) */
     mCoreConfigSetOverrideIntValue(&gb_core->config, "useBios", 0);
     mCoreConfigSetOverrideIntValue(&gb_core->config, "skipBios", 1);
 
-    /* Force CGB model to match jagoombacolor's behavior for GBC ROMs */
+    /* Force CGB model to match chroma's behavior for GBC ROMs */
     /* Check ROM header byte 0x143 for CGB flag */
     struct VFile* gb_vf = VFileOpen(gb_rom_path, O_RDONLY);
     if (!gb_vf) {
@@ -245,7 +245,7 @@ int main(int argc, char** argv) {
         /* Jagoombacolor always uses DMG registers for non-CGB ROMs, even SGB-capable ones */
         mCoreConfigSetOverrideIntValue(&gb_core->config, "gb.model", GB_MODEL_DMG);
     }
-    /* Ensure SGB features are disabled to match jagoombacolor's default behavior */
+    /* Ensure SGB features are disabled to match chroma's default behavior */
     mCoreConfigSetOverrideIntValue(&gb_core->config, "sgb.model", 0);
     mCoreConfigSetOverrideIntValue(&gb_core->config, "sgb.borders", 0);
 
@@ -265,15 +265,15 @@ int main(int argc, char** argv) {
     struct GB* gb = (struct GB*)gb_core->board;
     struct SM83Core* cpu = gb->cpu;
 
-    /* Force post-boot register state to match jagoombacolor exactly.
+    /* Force post-boot register state to match chroma exactly.
      * mGBA may auto-detect SGB and use different values. Override here. */
     if (is_cgb) {
-        /* Match jagoombacolor's emu_reset for CGB/AGB mode:
+        /* Match chroma's emu_reset for CGB/AGB mode:
          * A=0x11, F=Z+C+H (0xB0), B=0x01 (AGB), C=0x13,
          * DE=0x00D8, HL=0x014D — NOT real AGB post-boot values */
         cpu->a = 0x11;
         cpu->f.packed = 0xB0;  /* Z, H, C flags set */
-        cpu->b = 0x00;  /* jagoombacolor checks gbamode separately */
+        cpu->b = 0x00;  /* chroma checks gbamode separately */
         cpu->c = 0x13;
         cpu->d = 0x00;
         cpu->e = 0xD8;
@@ -292,7 +292,7 @@ int main(int argc, char** argv) {
     cpu->sp = 0xFFFE;
     cpu->pc = 0x100;
 
-    /* Note: mGBA's LCD starts mid-VBlank after GBSkipBIOS while jagoombacolor
+    /* Note: mGBA's LCD starts mid-VBlank after GBSkipBIOS while chroma
      * starts at LY=0. LY reads will differ — handled by I/O patching in Phase 3. */
 
     if (ref_only) {
@@ -313,7 +313,7 @@ int main(int argc, char** argv) {
     /* Reference trace will be generated on-the-fly during comparison
      * so we can patch I/O reads to keep the cores in sync. */
 
-    /* ===== PHASE 2: Run jagoombacolor and extract trace ===== */
+    /* ===== PHASE 2: Run chroma and extract trace ===== */
     fprintf(stderr, "=== Phase 2: Jagoombacolor trace (mGBA GBA core) ===\n");
 
     struct mCore* gba_core = mCoreFind(gba_rom_path);
@@ -392,16 +392,16 @@ int main(int argc, char** argv) {
         }
     }
     if (jgbc_offset > 0) {
-        fprintf(stderr, "  Skipping %d pre-boot entries in jagoombacolor trace\n", jgbc_offset);
+        fprintf(stderr, "  Skipping %d pre-boot entries in chroma trace\n", jgbc_offset);
         jgbc_count -= jgbc_offset;
         memmove(jgbc_trace, jgbc_trace + jgbc_offset, jgbc_count * sizeof(struct trace_entry));
     }
 
     /* ===== PHASE 3: Interleaved compare with I/O patching ===== */
     /* Step the reference core one instruction at a time, comparing against
-     * the jagoombacolor trace. When an I/O read produces a different value
+     * the chroma trace. When an I/O read produces a different value
      * (due to timing), patch the reference core's A register to match
-     * jagoombacolor's, keeping both on the same code path. */
+     * chroma's, keeping both on the same code path. */
     fprintf(stderr, "=== Phase 3: Interleaved comparison ===\n");
 
     int ji = 0;  /* jgbc trace index */
@@ -440,7 +440,7 @@ int main(int argc, char** argv) {
                     printf("  IO  JGC[%5d] PC=%04X A=%02X->%02X (FF%02X read)\n",
                            ji, ref.pc, ref.a, jgbc->a, io_reg);
                 }
-                /* Patch the reference core's A to match jagoombacolor's value.
+                /* Patch the reference core's A to match chroma's value.
                  * This keeps the reference on the same code path. */
                 cpu->a = jgbc->a;
                 io_patches++;
@@ -475,7 +475,7 @@ int main(int argc, char** argv) {
         /* PC differs — the traces have diverged onto different code paths.
          * This can happen when a conditional branch was taken differently
          * due to flags set by a previous I/O-dependent computation.
-         * Reset the reference core to match jagoombacolor's state and continue. */
+         * Reset the reference core to match chroma's state and continue. */
         if (ref.sp == jgbc->sp) {
             if (verbose) {
                 printf("  RESYNC JGC[%5d] REF PC=%04X -> JGC PC=%04X\n",
@@ -497,14 +497,14 @@ int main(int argc, char** argv) {
         }
 
         /* SP differs. This can happen when an interrupt fires at a different
-         * point in each core (jagoombacolor's scanline-based timing vs mGBA's
+         * point in each core (chroma's scanline-based timing vs mGBA's
          * cycle-accurate timing). An interrupt pushes PC, changes SP, and
          * jumps to a handler — causing both PC and SP to diverge.
          * Detect this by checking if SP decreased (interrupt push) and
          * resync the reference core to match. */
         if (jgbc->sp < ref.sp) {
-            /* SP decreased — likely interrupt fired in jagoombacolor.
-             * Resync the reference to follow jagoombacolor's execution. */
+            /* SP decreased — likely interrupt fired in chroma.
+             * Resync the reference to follow chroma's execution. */
             if (verbose) {
                 printf("  IRQ JGC[%5d] REF PC=%04X SP=%04X -> JGC PC=%04X SP=%04X (interrupt)\n",
                        ji, ref.pc, ref.sp, jgbc->pc, jgbc->sp);
@@ -525,8 +525,8 @@ int main(int argc, char** argv) {
         }
 
         if (jgbc->sp > ref.sp) {
-            /* SP lower in ref — ref took an interrupt that jagoombacolor hasn't.
-             * Force-sync the ref to match jagoombacolor's state. */
+            /* SP lower in ref — ref took an interrupt that chroma hasn't.
+             * Force-sync the ref to match chroma's state. */
             if (verbose) {
                 printf("  IRQ JGC[%5d] REF SP=%04X -> JGC SP=%04X (interrupt in ref)\n",
                        ji, ref.sp, jgbc->sp);

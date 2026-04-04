@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Test RST instruction timing consistency.
 
-Runs rst_timing_test.gb through jagoombacolor and reads results from
+Runs rst_timing_test.gb through chroma and reads results from
 SRAM to verify all RST variants have identical timing (16 T-cycles)
 and CALL has 24 T-cycles.
 """
@@ -15,7 +15,7 @@ SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent
 RUNNER = SCRIPT_DIR / "mgba_runner"
 COMPILER = SCRIPT_DIR / "goomba_compile.py"
-EMULATOR = PROJECT_DIR / "jagoombacolor.gba"
+EMULATOR = PROJECT_DIR / "chroma.gba"
 ROM = SCRIPT_DIR / "rst_timing_test.gb"
 
 
@@ -24,7 +24,7 @@ def main():
         print(f"ERROR: mgba_runner not found at {RUNNER}")
         sys.exit(1)
     if not EMULATOR.exists():
-        print(f"ERROR: jagoombacolor.gba not found")
+        print(f"ERROR: chroma.gba not found")
         sys.exit(1)
     if not ROM.exists():
         print(f"ERROR: rst_timing_test.gb not found — assemble it first")

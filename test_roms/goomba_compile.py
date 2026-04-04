@@ -29,7 +29,7 @@ def main():
     parser.add_argument(
         "-e", "--emulator",
         required=True,
-        help="Path to jagoombacolor.gba"
+        help="Path to chroma.gba"
     )
 
     parser.add_argument(
