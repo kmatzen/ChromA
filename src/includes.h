@@ -16,7 +16,7 @@
 #include "gba.h"
 
 #include "asmcalls.h"
-#include "minilzo.107/minilzo.h"
+#include "rle.h"
 #include "main.h"
 #include "ui.h"
 #include "sram.h"

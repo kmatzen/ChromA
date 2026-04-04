@@ -168,7 +168,7 @@ void C_entry()
 
 //	vcountfptr=&vcountinterrupt;
 #if CARTSRAM
-	lzo_init();	//init compression lib for savestates
+	
 #endif
 
 	//make 16 solid tiles
