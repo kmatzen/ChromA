@@ -1,0 +1,95 @@
+name: Build & Test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkitarm:latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Build
+      run: make
+      env:
+        DEVKITARM: /opt/devkitpro/devkitARM
+
+    - name: Upload GBA binary
+      uses: actions/upload-artifact@v4
+      with:
+        name: jagoombacolor.gba
+        path: jagoombacolor.gba
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download GBA binary
+      uses: actions/download-artifact@v4
+      with:
+        name: jagoombacolor.gba
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake libelf-dev libpng-dev \
+          libsqlite3-dev libedit-dev python3-pip
+        pip3 install --break-system-packages Pillow
+
+    - name: Build mGBA library
+      run: |
+        git clone --depth 1 https://github.com/mgba-emu/mgba.git /tmp/mgba-build
+        mkdir -p /tmp/mgba-build/build
+        cd /tmp/mgba-build/build
+        cmake .. -DBUILD_QT=OFF -DBUILD_SDL=OFF \
+          -DUSE_EPOXY=OFF -DUSE_FFMPEG=OFF -DUSE_LIBZIP=OFF \
+          -DUSE_DISCORD_RPC=OFF -DUSE_LUA=OFF -DUSE_LZMA=OFF \
+          -DENABLE_VFS_FD=ON -DENABLE_VFS=ON -DENABLE_DIRECTORIES=ON
+        make -j$(nproc)
+
+    - name: Build test runner
+      run: |
+        cc -O2 -g \
+          -I/tmp/mgba-build/include -I/tmp/mgba-build/build/include -I/tmp/mgba-build/src \
+          -include /tmp/mgba-build/build/include/mgba/flags.h \
+          -DM_CORE_GB -DM_CORE_GBA -DMGBA_DLL \
+          -o test_roms/mgba_runner test_roms/mgba_runner.c \
+          -L/tmp/mgba-build/build -lmgba -Wl,-rpath,/tmp/mgba-build/build
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
+    - name: Smoke test mgba_runner
+      run: |
+        echo "=== VFS flags ==="
+        grep 'VFS\|DIRECTORIES' /tmp/mgba-build/build/include/mgba/flags.h
+        echo "=== Test ==="
+        python3 test_roms/goomba_compile.py -e jagoombacolor.gba -o /tmp/smoke.gba test_roms/ei_delay_test.gb
+        test_roms/mgba_runner /tmp/smoke.gba 10 /tmp/smoke.bmp
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
+    - name: Run custom ROM visual tests
+      run: |
+        python3 test_roms/run_tests.py \
+          -t ei_delay_test \
+          -t halt_bug_test \
+          -t jr_hram_test \
+          -t rst_timing_test \
+          -t sprite_limit_test \
+          -t timer_accuracy_test
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
+    - name: Run RST timing test
+      run: python3 test_roms/test_rst_timing.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
