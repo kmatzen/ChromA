@@ -1,4 +1,4 @@
-MAKEFILE	:=	makefile
+MAKEFILE	:=	Makefile
 
 #---------------------------------------------------------------------------------
 # Clear the implicit built in rules

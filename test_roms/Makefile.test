@@ -10,16 +10,13 @@ MGBA_SRC ?= /tmp/mgba-build
 MGBA_BUILD ?= $(MGBA_SRC)/build
 
 CC = cc
+# Use mGBA's generated config.h for feature defines instead of hardcoding
 CFLAGS = -O2 \
   -I$(MGBA_SRC)/include \
   -I$(MGBA_BUILD)/include \
   -I$(MGBA_SRC)/src \
-  -DBUILD_GLES2 -DBUILD_GLES3 -DENABLE_DEBUGGERS -DENABLE_DIRECTORIES \
-  -DENABLE_GDB_STUB -DENABLE_SCRIPTING -DENABLE_VFS -DENABLE_VFS_FD \
-  -DM_CORE_GB -DM_CORE_GBA -DUSE_DISCORD_RPC -DUSE_EDITLINE -DUSE_EPOXY \
-  -DUSE_FFMPEG -DUSE_FREETYPE -DUSE_JSON_C -DUSE_LIBSWRESAMPLE -DUSE_LIBZIP \
-  -DUSE_LUA -DUSE_LZMA -DUSE_PNG -DUSE_PTHREADS -DUSE_SQLITE3 -DUSE_ZLIB \
-  -D_DARWIN_C_SOURCE -DMGBA_DLL
+  -include $(MGBA_BUILD)/include/mgba/flags.h \
+  -DM_CORE_GB -DM_CORE_GBA -DMGBA_DLL
 
 LDFLAGS = -L$(MGBA_BUILD) -lmgba -Wl,-rpath,$(MGBA_BUILD)
 
@@ -34,6 +31,12 @@ test_roms/trace_compare: test_roms/trace_compare.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
 test: test_roms/mgba_runner
+	python3 test_roms/run_all_tests.py
+
+test-quick: test_roms/mgba_runner
+	python3 test_roms/run_all_tests.py --quick
+
+test-visual: test_roms/mgba_runner
 	python3 test_roms/run_tests.py
 
 baseline: test_roms/mgba_runner
