@@ -39,7 +39,7 @@
     margin-bottom: 4px;
     text-shadow: none;
   }
-  .sub { color: #445; font-size: 0.85em; margin-bottom: 24px; letter-spacing: 0.15em; text-transform: uppercase; }
+  .sub { color: #889; font-size: 0.85em; margin-bottom: 24px; letter-spacing: 0.15em; text-transform: uppercase; }
   .screen-wrap {
     position: relative; border-radius: 8px; overflow: hidden;
     border: 2px solid #2a2a3a;
@@ -54,11 +54,11 @@
     width: 480px; height: 320px; display: block;
   }
   .keys {
-    font-size: 11px; color: #334; margin: 10px 0; letter-spacing: 0.02em;
+    font-size: 11px; color: #778; margin: 10px 0; letter-spacing: 0.02em;
   }
   kbd {
     background: #12121a; padding: 2px 6px; border-radius: 4px;
-    border: 1px solid #222; font-family: inherit; font-size: 11px; color: #667;
+    border: 1px solid #444; font-family: inherit; font-size: 11px; color: #aab;
   }
   #drop-zone {
     border: 2px dashed #222; border-radius: 12px;
@@ -82,7 +82,7 @@
     -webkit-background-clip: text; background-clip: text;
     -webkit-text-fill-color: transparent;
   }
-  #drop-zone .hint { margin-top: 6px; color: #334; font-size: 0.85em; }
+  #drop-zone .hint { margin-top: 6px; color: #778; font-size: 0.85em; }
   #status {
     font-size: 13px; margin: 8px 0; min-height: 20px;
     animation: shimmer 2s ease infinite;
@@ -91,11 +91,11 @@
   #status.error { color: #f55; animation: none; }
   #status.loading { color: #fa0; }
   .footer {
-    color: #223; font-size: 10px;
+    color: #667; font-size: 10px;
     margin-top: auto; padding-top: 30px;
     text-align: center; line-height: 1.8;
   }
-  .footer a { color: #446; text-decoration: none; border-bottom: 1px solid #222; }
+  .footer a { color: #89a; text-decoration: none; border-bottom: 1px solid #222; }
   .footer a:hover { color: #0ff; border-color: #0ff; }
   .hidden { display: none; }
 </style>
@@ -106,7 +106,7 @@
 <p class="sub">Game Boy &middot; Game Boy Color &middot; on GBA</p>
 
 <div class="screen-wrap" id="screen-wrap">
-  <canvas id="screen" width="240" height="160"></canvas>
+  <canvas id="screen" width="240" height="160" tabindex="0"></canvas>
 </div>
 
 <p class="keys">
@@ -184,10 +184,27 @@ async function loadGB(file) {
     setStatus('', '');
     dropZone.classList.add('hidden');
     screenWrap.classList.add('playing');
+    canvas.focus();
   } else {
     setStatus('Failed to load ROM', 'error');
   }
 }
+
+const keyMap = {
+  'ArrowUp': 'Up', 'ArrowDown': 'Down', 'ArrowLeft': 'Left', 'ArrowRight': 'Right',
+  'x': 'A', 'X': 'A', 'z': 'B', 'Z': 'B',
+  'Enter': 'Start', 'Backspace': 'Select',
+  'a': 'L', 'A': 'L', 's': 'R', 'S': 'R'
+};
+
+window.addEventListener('keydown', e => {
+  if (keyMap[e.key]) e.preventDefault();
+  if (emu && keyMap[e.key]) emu.buttonPress(keyMap[e.key]);
+});
+
+window.addEventListener('keyup', e => {
+  if (emu && keyMap[e.key]) emu.buttonUnpress(keyMap[e.key]);
+});
 
 dropZone.addEventListener('click', () => romInput.click());
 romInput.addEventListener('change', e => { if (e.target.files[0]) loadGB(e.target.files[0]); });
