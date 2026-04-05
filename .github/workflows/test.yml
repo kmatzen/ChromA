@@ -191,7 +191,6 @@ jobs:
     needs: [test, test-full]
     if: always() && needs.test.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       pages: write
       id-token: write
