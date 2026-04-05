@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChromA — GB/GBC on GBA</title>
+<style>
+  @keyframes holo {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  @keyframes shimmer {
+    0%   { opacity: 0.4; }
+    50%  { opacity: 1; }
+    100% { opacity: 0.4; }
+  }
+  @keyframes pulse-border {
+    0%   { border-color: #2a2a3a; box-shadow: 0 0 0px transparent; }
+    50%  { border-color: #5bf; box-shadow: 0 0 20px rgba(85,187,255,0.15); }
+    100% { border-color: #2a2a3a; box-shadow: 0 0 0px transparent; }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #08080e;
+    color: #aab;
+    font-family: system-ui, -apple-system, sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    min-height: 100vh; padding: 30px 20px;
+  }
+  h1 {
+    font-size: 3em; font-weight: 800; letter-spacing: 0.08em;
+    background: linear-gradient(135deg, #f0f, #0ff, #ff0, #0f0, #f0f, #0ff);
+    background-size: 300% 300%;
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: holo 4s ease infinite;
+    margin-bottom: 4px;
+    text-shadow: none;
+  }
+  .sub { color: #445; font-size: 0.85em; margin-bottom: 24px; letter-spacing: 0.15em; text-transform: uppercase; }
+  .screen-wrap {
+    position: relative; border-radius: 8px; overflow: hidden;
+    border: 2px solid #2a2a3a;
+    box-shadow: 0 4px 30px rgba(0,0,0,0.6), inset 0 0 60px rgba(0,0,0,0.3);
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  .screen-wrap.playing {
+    animation: pulse-border 3s ease infinite;
+  }
+  #screen {
+    image-rendering: pixelated; background: #000;
+    width: 480px; height: 320px; display: block;
+  }
+  .keys {
+    font-size: 11px; color: #334; margin: 10px 0; letter-spacing: 0.02em;
+  }
+  kbd {
+    background: #12121a; padding: 2px 6px; border-radius: 4px;
+    border: 1px solid #222; font-family: inherit; font-size: 11px; color: #667;
+  }
+  #drop-zone {
+    border: 2px dashed #222; border-radius: 12px;
+    padding: 36px 50px; cursor: pointer;
+    transition: all 0.3s; margin: 20px 0;
+    background: rgba(255,255,255,0.01);
+  }
+  #drop-zone:hover {
+    border-color: #0ff;
+    background: rgba(0,255,255,0.02);
+    box-shadow: 0 0 30px rgba(0,255,255,0.05);
+  }
+  #drop-zone.drag {
+    border-color: #f0f;
+    background: rgba(255,0,255,0.03);
+    box-shadow: 0 0 40px rgba(255,0,255,0.08);
+  }
+  #drop-zone .big {
+    font-size: 1.1em; font-weight: 600;
+    background: linear-gradient(90deg, #0ff, #f0f);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  #drop-zone .hint { margin-top: 6px; color: #334; font-size: 0.85em; }
+  #status {
+    font-size: 13px; margin: 8px 0; min-height: 20px;
+    animation: shimmer 2s ease infinite;
+  }
+  #status.ready { color: #0fa; animation: none; }
+  #status.error { color: #f55; animation: none; }
+  #status.loading { color: #fa0; }
+  .footer {
+    color: #223; font-size: 10px;
+    margin-top: auto; padding-top: 30px;
+    text-align: center; line-height: 1.8;
+  }
+  .footer a { color: #446; text-decoration: none; border-bottom: 1px solid #222; }
+  .footer a:hover { color: #0ff; border-color: #0ff; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<h1>ChromA</h1>
+<p class="sub">Game Boy &middot; Game Boy Color &middot; on GBA</p>
+
+<div class="screen-wrap" id="screen-wrap">
+  <canvas id="screen" width="240" height="160"></canvas>
+</div>
+
+<p class="keys">
+  <kbd>X</kbd> A &ensp; <kbd>Z</kbd> B &ensp;
+  <kbd>Enter</kbd> Start &ensp; <kbd>Backspace</kbd> Select &ensp;
+  <kbd>&larr;&uarr;&darr;&rarr;</kbd> D-pad
+</p>
+
+<div id="drop-zone">
+  <p class="big">Drop a .gb or .gbc ROM here</p>
+  <p class="hint">or click to browse</p>
+  <input type="file" id="rom-input" accept=".gb,.gbc" style="display:none">
+</div>
+
+<p id="status" class="loading"></p>
+
+<div class="footer">
+  GBA emulation: <a href="https://github.com/mgba-emu/mgba">mGBA</a>
+  (<a href="https://www.mozilla.org/en-US/MPL/2.0/">MPL-2.0</a>,
+  <a href="https://github.com/mgba-emu/mgba">source</a>)
+  via <a href="https://github.com/thenick775/mgba-wasm">@thenick775/mgba-wasm</a> (BSD-2-Clause)
+  <br>
+  <a href="https://github.com/kmatzen/jagoombacolor">ChromA source</a>
+</div>
+
+<script type="module">
+import mGBA from './mgba.js';
+
+const canvas = document.getElementById('screen');
+const statusEl = document.getElementById('status');
+const dropZone = document.getElementById('drop-zone');
+const romInput = document.getElementById('rom-input');
+const screenWrap = document.getElementById('screen-wrap');
+
+function setStatus(msg, cls) {
+  statusEl.textContent = msg;
+  statusEl.className = cls || '';
+}
+
+setStatus('Initializing emulator...', 'loading');
+
+let emu = null;
+let chromaData = null;
+
+async function init() {
+  try {
+    emu = await mGBA({ canvas });
+    await emu.FSInit();
+    setStatus('Loading ChromA...', 'loading');
+
+    const resp = await fetch('chroma.gba');
+    chromaData = new Uint8Array(await resp.arrayBuffer());
+
+    setStatus('Ready \u2014 drop a Game Boy ROM', 'ready');
+  } catch (e) {
+    setStatus('Error: ' + e.message, 'error');
+    console.error(e);
+  }
+}
+
+async function loadGB(file) {
+  if (!emu || !chromaData) return;
+  setStatus('Building ROM...', 'loading');
+
+  const gbData = new Uint8Array(await file.arrayBuffer());
+
+  const combined = new Uint8Array(chromaData.length + gbData.length + 264);
+  combined.set(chromaData, 0);
+  combined.set(gbData, chromaData.length);
+
+  const romPath = emu.filePaths().gamePath + '/chroma.gba';
+  emu.FS.writeFile(romPath, combined);
+
+  if (emu.loadGame(romPath)) {
+    setStatus('', '');
+    dropZone.classList.add('hidden');
+    screenWrap.classList.add('playing');
+  } else {
+    setStatus('Failed to load ROM', 'error');
+  }
+}
+
+dropZone.addEventListener('click', () => romInput.click());
+romInput.addEventListener('change', e => { if (e.target.files[0]) loadGB(e.target.files[0]); });
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag');
+  if (e.dataTransfer.files[0]) loadGB(e.dataTransfer.files[0]);
+});
+
+init();
+</script>
+</body>
+</html>

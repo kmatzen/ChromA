@@ -2,6 +2,8 @@ Jaga's Goomba Color fork
 
 A fork of Goomba Color with the goal of fixing bugs and incompatibilities in the original.  Based on the 2019-05-04 source.
 
+### [▶ Try it in your browser](https://kmatzen.github.io/jagoombacolor/) — drop a .gb/.gbc ROM to play
+
 Some notable hacks and games that have had issues fixed:
 - Donkey Kong Land: New Colors Mode, https://www.romhacking.net/hacks/6076/ (file select menu accessible)
 - Faceball 2000 (menu accessible)
