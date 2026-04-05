@@ -62,7 +62,8 @@ CFLAGS	:=	-g -Wall -Os\
 			-std=c99 \
 			$(ARCH)
 
-CFLAGS	+=	$(INCLUDE)
+GIT_HASH := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+CFLAGS	+=	$(INCLUDE) -DGIT_HASH=\"$(GIT_HASH)\"
 
 CXXFLAGS := $(CFLAGS) \
  			-fno-rtti -fno-exceptions

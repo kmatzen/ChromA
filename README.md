@@ -9,7 +9,7 @@ A Game Boy / Game Boy Color emulator for Game Boy Advance. Forked from Jagoomba 
 
 ## License
 
-This project is licensed under the GNU General Public License v2. See [LICENSE](LICENSE).
+This project is licensed under the GNU General Public License v2. See [LICENSE](LICENSE) for the full copyright chain and third-party component licenses.
 
 ## Features
 
@@ -50,7 +50,11 @@ make -f test_roms/Makefile.test
 test_roms/trace_compare rom.gb combined.gba --frames 600 --max-insns 5000
 ```
 
-CI runs on every PR (custom ROM tests) and on every push to master (full suite with game ROMs).
+CI runs on every PR (custom ROM tests) and on every push to main (full suite with game ROMs).
+
+## Test baselines
+
+The `test_roms/baselines/` directory contains screenshot images captured from commercial Game Boy and Game Boy Color games for automated visual regression testing. These screenshots are used solely for the purpose of verifying emulator correctness. All game content depicted in these images is the property of its respective copyright holders and is not licensed under this project's license.
 
 ## Acknowledgments
 
