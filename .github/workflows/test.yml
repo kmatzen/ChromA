@@ -134,9 +134,29 @@ jobs:
         GH_TOKEN: ${{ secrets.TEST_ROMS_PAT }}
 
     - name: Run full test suite
-      run: python3 test_roms/run_all_tests.py
+      run: |
+        python3 test_roms/run_tests.py --diff-dir /tmp/test-diffs || true
+        python3 test_roms/run_all_tests.py
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
+
+    - name: Generate diff report
+      if: always()
+      run: |
+        if [ -d /tmp/test-diffs ] && ls /tmp/test-diffs/*_comparison.png 1>/dev/null 2>&1; then
+          python3 test_roms/generate_diff_report.py /tmp/test-diffs /tmp/test-diffs/report.html
+        else
+          echo "<html><body><h1>All tests passed — no visual regressions</h1></body></html>" > /tmp/test-diffs-report.html
+          mkdir -p /tmp/test-diffs
+          cp /tmp/test-diffs-report.html /tmp/test-diffs/report.html
+        fi
+
+    - name: Upload diff report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: visual-diff-report
+        path: /tmp/test-diffs/report.html
 
   release:
     needs: test
