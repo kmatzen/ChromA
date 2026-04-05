@@ -2,6 +2,8 @@
 
 A Game Boy / Game Boy Color emulator for Game Boy Advance. Forked from Jagoomba Color by Jaga, which was based on Goomba Color by Dwedit, which was based on Goomba by FluBBa.
 
+### [▶ Try it in your browser](https://kmatzen.github.io/chroma/) — drop a .gb/.gbc ROM to play
+
 ## License
 
 This project is licensed under the GNU General Public License v2. See [LICENSE](LICENSE).
@@ -10,14 +12,14 @@ This project is licensed under the GNU General Public License v2. See [LICENSE](
 
 - Full GB/GBC CPU emulation (all opcodes, cycle-accurate STAT/DIV)
 - Per-scanline rendering with mid-frame register tracking
-- Mode 0 STAT IRQ via GBA HBlank hardware interrupt (zero-drift timing)
-- STAT IRQ blocking (LYC=LY, mode transitions)
+- STAT IRQ blocking (LYC=LY, mode transitions, VBlank entry)
 - GBC color palettes, VRAM banking, double-speed mode, HDMA
 - SGB border and palette support
 - 10 sprites per scanline limit
 - MBC1/2/3/5 with SRAM write-through persistence
 - MBC3 software RTC fallback
-- Instruction-level CPU trace comparison framework (TRACE=1 build)
+- Savestate support with RLE compression
+- Browser demo via mGBA WASM
 
 ## Building
 
@@ -33,18 +35,23 @@ Output: `chroma.gba`
 ## Testing
 
 ```bash
-# Visual regression tests (26 ROMs)
-python3 test_roms/run_tests.py
+# Run all tests locally (26 visual + 11 menu/savestate + RST + SRAM)
+python3 test_roms/run_all_tests.py
+
+# Quick mode (skip slow SRAM tests)
+python3 test_roms/run_all_tests.py --quick
 
 # Instruction-level trace comparison (20 ROMs)
 make clean && make TRACE=1
 make -f test_roms/Makefile.test
-# Then run trace_compare per ROM
+test_roms/trace_compare rom.gb combined.gba --frames 600 --max-insns 5000
 ```
+
+CI runs on every PR (custom ROM tests) and on every push to master (full suite with game ROMs).
 
 ## Acknowledgments
 
-- **Jaga** (EvilJagaGenius) for creating the Jagoomba Color fork: https://github.com/EvilJagaGenius/jagern
+- **Jaga** (EvilJagaGenius) for creating the Jagoomba Color fork
 - **Dwedit** (Dan Weiss) for the Goomba Color emulator: https://www.dwedit.org/gba/goombacolor.php
 - **FluBBa** (Fredrik Olsson) for the original Goomba emulator: http://goomba.webpersona.com/
 - **Minucce** for help with ASM
@@ -53,3 +60,5 @@ make -f test_roms/Makefile.test
 - **Nuvie** for per-game Game Boy type selection
 - **Radimerry** for MGS:Ghost Babel elevator fix, Faceball menu fix, SMLDX SRAM fix
 - **Therealteamplayer** for default-to-grayscale for GB games
+
+The browser demo uses [mGBA](https://github.com/mgba-emu/mgba) (MPL-2.0) via [@thenick775/mgba-wasm](https://github.com/thenick775/mgba-wasm) (BSD-2-Clause).
