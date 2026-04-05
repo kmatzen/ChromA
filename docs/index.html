@@ -177,7 +177,22 @@ async function loadGB(file) {
   combined.set(chromaData, 0);
   combined.set(gbData, chromaData.length);
 
-  const romPath = emu.filePaths().gamePath + '/chroma.gba';
+  // Use a unique path each time to prevent mGBA from loading stale saves
+  const romPath = emu.filePaths().gamePath + '/chroma_' + Date.now() + '.gba';
+
+  // Clean up old ROMs and saves from previous sessions
+  try {
+    const gamePath = emu.filePaths().gamePath;
+    const savePath = emu.filePaths().savePath;
+    for (const dir of [gamePath, savePath]) {
+      try {
+        emu.FS.readdir(dir).filter(f => f !== '.' && f !== '..').forEach(f => {
+          try { emu.FS.unlink(dir + '/' + f); } catch(e) {}
+        });
+      } catch(e) {}
+    }
+  } catch(e) {}
+
   emu.FS.writeFile(romPath, combined);
 
   if (emu.loadGame(romPath)) {
