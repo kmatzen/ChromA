@@ -116,7 +116,11 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
-      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
 
     steps:
     - uses: actions/checkout@v4
@@ -130,18 +134,18 @@ jobs:
       id: sha
       run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-    - name: Update web demo with latest build
+    - name: Build pages output
       run: |
-        cp chroma.gba docs/chroma.gba
-        # Inject build version into the page
-        sed -i "s|Game Boy \&middot; Game Boy Color \&middot; on GBA|Game Boy \&middot; Game Boy Color \&middot; on GBA<br><span style=\"font-size:0.7em;color:#334\">build ${{ steps.sha.outputs.short }}</span>|" docs/index.html
+        mkdir -p _site
+        cp -r docs/* _site/
+        cp chroma.gba _site/chroma.gba
+        sed -i "s|Game Boy \&middot; Game Boy Color \&middot; on GBA|Game Boy \&middot; Game Boy Color \&middot; on GBA<br><span style=\"font-size:0.7em;color:#334\">build ${{ steps.sha.outputs.short }}</span>|" _site/index.html
+
+    - name: Upload pages artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: _site
 
     - name: Deploy to GitHub Pages
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add -f docs/chroma.gba docs/index.html
-        git commit -m "Deploy web demo (build ${{ steps.sha.outputs.short }})" || true
-        git push
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      id: deploy
+      uses: actions/deploy-pages@v4
