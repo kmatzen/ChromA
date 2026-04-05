@@ -2,9 +2,9 @@ name: Build & Test
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
-    branches: [master]
+    branches: [main]
 
 jobs:
   build:
@@ -23,8 +23,8 @@ jobs:
     - name: Upload GBA binary
       uses: actions/upload-artifact@v4
       with:
-        name: jagoombacolor.gba
-        path: jagoombacolor.gba
+        name: chroma.gba
+        path: chroma.gba
 
   test:
     needs: build
@@ -36,7 +36,7 @@ jobs:
     - name: Download GBA binary
       uses: actions/download-artifact@v4
       with:
-        name: jagoombacolor.gba
+        name: chroma.gba
 
     - name: Install dependencies
       run: |
@@ -58,24 +58,12 @@ jobs:
 
     - name: Build test runner
       run: |
-        cc -O2 -g \
+        cc -O2 \
           -I/tmp/mgba-build/include -I/tmp/mgba-build/build/include -I/tmp/mgba-build/src \
           -include /tmp/mgba-build/build/include/mgba/flags.h \
           -DM_CORE_GB -DM_CORE_GBA -DMGBA_DLL \
           -o test_roms/mgba_runner test_roms/mgba_runner.c \
           -L/tmp/mgba-build/build -lmgba -Wl,-rpath,/tmp/mgba-build/build
-      env:
-        LD_LIBRARY_PATH: /tmp/mgba-build/build
-
-    - name: Smoke test mgba_runner
-      run: |
-        echo "=== VFS flags ==="
-        grep 'VFS\|DIRECTORIES' /tmp/mgba-build/build/include/mgba/flags.h
-        echo "=== Test ==="
-        python3 test_roms/goomba_compile.py -e jagoombacolor.gba -o /tmp/smoke.gba test_roms/ei_delay_test.gb
-        test_roms/mgba_runner /tmp/smoke.gba 10 /tmp/smoke.bmp
-      env:
-        LD_LIBRARY_PATH: /tmp/mgba-build/build
 
     - name: Run custom ROM visual tests
       run: |
@@ -93,3 +81,67 @@ jobs:
       run: python3 test_roms/test_rst_timing.py
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download GBA binary
+      uses: actions/download-artifact@v4
+      with:
+        name: chroma.gba
+
+    - name: Get short SHA
+      id: sha
+      run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+    - name: Create/update latest release
+      run: |
+        gh release delete latest --yes 2>/dev/null || true
+        gh release create latest chroma.gba \
+          --title "Latest build (${{ steps.sha.outputs.short }})" \
+          --notes "Built from [\`${{ steps.sha.outputs.short }}\`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})" \
+          --prerelease
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-demo:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download GBA binary
+      uses: actions/download-artifact@v4
+      with:
+        name: chroma.gba
+
+    - name: Get short SHA
+      id: sha
+      run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+    - name: Update web demo with latest build
+      run: |
+        cp chroma.gba docs/chroma.gba
+        # Inject build version into the page
+        sed -i "s|Game Boy \&middot; Game Boy Color \&middot; on GBA|Game Boy \&middot; Game Boy Color \&middot; on GBA<br><span style=\"font-size:0.7em;color:#334\">build ${{ steps.sha.outputs.short }}</span>|" docs/index.html
+
+    - name: Deploy to GitHub Pages
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add -f docs/chroma.gba docs/index.html
+        git commit -m "Deploy web demo (build ${{ steps.sha.outputs.short }})" || true
+        git push
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
