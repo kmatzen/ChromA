@@ -188,7 +188,8 @@ jobs:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   deploy-demo:
-    needs: test
+    needs: [test, test-full]
+    if: always() && needs.test.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
@@ -210,12 +211,23 @@ jobs:
       id: sha
       run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
+    - name: Download diff report
+      uses: actions/download-artifact@v4
+      with:
+        name: visual-diff-report
+        path: /tmp/diff-report
+      continue-on-error: true
+
     - name: Build pages output
       run: |
         mkdir -p _site
         cp -r docs/* _site/
         cp chroma.gba _site/chroma.gba
         sed -i "s|Game Boy \&middot; Game Boy Color \&middot; on GBA|Game Boy \&middot; Game Boy Color \&middot; on GBA<br><span style=\"font-size:0.7em;color:#334\">build ${{ steps.sha.outputs.short }}</span>|" _site/index.html
+        # Include test report if available
+        if [ -f /tmp/diff-report/report.html ]; then
+          cp /tmp/diff-report/report.html _site/test-report.html
+        fi
 
     - name: Upload pages artifact
       uses: actions/upload-pages-artifact@v3
