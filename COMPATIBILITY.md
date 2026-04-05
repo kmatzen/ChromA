@@ -58,7 +58,7 @@ What this GB/GBC emulator implements, what it's missing, and why.
 - Per-scanline rendering with HBlank DMA for mid-frame register changes
 - LCDC all bits including mid-frame sprite size/enable tracking
 - STAT mode flags (cycle-based thresholds, self-modifying for double speed)
-- STAT mode 0 interrupt via GBA HBlank hardware IRQ (hardware-timed, zero drift)
+- STAT mode 0/2 interrupts (HBlank and OAM, fired per-scanline when enabled)
 - STAT mode 2 interrupt (OAM, fired at scanline boundary)
 - STAT IRQ blocking (LYC=LY holding line high suppresses mode 0/2 re-trigger)
 - STAT VBlank interrupt (mode 1 STAT IE fires at line 144, with IRQ blocking)
@@ -128,11 +128,11 @@ mapped 1:1 to equivalent GBA registers. The GBA hardware generates audio.
 ### Gaps
 
 **TIMA overflow detection is per-scanline** — HARD
-> Real GB detects TIMA overflow every cycle. Goomba checks once per
+> Real GB detects TIMA overflow every cycle. ChromA checks once per
 > scanline. A TIMA overflow mid-scanline would fire the interrupt late
 > (up to ~456 cycles). This is what causes mem_timing tests to fail.
 > Fixing requires per-instruction overflow checks in the fetch macro,
-> which would consume ~3.5KB of IWRAM (~1.9KB free).
+> which would consume ~3.5KB of IWRAM (~2.0KB free).
 
 ---
 
@@ -192,7 +192,7 @@ No link cable multiplayer or printer support.
 
 | Constraint | Impact |
 |------------|--------|
-| **IWRAM: 32KB, ~94.9% used** | ~1,924 bytes free (code=29,576 bss=1,268) |
+| **IWRAM: 32KB, ~94.6% used** | ~2,036 bytes free (code=29,480 bss=1,252) |
 | **All 4 GBA DMA channels allocated** | No spare DMA |
 | **ARM/GBC cycle ratio ~3:1** | GBC frame spans ~2 GBA frames |
 | **16MHz ARM7TDMI** | No room for software audio or per-pixel compositing |
@@ -209,7 +209,7 @@ No link cable multiplayer or printer support.
 | Per-scanline palette buffer | OPEN (#4) | `ff69_w_tail` doesn't capture full state per scanline |
 | Per-dot rendering | NOT FEASIBLE | Complete rewrite |
 | Software audio | NOT FEASIBLE | No CPU budget |
-| TIMA overflow per-scanline | HARD | Needs per-instruction check, ~1.9KB IWRAM free |
+| TIMA overflow per-scanline | HARD | Needs per-instruction check, ~2.0KB IWRAM free |
 | MBC4/MBC6/MMM01 | NO TEST ROMS | Very few games |
 | MBC7 accelerometer | NOT FEASIBLE | No hardware |
 | Infrared port | NO HARDWARE | Handful of games |

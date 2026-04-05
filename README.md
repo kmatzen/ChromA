@@ -50,7 +50,7 @@ make -f test_roms/Makefile.test
 test_roms/trace_compare rom.gb combined.gba --frames 600 --max-insns 5000
 ```
 
-CI runs on every PR (custom ROM tests) and on every push to main (full suite with game ROMs).
+CI runs on every PR (custom ROM tests) and on every push to main (full suite with game ROMs). Visual regression reports are published to the [test report page](https://kmatzen.github.io/chroma/test-report.html).
 
 ## Test baselines
 

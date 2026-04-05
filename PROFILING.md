@@ -55,11 +55,13 @@ fundamentally different timer interrupt mechanism.
 
 ## Mid-scanline timing via GBA HBlank IRQ
 
-The GBA HBlank hardware interrupt was successfully used for mode 0 STAT
-IRQ timing (PR #49). This fires at the exact GBA HBlank boundary with
+The GBA HBlank hardware interrupt was tested for mode 0 STAT
+IRQ timing (PR #49, later reverted in PR #53). It fired at the exact GBA HBlank boundary with
 zero drift. The handler saves/restores r0-r3 on the IRQ stack (since
-r3=gb_flg is live during GB execution) and checks lcdstat for mode 0
-STAT IE conditions.
+r3=gb_flg is live during GB execution). However, the 228 IRQ entries
+per frame added ~17,000 ARM cycles of overhead, which corrupted
+Crystalis rendering. The approach was reverted — mode 0 STAT IRQ
+returned to scanline-boundary timing.
 
 A two-phase scanline timeout split was also attempted (PR #48, closed)
 but broke Hercules GBC per-scanline palette DMA. The extra timeout
@@ -76,8 +78,8 @@ GB core stepped instruction-by-instruction.
 
 Results across 20 ROMs: all pass. ~73% of instructions match exactly.
 The remaining ~27% are LY (FF44) reads that return different values due
-to different frame-start positions (jagoombacolor starts at LY=0, mGBA
+to different frame-start positions (ChromA starts at LY=0, mGBA
 at LY≈145). The tool handles these via I/O patching and state resyncs.
 
 All STAT mode bits, DIV, and other I/O registers match cycle-accurately
-between jagoombacolor and mGBA — zero patches needed for those registers.
+between ChromA and mGBA — zero patches needed for those registers.
