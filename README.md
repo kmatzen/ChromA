@@ -29,8 +29,6 @@ This project is licensed under the GNU General Public License v2. See [LICENSE](
 ```bash
 # Install DevkitPro GBA tools, then:
 make
-# Rename font.lz77.o to font.o and fontpal.bin.o to fontpal.o
-make
 ```
 
 Output: `chroma.gba`
