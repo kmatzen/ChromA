@@ -110,7 +110,7 @@ CPPFILES	:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.cpp)))
 SFILES		:=	all.s
 DATA1		:=	font.lz77
 DATA2		:=	fontpal.bin
-DATA3		:=	#../chroma_mb.gba
+DATA3		:=
 
 #---------------------------------------------------------------------------------
 # use CXX for linking C++ projects, CC for standard C
