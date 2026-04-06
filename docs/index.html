@@ -158,6 +158,7 @@ async function init() {
     setStatus('Loading ChromA...', 'loading');
 
     const resp = await fetch('chroma.gba');
+    if (!resp.ok) throw new Error(`Failed to load chroma.gba (${resp.status})`);
     chromaData = new Uint8Array(await resp.arrayBuffer());
 
     setStatus('Ready \u2014 drop a Game Boy ROM', 'ready');
