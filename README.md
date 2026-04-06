@@ -1,7 +1,7 @@
 # ChromA
 
 [![Build & Test](https://github.com/kmatzen/chroma/actions/workflows/test.yml/badge.svg)](https://github.com/kmatzen/chroma/actions/workflows/test.yml)
-[![Latest Build](https://img.shields.io/github/v/release/kmatzen/chroma?label=download&color=brightgreen)](https://github.com/kmatzen/chroma/releases/latest)
+[![Latest Build](https://img.shields.io/github/v/release/kmatzen/chroma?include_prereleases&label=download&color=brightgreen)](https://github.com/kmatzen/chroma/releases/latest)
 
 A Game Boy / Game Boy Color emulator for Game Boy Advance. Forked from Jagoomba Color by Jaga, which was based on Goomba Color by Dwedit, which was based on Goomba by FluBBa.
 
