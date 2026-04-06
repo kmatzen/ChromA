@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run all jagoombacolor test suites and report results.
+"""Run all chroma test suites and report results.
 
 Usage:
     python3 test_roms/run_all_tests.py          # Run everything

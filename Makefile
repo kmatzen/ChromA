@@ -45,7 +45,7 @@ include $(DEVKITARM)/gba_rules
 # SOURCES is a list of directories containing source code
 # INCLUDES is a list of directories containing extra header files
 #---------------------------------------------------------------------------------
-TARGET		:=	jagoombacolor
+TARGET		:=	chroma
 BUILD		:=	build
 SOURCES		:=	src
 INCLUDES	:=
@@ -110,7 +110,7 @@ CPPFILES	:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.cpp)))
 SFILES		:=	all.s
 DATA1		:=	font.lz77
 DATA2		:=	fontpal.bin
-DATA3		:=	#../goomba_mb.gba
+DATA3		:=	#../chroma_mb.gba
 
 #---------------------------------------------------------------------------------
 # use CXX for linking C++ projects, CC for standard C
@@ -191,8 +191,8 @@ $(OUTPUT).elf	:	$(OFILES)	gba_crt0_my.o
 	@python3 ../scripts/validate_timing.py
 	@$(OBJCOPY) -O binary $< $@
 	@echo CUSTOM built ... $(notdir $@)
-	@echo gbafix $@ -t GOOMBA COLOR -c JGBC
-	@gbafix $@ "-tGOOMBA COLOR" "-cJGBC"
+	@echo gbafix $@ -t CHROMA -c CHRM
+	@gbafix $@ "-tCHROMA" "-cCHRM"
 
 
 

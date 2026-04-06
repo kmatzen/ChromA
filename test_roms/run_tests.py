@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Automated visual regression testing for jagoombacolor.
+"""Automated visual regression testing for chroma.
 
 Usage:
     python3 test_roms/run_tests.py                    # Run all tests, compare to baselines
@@ -9,7 +9,7 @@ Usage:
 
 Prerequisites:
     - mgba_runner binary (compile with: make -f test_roms/Makefile.test)
-    - goomba_compile.py (in test_roms/)
+    - chroma_compile.py (in test_roms/)
     - Test ROMs in test_roms/ (e.g., cpu_instrs.gb, cgb-acid2.gbc)
     - Pillow: pip3 install Pillow
 """
@@ -31,8 +31,8 @@ except ImportError:
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent
 RUNNER = SCRIPT_DIR / "mgba_runner"
-COMPILER = SCRIPT_DIR / "goomba_compile.py"
-EMULATOR = PROJECT_DIR / "jagoombacolor.gba"
+COMPILER = SCRIPT_DIR / "chroma_compile.py"
+EMULATOR = PROJECT_DIR / "chroma.gba"
 BASELINE_DIR = SCRIPT_DIR / "baselines"
 TEST_CONFIG = SCRIPT_DIR / "test_config.json"
 
@@ -46,7 +46,7 @@ def load_test_config():
 
 
 def compile_test_rom(rom_path, output_path):
-    """Wrap a GB/GBC ROM with jagoombacolor using goomba_compile.py."""
+    """Wrap a GB/GBC ROM with chroma using chroma_compile.py."""
     result = subprocess.run(
         [sys.executable, str(COMPILER), "-e", str(EMULATOR), "-o", str(output_path), str(rom_path)],
         capture_output=True, text=True
@@ -228,7 +228,7 @@ def run_single_test(name, test_info, rebaseline=False, diff_dir=None, verbose=Fa
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Automated visual regression testing for jagoombacolor")
+    parser = argparse.ArgumentParser(description="Automated visual regression testing for chroma")
     parser.add_argument("--rebaseline", action="store_true", help="Generate new baseline images")
     parser.add_argument("--test", "-t", action="append", help="Run specific test(s) by name")
     parser.add_argument("--diff-dir", "-d", default=None, help="Directory for diff images")
@@ -242,7 +242,7 @@ def main():
         print("Build it with: make -f test_roms/Makefile.test")
         sys.exit(1)
     if not EMULATOR.exists():
-        print(f"ERROR: jagoombacolor.gba not found at {EMULATOR}")
+        print(f"ERROR: chroma.gba not found at {EMULATOR}")
         print("Build it with: make")
         sys.exit(1)
 

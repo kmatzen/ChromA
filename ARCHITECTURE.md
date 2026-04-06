@@ -1,6 +1,6 @@
-# Jagoomba Color Architecture
+# ChromA Architecture
 
-A Game Boy / Game Boy Color emulator running on Game Boy Advance hardware. Based on Goomba Color by Dwedit, which was based on Goomba by FluBBa.
+A Game Boy / Game Boy Color emulator running on Game Boy Advance hardware. Based on ChromA by Dwedit, which was based on ChromA by FluBBa.
 
 ## Overview
 
@@ -230,7 +230,7 @@ The build runs two validators before creating the .gba ROM:
 
 ### Test Suite
 `test_roms/run_tests.py` runs visual regression tests:
-- Compiles test ROMs with `goomba_compile.py`
+- Compiles test ROMs with `chroma_compile.py`
 - Runs headless via `mgba_runner` (custom mGBA wrapper)
 - Captures screenshots at specific frames
 - Compares against baseline PNGs

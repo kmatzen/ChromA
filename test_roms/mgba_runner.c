@@ -1,4 +1,4 @@
-/* Minimal headless mGBA runner for jagoombacolor testing.
+/* Minimal headless mGBA runner for chroma testing.
    Runs a GBA ROM for N frames, captures screenshots as BMP files.
    Avoids PNG to work around bundled libpng version mismatch. */
 

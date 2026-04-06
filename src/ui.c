@@ -322,8 +322,8 @@ char *const clocktxt[]={"Full","Half speed"};
 char *const lcdhacktxt[]={"OFF","Low","Medium","High"};
 //char *const dmamodetxt[]={"Buffered", "Direct to VRAM", "WayForward"};
 
-#define EMUNAME "Jagoomba Color"
-//char *const emuname = "Goomba Color ";
+#define EMUNAME "ChromA"
+//char *const emuname = "ChromA ";
 char *const palnumtxt[]={"0","1","2","3"};
 
 void drawui1()

@@ -124,7 +124,7 @@ void C_entry()
 			ui_x=0;
 			move_ui();
 			drawtext(0,"No ROM found!",0);
-			drawtext(19,"Goomba Color " VERSION,0);
+			drawtext(19,"ChromA " VERSION,0);
 			while (1)
 			{
 				waitframe();

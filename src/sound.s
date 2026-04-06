@@ -374,7 +374,7 @@ _FF26R:@		NR52 - Sound on/off
 @----------------------------------------------------------------------------
 	mov r1,#REG_BASE
 	ldrb r0,[r1,#REG_SGCNT_X]
-	@work around for bugs in VBA-M, fixes Zelda Oracles games when running Goomba Color in that emulator
+	@work around for bugs in VBA-M, fixes Zelda Oracles games when running ChromA in that emulator
 	ldrb r2,[r1,#REG_SG3CNT_L]	@is channel 3 "play" flag off?
 	tst r2,#0x80
 	biceq r0,#0x04				@clear "channel 3 is playing" bit

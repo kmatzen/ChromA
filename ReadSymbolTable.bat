@@ -1,1 +1,1 @@
-readelf -s jagoombacolor.elf > SymbolTable.txt
+readelf -s chroma.elf > SymbolTable.txt

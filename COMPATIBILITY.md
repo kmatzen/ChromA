@@ -1,4 +1,4 @@
-# Jagoomba Color — Compatibility Gap Analysis
+# ChromA — Compatibility Gap Analysis
 
 What this GB/GBC emulator implements, what it's missing, and why.
 
@@ -19,7 +19,7 @@ What this GB/GBC emulator implements, what it's missing, and why.
 | Halt bug test | **PASS** | Custom ROM validates HALT behavior with IME=0 |
 | 26 game regression tests | **PASS** | Pokemon R/B/Y/Gold/Crystal, Zelda LA/DX/OoA/OoS, Shantae, etc. |
 | 20 trace comparison tests | **PASS** | Instruction-level CPU verification against mGBA reference |
-| 11 menu tests | **PASS** | All Goomba menu features automated |
+| 11 menu tests | **PASS** | All ChromA menu features automated |
 
 ---
 
@@ -44,7 +44,7 @@ What this GB/GBC emulator implements, what it's missing, and why.
 **Blargg instr_timing fails on RST 38h** — NOT AN RST BUG
 > A custom test ROM confirms all 8 RST variants have identical timing
 > (16 T-cycles) matching native mGBA. Blargg's test uses TIMA at
-> 262144 Hz (4 T-cycle granularity) for measurement, but jagoomba
+> 262144 Hz (4 T-cycle granularity) for measurement, but jachroma
 > updates TIMA per-scanline with sub-scanline interpolation on reads.
 > The synchronization loop in Blargg's test misaligns with interpolated
 > TIMA values, causing accumulated error that manifests at opcode 0xFF
@@ -128,7 +128,7 @@ mapped 1:1 to equivalent GBA registers. The GBA hardware generates audio.
 ### Gaps
 
 **TIMA overflow detection is per-scanline** — HARD
-> Real GB detects TIMA overflow every cycle. Goomba checks once per
+> Real GB detects TIMA overflow every cycle. ChromA checks once per
 > scanline. A TIMA overflow mid-scanline would fire the interrupt late
 > (up to ~456 cycles). This is what causes mem_timing tests to fail.
 > Fixing requires per-instruction overflow checks in the fetch macro,

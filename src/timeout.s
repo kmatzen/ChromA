@@ -357,7 +357,7 @@ immediate_check_irq:
 @	movs r0,r0
 @	bxeq lr
 	@different ugly hack which doesn't mess up timing,
-	@this is necessary because goomba must finish executing its instruction before checking for GB interrupts
+	@this is necessary because chroma must finish executing its instruction before checking for GB interrupts
 	.pushsection .text
 immediate_check_irq_2:
 	ldr_ r0,nexttimeout

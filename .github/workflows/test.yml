@@ -23,8 +23,8 @@ jobs:
     - name: Upload GBA binary
       uses: actions/upload-artifact@v4
       with:
-        name: jagoombacolor.gba
-        path: jagoombacolor.gba
+        name: chroma.gba
+        path: chroma.gba
 
   test:
     needs: build
@@ -36,7 +36,7 @@ jobs:
     - name: Download GBA binary
       uses: actions/download-artifact@v4
       with:
-        name: jagoombacolor.gba
+        name: chroma.gba
 
     - name: Install dependencies
       run: |
@@ -72,7 +72,7 @@ jobs:
         echo "=== VFS flags ==="
         grep 'VFS\|DIRECTORIES' /tmp/mgba-build/build/include/mgba/flags.h
         echo "=== Test ==="
-        python3 test_roms/goomba_compile.py -e jagoombacolor.gba -o /tmp/smoke.gba test_roms/ei_delay_test.gb
+        python3 test_roms/chroma_compile.py -e chroma.gba -o /tmp/smoke.gba test_roms/ei_delay_test.gb
         test_roms/mgba_runner /tmp/smoke.gba 10 /tmp/smoke.bmp
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build

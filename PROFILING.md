@@ -1,4 +1,4 @@
-# Jagoomba Color — VBlank Frame Profiling
+# ChromA — VBlank Frame Profiling
 
 Per-frame timing measured by reading VCOUNT at key points during
 the VBlank handler. The GBA has 68 VBlank scanlines (160-227) for
@@ -76,8 +76,8 @@ GB core stepped instruction-by-instruction.
 
 Results across 20 ROMs: all pass. ~73% of instructions match exactly.
 The remaining ~27% are LY (FF44) reads that return different values due
-to different frame-start positions (jagoombacolor starts at LY=0, mGBA
+to different frame-start positions (chroma starts at LY=0, mGBA
 at LY≈145). The tool handles these via I/O patching and state resyncs.
 
 All STAT mode bits, DIV, and other I/O registers match cycle-accurately
-between jagoombacolor and mGBA — zero patches needed for those registers.
+between chroma and mGBA — zero patches needed for those registers.

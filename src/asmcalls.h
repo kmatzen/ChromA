@@ -8,13 +8,13 @@ static __inline void breakpoint()
 
 
 #if ROMVERSION
-	extern u8 goomba_mb_gba[];
+	extern u8 chroma_mb_gba[];
 	#if !GCC
-		extern u32 goomba_mb_gba_size[];
-		#define GOOMBA_MB_GBA_SIZE ((u32)(&goomba_mb_gba_size))
+		extern u32 chroma_mb_gba_size[];
+		#define CHROMA_MB_GBA_SIZE ((u32)(&chroma_mb_gba_size))
 	#else
-		extern u32 goomba_mb_gba_size;
-		#define GOOMBA_MB_GBA_SIZE goomba_mb_gba_size
+		extern u32 chroma_mb_gba_size;
+		#define CHROMA_MB_GBA_SIZE chroma_mb_gba_size
 	#endif
 #endif
 

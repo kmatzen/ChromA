@@ -2574,7 +2574,7 @@ cpu_reset:
 	movnes r0,r0
 	ldrne gb_bc,=0x01130000	@Breg->0=Normal,1=AGB
 	mov gb_de,#0x00d80000
-@	movne gb_de,#0x00200000	;For Goomba detection, e=0x20
+@	movne gb_de,#0x00200000	;For ChromA detection, e=0x20
 	ldr gb_hl,=0x014d0000
 	mov gb_flg,#PSR_Z+PSR_C+PSR_h
 	mov r0,#0

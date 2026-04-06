@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Automated tests for all Goomba menu features.
+"""Automated tests for all ChromA menu features.
 
 Tests save states, menu navigation, persistence, display settings,
 and all accessible menu items.
@@ -17,8 +17,8 @@ from PIL import Image
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent
 RUNNER = SCRIPT_DIR / "mgba_runner"
-COMPILER = SCRIPT_DIR / "goomba_compile.py"
-EMULATOR = PROJECT_DIR / "jagoombacolor.gba"
+COMPILER = SCRIPT_DIR / "chroma_compile.py"
+EMULATOR = PROJECT_DIR / "chroma.gba"
 SML2_ROM = SCRIPT_DIR / "Super Mario Land 2 - 6 Golden Coins (USA, Europe) (Rev 2).gb"
 ZELDA_DX_ROM = SCRIPT_DIR / "Legend of Zelda, The - Link's Awakening DX (USA, Europe) (Rev 2) (SGB Enhanced) (GB Compatible).gbc"
 KIRBY_DL2_ROM = SCRIPT_DIR / "Kirby's Dream Land 2 (USA, Europe) (SGB Enhanced).gb"
@@ -27,7 +27,7 @@ KIRBY_DL2_ROM = SCRIPT_DIR / "Kirby's Dream Land 2 (USA, Europe) (SGB Enhanced).
 # Use 120-frame gaps between inputs to ensure each registers exactly once.
 MENU_GAP = 120
 
-# Emulator memory addresses (from build/jagoombacolor.elf.map)
+# Emulator memory addresses (from build/chroma.elf.map)
 ADDR_JOYCFG = 0x030038CC        # 4 bytes - input config (autofire masks + swap bit 10)
 ADDR_FPSENABLED = 0x03003808    # 1 byte - FPS meter flag
 ADDR_NOVBLANKWAIT = 0x03005113  # 1 byte - VSync mode (0=ON, 1=OFF, 2=SLOWMO)

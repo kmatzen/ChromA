@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Test SRAM write-through and save reload for jagoombacolor.
+"""Test SRAM write-through and save reload for chroma.
 
 Tests:
   1. Write-through: sram_W2 writes to both emulated XGB_SRAM and GBA cart SRAM
      (8KB games only — 32KB+ overlaps the config area so write-through is
      disabled for those)
-  2. Save reload:   a save persisted via Goomba's compressed save system can
+  2. Save reload:   a save persisted via ChromA's compressed save system can
                      be reloaded on a fresh boot with the same .sav file
 
 Usage:
@@ -20,10 +20,10 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent
 RUNNER = SCRIPT_DIR / "mgba_runner"
-COMPILER = SCRIPT_DIR / "goomba_compile.py"
-EMULATOR = PROJECT_DIR / "jagoombacolor.gba"
+COMPILER = SCRIPT_DIR / "chroma_compile.py"
+EMULATOR = PROJECT_DIR / "chroma.gba"
 
-# Addresses from jagoombacolor.elf
+# Addresses from chroma.elf
 XGB_SRAM_ADDR = 0x02038000
 GBA_SRAM_BASE = 0x0E000000
 GBA_CART_SIZE = 0x10000  # 64K flash cart
@@ -75,7 +75,7 @@ CRYSTAL_NUM_BANKS = 4
 
 
 def crystal_advance_inputs():
-    """A-spam to advance through Goomba menu, Game Freak logo, title, Oak
+    """A-spam to advance through ChromA menu, Game Freak logo, title, Oak
     intro, character naming, and into gameplay."""
     return [f"{f}:A" for f in range(300, 5500, 45)]
 
@@ -245,7 +245,7 @@ def main():
         print(f"ERROR: mgba_runner not found at {RUNNER}")
         sys.exit(1)
     if not EMULATOR.exists():
-        print(f"ERROR: jagoombacolor.gba not found at {EMULATOR}")
+        print(f"ERROR: chroma.gba not found at {EMULATOR}")
         sys.exit(1)
 
     results = []

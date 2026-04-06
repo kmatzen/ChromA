@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 
 
-def build_goomba_rom(emulator_path: Path, rom_path: Path, output_path: Path):
+def build_chroma_rom(emulator_path: Path, rom_path: Path, output_path: Path):
     if not emulator_path.exists():
         raise FileNotFoundError(f"Missing emulator: {emulator_path}")
     if not rom_path.exists():
@@ -24,12 +24,12 @@ def build_goomba_rom(emulator_path: Path, rom_path: Path, output_path: Path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Goomba ROM builder")
+    parser = argparse.ArgumentParser(description="ChromA ROM builder")
 
     parser.add_argument(
         "-e", "--emulator",
         required=True,
-        help="Path to jagoombacolor.gba"
+        help="Path to chroma.gba"
     )
 
     parser.add_argument(
@@ -45,7 +45,7 @@ def main():
 
     args = parser.parse_args()
 
-    build_goomba_rom(
+    build_chroma_rom(
         Path(args.emulator),
         Path(args.rom),
         Path(args.output)
