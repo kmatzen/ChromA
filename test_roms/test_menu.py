@@ -314,7 +314,7 @@ def test_autofire_toggle(tmpdir):
 
     # The menu text should change (autofire OFF → Hold)
     d = pixel_diff_pct(before, after)
-    passed = d > 0.1  # text change is only a few pixels
+    passed = d > 0.05  # sharp pixel font: OFF→Hold is ~27 pixels (0.07%)
     print(f"  Menu diff after toggle: {d:.1f}% {'PASS' if passed else 'FAIL'}")
     return passed
 
@@ -366,6 +366,185 @@ def test_sram_persistence(tmpdir):
     return result.returncode == 0
 
 
+def _submenu_toggle_test(tmpdir, name, main_downs, sub_downs):
+    """Generic test: navigate to a submenu item, toggle it, verify pixel change."""
+    print(f"Test: {name}")
+    gba = tmpdir / "t.gba"
+    if not compile_sml2(gba):
+        return False
+    before = str(tmpdir / "before.bmp")
+    after = str(tmpdir / "after.bmp")
+
+    t = 2000
+    inputs = ["600:Start", "900:Start", f"{t}:L+R"]
+    t += 200
+    inputs += menu_down(main_downs, t)
+    t += main_downs * MENU_GAP
+    inputs += [f"{t}:A"]  # enter submenu
+    t += MENU_GAP
+    if sub_downs > 0:
+        inputs += menu_down(sub_downs, t)
+        t += sub_downs * MENU_GAP
+    t += MENU_GAP  # let menu settle
+    before_frame = t
+    t += MENU_GAP
+    inputs += [f"{t}:A"]  # toggle
+    t += MENU_GAP
+    after_frame = t
+
+    run(gba, after_frame + 500, inputs,
+        screenshots=[f"{before_frame}:{before}", f"{after_frame}:{after}"])
+
+    d = pixel_diff_pct(before, after)
+    passed = d > 0.05
+    print(f"  {name} diff: {d:.1f}% {'PASS' if passed else 'FAIL'}")
+    return passed
+
+
+def _mainmenu_toggle_test(tmpdir, name, downs):
+    """Generic test: navigate to a main menu item, toggle it, verify pixel change."""
+    print(f"Test: {name}")
+    gba = tmpdir / "t.gba"
+    if not compile_sml2(gba):
+        return False
+    before = str(tmpdir / "before.bmp")
+    after = str(tmpdir / "after.bmp")
+
+    t = 2000
+    inputs = ["600:Start", "900:Start", f"{t}:L+R"]
+    t += 200
+    if downs > 0:
+        inputs += menu_down(downs, t)
+        t += downs * MENU_GAP
+    t += MENU_GAP  # let menu settle
+    before_frame = t
+    t += MENU_GAP
+    inputs += [f"{t}:A"]
+    t += MENU_GAP
+    after_frame = t
+
+    run(gba, after_frame + 500, inputs,
+        screenshots=[f"{before_frame}:{before}", f"{after_frame}:{after}"])
+
+    d = pixel_diff_pct(before, after)
+    passed = d > 0.05
+    print(f"  {name} diff: {d:.1f}% {'PASS' if passed else 'FAIL'}")
+    return passed
+
+
+def test_a_autofire_toggle(tmpdir):
+    """A autofire cycles through OFF/Hold/Toggle on A press."""
+    return _mainmenu_toggle_test(tmpdir, "A autofire toggle", 1)
+
+
+def test_license_screen(tmpdir):
+    """License screen opens and shows copyright text."""
+    print("Test: License screen")
+    gba = tmpdir / "t.gba"
+    if not compile_sml2(gba):
+        return False
+    menu = str(tmpdir / "menu.bmp")
+    license_scr = str(tmpdir / "license.bmp")
+
+    t = 2000
+    inputs = ["600:Start", "900:Start", f"{t}:L+R"]
+    t += 200
+    # Down×10 → License
+    inputs += menu_down(10, t)
+    t += 10 * MENU_GAP
+    inputs += [f"{t}:A"]
+    t += 300
+
+    run(gba, t + 500, inputs,
+        screenshots=[f"2200:{menu}", f"{t}:{license_scr}"])
+
+    d = pixel_diff_pct(menu, license_scr)
+    passed = d > 5  # license uses submenu tilemap overlay, so diff is moderate
+    print(f"  License diff: {d:.1f}% {'PASS' if passed else 'FAIL'}")
+    return passed
+
+
+# --- Other Settings submenu (main menu item 3) ---
+# Items: 0=VSync, 1=FPS-Meter, 2=Autosleep, 3=Swap A-B,
+#        4=Autoload state, 5=Game Boy type, 6=Auto SGB border, 7=Identify as GBA
+
+def test_other_vsync_toggle(tmpdir):
+    return _submenu_toggle_test(tmpdir, "Other Settings: VSync", 3, 0)
+
+def test_other_fpsmeter_toggle(tmpdir):
+    return _submenu_toggle_test(tmpdir, "Other Settings: FPS-Meter", 3, 1)
+
+def test_other_autosleep_toggle(tmpdir):
+    return _submenu_toggle_test(tmpdir, "Other Settings: Autosleep", 3, 2)
+
+def test_other_swap_ab_toggle(tmpdir):
+    return _submenu_toggle_test(tmpdir, "Other Settings: Swap A-B", 3, 3)
+
+def test_other_autoload_toggle(tmpdir):
+    return _submenu_toggle_test(tmpdir, "Other Settings: Autoload state", 3, 4)
+
+def test_other_gametype_cycle(tmpdir):
+    return _submenu_toggle_test(tmpdir, "Other Settings: Game Boy type", 3, 5)
+
+def test_other_sgb_border_toggle(tmpdir):
+    return _submenu_toggle_test(tmpdir, "Other Settings: Auto SGB border", 3, 6)
+
+def test_other_identify_gba_toggle(tmpdir):
+    return _submenu_toggle_test(tmpdir, "Other Settings: Identify as GBA", 3, 7)
+
+
+# --- Display submenu (main menu item 2) ---
+# Items: 0=Palette, 1=Gamma, 2=SGB Palette Number
+
+def test_display_palette_cycle(tmpdir):
+    return _submenu_toggle_test(tmpdir, "Display: Palette cycle", 2, 0)
+
+def test_display_gamma_cycle(tmpdir):
+    return _submenu_toggle_test(tmpdir, "Display: Gamma cycle", 2, 1)
+
+def test_display_sgb_palette_cycle(tmpdir):
+    """SGB Palette Number cycles through 0-3 in Display submenu."""
+    print("Test: Display: SGB Palette Number")
+    gba = tmpdir / "t.gba"
+    if not compile_sml2(gba):
+        return False
+    before = str(tmpdir / "before.bmp")
+    after = str(tmpdir / "after.bmp")
+
+    t = 2000
+    inputs = ["600:Start", "900:Start", f"{t}:L+R"]
+    t += MENU_GAP
+    inputs += menu_down(2, t)  # to Display
+    t += 2 * MENU_GAP
+    inputs += [f"{t}:A"]  # enter Display submenu
+    t += MENU_GAP
+    inputs += menu_down(2, t)  # to SGB Palette Number
+    t += 2 * MENU_GAP + MENU_GAP  # extra settle time
+    before_frame = t
+    t += MENU_GAP
+    inputs += [f"{t}:A"]  # toggle 0→1
+    t += 2 * MENU_GAP  # generous time for redraw
+    after_frame = t
+
+    run(gba, after_frame + 500, inputs,
+        screenshots=[f"{before_frame}:{before}", f"{after_frame}:{after}"])
+
+    d = pixel_diff_pct(before, after)
+    passed = d > 0.03  # small text change: "0" → "1" is ~19 pixels (0.049%)
+    print(f"  SGB Palette diff: {d:.2f}% {'PASS' if passed else 'FAIL'}")
+    return passed
+
+
+# --- Speed Hacks submenu (main menu item 4) ---
+# Items: 0=Double Speed, 1=LCD scanline hack
+
+def test_speed_double_speed_toggle(tmpdir):
+    return _submenu_toggle_test(tmpdir, "Speed Hacks: Double Speed", 4, 0)
+
+def test_speed_lcd_scanline_hack(tmpdir):
+    return _submenu_toggle_test(tmpdir, "Speed Hacks: LCD scanline hack", 4, 1)
+
+
 def main():
     if not all(p.exists() for p in [RUNNER, EMULATOR, SML2_ROM]):
         print("ERROR: missing prerequisites")
@@ -374,16 +553,37 @@ def main():
     results = []
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
+        # Core functionality
         results.append(("Quicksave/load round-trip", test_quicksave_roundtrip(tmpdir)))
         results.append(("Quicksave persistence", test_quicksave_persistence(tmpdir)))
         results.append(("Menu open/close", test_menu_open_close(tmpdir)))
         results.append(("Menu save/load state", test_menu_save_load_state(tmpdir)))
+        results.append(("Restart", test_restart(tmpdir)))
+        results.append(("Manage SRAM", test_manage_sram(tmpdir)))
+        # Main menu toggles
+        results.append(("B autofire toggle", test_autofire_toggle(tmpdir)))
+        results.append(("A autofire toggle", test_a_autofire_toggle(tmpdir)))
+        results.append(("License screen", test_license_screen(tmpdir)))
+        # Submenu navigation
         results.append(("Display submenu", test_display_submenu(tmpdir)))
         results.append(("Other Settings submenu", test_other_settings_submenu(tmpdir)))
         results.append(("Speed Hacks submenu", test_speed_hacks_submenu(tmpdir)))
-        results.append(("Autofire toggle", test_autofire_toggle(tmpdir)))
-        results.append(("Manage SRAM", test_manage_sram(tmpdir)))
-        results.append(("Restart", test_restart(tmpdir)))
+        # Other Settings items
+        results.append(("Other: VSync", test_other_vsync_toggle(tmpdir)))
+        results.append(("Other: FPS-Meter", test_other_fpsmeter_toggle(tmpdir)))
+        results.append(("Other: Autosleep", test_other_autosleep_toggle(tmpdir)))
+        results.append(("Other: Swap A-B", test_other_swap_ab_toggle(tmpdir)))
+        results.append(("Other: Autoload state", test_other_autoload_toggle(tmpdir)))
+        results.append(("Other: Game Boy type", test_other_gametype_cycle(tmpdir)))
+        results.append(("Other: Auto SGB border", test_other_sgb_border_toggle(tmpdir)))
+        results.append(("Other: Identify as GBA", test_other_identify_gba_toggle(tmpdir)))
+        # Display items
+        results.append(("Display: Palette", test_display_palette_cycle(tmpdir)))
+        results.append(("Display: Gamma", test_display_gamma_cycle(tmpdir)))
+        results.append(("Display: SGB Palette #", test_display_sgb_palette_cycle(tmpdir)))
+        # Speed Hacks items
+        results.append(("Speed: Double Speed", test_speed_double_speed_toggle(tmpdir)))
+        results.append(("Speed: LCD scanline", test_speed_lcd_scanline_hack(tmpdir)))
     results.append(("SRAM persistence", test_sram_persistence(None)))
 
     print(f"\n{'='*60}")
@@ -392,6 +592,8 @@ def main():
     for name, r in results:
         print(f"  {'PASS' if r else 'FAIL'}: {name}")
     print(f"\nMenu tests: {passed} passed, {failed} failed")
+    # Note: Sleep and Exit are not testable in automated mGBA runner
+    # (Sleep halts GBA, Exit terminates emulation)
     sys.exit(1 if failed else 0)
 
 

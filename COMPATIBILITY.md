@@ -19,7 +19,7 @@ What this GB/GBC emulator implements, what it's missing, and why.
 | Halt bug test | **PASS** | Custom ROM validates HALT behavior with IME=0 |
 | 26 game regression tests | **PASS** | Pokemon R/B/Y/Gold/Crystal, Zelda LA/DX/OoA/OoS, Shantae, etc. |
 | 20 trace comparison tests | **PASS** | Instruction-level CPU verification against mGBA reference |
-| 11 menu tests | **PASS** | All Goomba menu features automated |
+| 26 menu tests | **PASS** | All menu features automated (toggles, submenus, license, savestates) |
 
 ---
 
