@@ -20,13 +20,30 @@ RUNNER = SCRIPT_DIR / "mgba_runner"
 COMPILER = SCRIPT_DIR / "goomba_compile.py"
 EMULATOR = PROJECT_DIR / "jagoombacolor.gba"
 SML2_ROM = SCRIPT_DIR / "Super Mario Land 2 - 6 Golden Coins (USA, Europe) (Rev 2).gb"
+ZELDA_DX_ROM = SCRIPT_DIR / "Legend of Zelda, The - Link's Awakening DX (USA, Europe) (Rev 2) (SGB Enhanced) (GB Compatible).gbc"
+KIRBY_DL2_ROM = SCRIPT_DIR / "Kirby's Dream Land 2 (USA, Europe) (SGB Enhanced).gb"
 
 # Menu runs ~1 iteration per 2-3 mGBA frames.
 # Use 120-frame gaps between inputs to ensure each registers exactly once.
 MENU_GAP = 120
 
+# Emulator memory addresses (from build/jagoombacolor.elf.map)
+ADDR_JOYCFG = 0x030038CC        # 4 bytes - input config (autofire masks + swap bit 10)
+ADDR_FPSENABLED = 0x03003808    # 1 byte - FPS meter flag
+ADDR_NOVBLANKWAIT = 0x03005113  # 1 byte - VSync mode (0=ON, 1=OFF, 2=SLOWMO)
+ADDR_SLEEPTIME = 0x03005234     # 4 bytes - autosleep timer threshold
+ADDR_AUTOSTATE = 0x02000057     # 1 byte - autoload state flag
+ADDR_DOUBLETIMER = 0x03005110   # 1 byte - double speed (1=Half, 2=Full)
+ADDR_G_LCDHACK = 0x030051BE    # 1 byte - LCD scanline hack level (0-3)
+ADDR_PALETTEBANK = 0x030051AC  # 4 bytes - current palette index
+ADDR_GAMMAVALUE = 0x03005169   # 1 byte - gamma level (0-4)
+ADDR_SGB_PALNUM = 0x03005168   # 1 byte - SGB palette number (0-3)
+ADDR_REQUEST_GBA = 0x03005111  # 1 byte - identify as GBA flag (byte after doubletimer)
+ADDR_REQUEST_GB_TYPE = 0x03005112  # 1 byte - GB type (0-3)
+ADDR_AUTO_BORDER = 0x03005221  # 1 byte - auto SGB border flag
 
-def run(gba, frames, inputs, screenshots=None, savefile=None):
+
+def run(gba, frames, inputs, screenshots=None, savefile=None, memdumps=None):
     cmd = [str(RUNNER), str(gba), str(frames), "/dev/null"]
     for inp in inputs:
         cmd.extend(["--input", inp])
@@ -34,6 +51,8 @@ def run(gba, frames, inputs, screenshots=None, savefile=None):
         cmd.extend(["--screenshot", ss])
     if savefile:
         cmd.extend(["--savefile", str(savefile)])
+    for md in (memdumps or []):
+        cmd.extend(["--memdump", md])
     return subprocess.run(cmd, capture_output=True, text=True, timeout=300).returncode == 0
 
 
@@ -57,9 +76,74 @@ def compile_sml2(output):
     ).returncode == 0
 
 
+def compile_rom(rom_path, output):
+    """Compile any GB/GBC ROM with the emulator."""
+    return subprocess.run(
+        [sys.executable, str(COMPILER), "-e", str(EMULATOR),
+         "-o", str(output), str(rom_path)],
+        capture_output=True, text=True
+    ).returncode == 0
+
+
+def read_u8(path):
+    """Read a 1-byte memory dump file."""
+    with open(path, "rb") as f:
+        return f.read(1)[0]
+
+
+def read_u32_le(path):
+    """Read a 4-byte little-endian memory dump file."""
+    with open(path, "rb") as f:
+        data = f.read(4)
+    return int.from_bytes(data, "little")
+
+
+def avg_brightness(path):
+    """Compute mean pixel brightness (0-255) of an image."""
+    img = Image.open(path).convert("RGB")
+    pixels = list(img.getdata())
+    return sum(max(r, g, b) for r, g, b in pixels) / len(pixels)
+
+
+def memdump_arg(addr, length, filepath):
+    """Format a --memdump argument string."""
+    return f"0x{addr:08X}:{length}:{filepath}"
+
+
 def menu_down(n, start_frame):
     """Generate Down×n inputs with proper spacing."""
     return [f"{start_frame + i * MENU_GAP}:Down" for i in range(n)]
+
+
+def navigate_to_submenu_item(t, submenu_downs, item_downs):
+    """Build inputs to open menu, enter a submenu, and navigate to an item.
+
+    Returns (inputs, t) where t is the current frame after navigation.
+    """
+    inputs = [f"{t}:L+R"]
+    t += 300
+    inputs += menu_down(submenu_downs, t)
+    t += submenu_downs * MENU_GAP
+    inputs += [f"{t}:A"]  # enter submenu
+    t += 300
+    if item_downs > 0:
+        inputs += menu_down(item_downs, t)
+        t += item_downs * MENU_GAP
+    return inputs, t
+
+
+def toggle_and_close_menu(t):
+    """Press A to toggle a setting, then B twice to close submenu and menu.
+
+    Returns (inputs, t).
+    """
+    inputs = [f"{t}:A"]
+    t += MENU_GAP
+    inputs += [f"{t}:B"]  # back to main menu
+    t += MENU_GAP
+    inputs += [f"{t}:B"]  # close menu
+    t += 300
+    return inputs, t
 
 
 def test_quicksave_roundtrip(tmpdir):
@@ -355,174 +439,577 @@ def test_manage_sram(tmpdir):
     return passed
 
 
-def _toggle_test(tmpdir, name, open_submenu_downs, item_downs_in_sub):
-    """Generic helper: open menu, enter submenu, navigate to item, toggle, verify text changed.
-
-    open_submenu_downs: how many Downs from top of main menu to reach submenu entry
-    item_downs_in_sub: how many Downs inside submenu to reach the item (0 = first item)
-    """
-    print(f"Test: {name}")
+def test_a_autofire_behavior(tmpdir):
+    """A autofire: verify joycfg bitmask changes to enable autofire pulse."""
+    print("Test: A autofire (behavioral)")
     gba = tmpdir / "t.gba"
     if not compile_sml2(gba):
         return False
-    before = str(tmpdir / "before.bmp")
-    after = str(tmpdir / "after.bmp")
+    before_dump = str(tmpdir / "joycfg_before.bin")
+    after_dump = str(tmpdir / "joycfg_after.bin")
 
+    # Boot game, dump joycfg before toggle
     t = 2000
-    inputs = ["600:Start", "900:Start", f"{t}:L+R"]
-    t += 300  # wait for menu to render
-    # Navigate to submenu
-    inputs += menu_down(open_submenu_downs, t)
-    t += open_submenu_downs * MENU_GAP
-    inputs += [f"{t}:A"]  # enter submenu
-    t += 300  # wait for submenu scroll animation
-    # Navigate to item within submenu
-    if item_downs_in_sub > 0:
-        inputs += menu_down(item_downs_in_sub, t)
-        t += item_downs_in_sub * MENU_GAP
-    # Screenshot before toggle
+    inputs = ["600:Start", "900:Start"]
     before_frame = t
-    t += 200
-    # Toggle
-    inputs += [f"{t}:A"]
-    t += 300  # wait for redraw
-    after_frame = t
-
-    run(gba, after_frame + 500, inputs,
-        screenshots=[f"{before_frame}:{before}", f"{after_frame}:{after}"])
-
-    d = pixel_diff_pct(before, after)
-    passed = d > 0.1
-    print(f"  Menu diff after toggle: {d:.1f}% {'PASS' if passed else 'FAIL'}")
-    return passed
-
-
-def test_a_autofire_toggle(tmpdir):
-    """A autofire cycles through OFF/Hold/Toggle on A press."""
-    print("Test: A autofire toggle")
-    gba = tmpdir / "t.gba"
-    if not compile_sml2(gba):
-        return False
-    before = str(tmpdir / "before.bmp")
-    after = str(tmpdir / "after.bmp")
-
-    t = 2000
-    inputs = ["600:Start", "900:Start", f"{t}:L+R"]
-    t += 300  # wait for menu to render
-    # Down×1 → A autofire (item 1)
+    # Open menu, navigate to A autofire (item 1), toggle it
+    inputs += [f"{t}:L+R"]
+    t += 300
     inputs += menu_down(1, t)
-    t += 1 * MENU_GAP
-    before_frame = t
+    t += MENU_GAP
     t += 200
-    inputs += [f"{t}:A"]
+    inputs += [f"{t}:A"]  # toggle A autofire ON
     t += 300
     after_frame = t
 
-    run(gba, after_frame + 500, inputs,
-        screenshots=[f"{before_frame}:{before}", f"{after_frame}:{after}"])
+    run(gba, t + 500, inputs,
+        memdumps=[
+            memdump_arg(ADDR_JOYCFG, 4, before_dump.replace("before", "default")),
+            memdump_arg(ADDR_JOYCFG, 4, after_dump),
+        ],
+        screenshots=[f"{before_frame}:{before_dump}.bmp",
+                     f"{after_frame}:{after_dump}.bmp"])
 
-    d = pixel_diff_pct(before, after)
-    passed = d > 0.1
-    print(f"  Menu diff after toggle: {d:.1f}% {'PASS' if passed else 'FAIL'}")
+    # Actually we need the dump at two different times. memdump only runs at end.
+    # So instead: verify the final joycfg has A bit cleared (autofire active).
+    joycfg = read_u32_le(after_dump)
+    a_bit_cleared = (joycfg & 0x01) == 0  # A button masked = autofire active
+    passed = a_bit_cleared
+    print(f"  joycfg=0x{joycfg:08X}, A bit cleared={a_bit_cleared} {'PASS' if passed else 'FAIL'}")
     return passed
 
 
-def test_vsync_toggle(tmpdir):
-    """VSync cycles through ON/OFF/SLOWMO."""
-    return _toggle_test(tmpdir, "VSync toggle", 3, 0)
-
-
-def test_fps_meter_toggle(tmpdir):
-    """FPS-Meter toggles ON/OFF."""
-    return _toggle_test(tmpdir, "FPS-Meter toggle", 3, 1)
-
-
-def test_autosleep_toggle(tmpdir):
-    """Autosleep cycles through 5min/10min/30min/OFF."""
-    return _toggle_test(tmpdir, "Autosleep toggle", 3, 2)
-
-
-def test_swap_ab_toggle(tmpdir):
-    """Swap A-B toggles ON/OFF."""
-    return _toggle_test(tmpdir, "Swap A-B toggle", 3, 3)
-
-
-def test_autoload_state_toggle(tmpdir):
-    """Autoload state toggles ON/OFF."""
-    return _toggle_test(tmpdir, "Autoload state toggle", 3, 4)
-
-
-def test_gameboy_type_toggle(tmpdir):
-    """Game Boy type cycles through GB/Prefer SGB/Prefer GBC/GBC+SGB."""
-    return _toggle_test(tmpdir, "Game Boy type toggle", 3, 5)
-
-
-def test_auto_sgb_border_toggle(tmpdir):
-    """Auto SGB border toggles ON/OFF."""
-    return _toggle_test(tmpdir, "Auto SGB border toggle", 3, 6)
-
-
-def test_identify_as_gba_toggle(tmpdir):
-    """Identify as GBA toggles ON/OFF."""
-    return _toggle_test(tmpdir, "Identify as GBA toggle", 3, 7)
-
-
-def test_palette_selection(tmpdir):
-    """Palette selection opens list and scrolling changes palette."""
-    print("Test: Palette selection")
+def test_vsync_behavior(tmpdir):
+    """VSync: verify novblankwait changes and game progression differs."""
+    print("Test: VSync (behavioral)")
     gba = tmpdir / "t.gba"
     if not compile_sml2(gba):
         return False
-    before = str(tmpdir / "before.bmp")
-    after = str(tmpdir / "after.bmp")
+    dump_path = str(tmpdir / "novblankwait.bin")
+    before_ss = str(tmpdir / "before.bmp")
+    after_ss = str(tmpdir / "after.bmp")
 
+    # Boot game, screenshot at gameplay
     t = 2000
-    inputs = ["600:Start", "900:Start", f"{t}:L+R"]
-    t += MENU_GAP
-    # Down×2 → Display submenu
-    inputs += menu_down(2, t)
-    t += 2 * MENU_GAP
-    inputs += [f"{t}:A"]  # enter Display
-    t += MENU_GAP
-    # Item 0 = Palette. Press A to open palette list.
-    inputs += [f"{t}:A"]
-    t += MENU_GAP
+    inputs = ["600:Start", "900:Start"]
     before_frame = t
-    # Scroll down in palette list to change selection
-    inputs += menu_down(3, t)
-    t += 3 * MENU_GAP
+    # Open menu, Other Settings (Down×3), VSync (item 0), toggle OFF
+    nav, t = navigate_to_submenu_item(t, 3, 0)
+    inputs += nav
+    tog, t = toggle_and_close_menu(t)
+    inputs += tog
+    # Let game run with VSync OFF for a bit, then screenshot
+    t += 2000
     after_frame = t
-    # Press A to confirm
-    inputs += [f"{t}:A"]
-    t += MENU_GAP
 
     run(gba, t + 500, inputs,
-        screenshots=[f"{before_frame}:{before}", f"{after_frame}:{after}"])
+        screenshots=[f"{before_frame}:{before_ss}", f"{after_frame}:{after_ss}"],
+        memdumps=[memdump_arg(ADDR_NOVBLANKWAIT, 1, dump_path)])
 
-    d = pixel_diff_pct(before, after)
-    passed = d > 0.1
-    print(f"  Palette list diff after scroll: {d:.1f}% {'PASS' if passed else 'FAIL'}")
+    val = read_u8(dump_path)
+    state_ok = val == 1  # novblankwait=1 means VSync OFF
+    # With VSync OFF, the game runs uncapped so more GB frames pass per GBA frame.
+    # The gameplay screenshot should differ from the pre-toggle screenshot.
+    diff = pixel_diff_pct(before_ss, after_ss)
+    visual_ok = diff > 5
+    passed = state_ok and visual_ok
+    print(f"  novblankwait={val} (expect 1), visual diff={diff:.1f}% {'PASS' if passed else 'FAIL'}")
     return passed
 
 
-def test_gamma_toggle(tmpdir):
-    """Gamma cycles through I/II/III/IIII/IIIII."""
-    return _toggle_test(tmpdir, "Gamma toggle", 2, 1)
+def test_fps_meter_behavior(tmpdir):
+    """FPS-Meter: verify FPS overlay appears on game screen."""
+    print("Test: FPS-Meter (behavioral)")
+    gba = tmpdir / "t.gba"
+    if not compile_sml2(gba):
+        return False
+    before_ss = str(tmpdir / "nofps.bmp")
+    after_ss = str(tmpdir / "fps.bmp")
+    dump_path = str(tmpdir / "fpsenabled.bin")
+
+    # Boot game, screenshot gameplay without FPS
+    t = 2000
+    inputs = ["600:Start", "900:Start"]
+    before_frame = t
+    # Open menu, Other Settings (Down×3), FPS-Meter (item 1), toggle ON
+    nav, t = navigate_to_submenu_item(t, 3, 1)
+    inputs += nav
+    tog, t = toggle_and_close_menu(t)
+    inputs += tog
+    # Let game run with FPS overlay for ~120 frames so counter updates
+    t += 200
+    after_frame = t
+
+    run(gba, t + 500, inputs,
+        screenshots=[f"{before_frame}:{before_ss}", f"{after_frame}:{after_ss}"],
+        memdumps=[memdump_arg(ADDR_FPSENABLED, 1, dump_path)])
+
+    val = read_u8(dump_path)
+    flag_ok = val == 1
+    # FPS overlay adds text to game screen
+    diff = pixel_diff_pct(before_ss, after_ss)
+    overlay_ok = diff > 0.3
+    passed = flag_ok and overlay_ok
+    print(f"  fpsenabled={val}, overlay diff={diff:.1f}% {'PASS' if passed else 'FAIL'}")
+    return passed
 
 
-def test_sgb_palette_number_toggle(tmpdir):
-    """SGB Palette Number cycles through 0/1/2/3."""
-    return _toggle_test(tmpdir, "SGB Palette Number toggle", 2, 2)
+def test_autosleep_behavior(tmpdir):
+    """Autosleep: verify sleeptime cycles through all 4 distinct timer values."""
+    print("Test: Autosleep (behavioral)")
+    gba = tmpdir / "t.gba"
+    if not compile_sml2(gba):
+        return False
+
+    expected_values = [36000, 108000, 0x7F000000, 18000]  # 10min, 30min, OFF, 5min
+    actual_values = []
+
+    for i in range(4):
+        dump_path = str(tmpdir / f"sleeptime_{i}.bin")
+        t = 2000
+        inputs = ["600:Start", "900:Start"]
+        # Open menu, Other Settings, Autosleep (item 2)
+        nav, t = navigate_to_submenu_item(t, 3, 2)
+        inputs += nav
+        # Press A (i+1) times to cycle through values
+        for _ in range(i + 1):
+            inputs += [f"{t}:A"]
+            t += MENU_GAP
+        # Close menu
+        inputs += [f"{t}:B", f"{t + MENU_GAP}:B"]
+        t += 2 * MENU_GAP
+
+        run(gba, t + 200, inputs,
+            memdumps=[memdump_arg(ADDR_SLEEPTIME, 4, dump_path)])
+        actual_values.append(read_u32_le(dump_path))
+
+    # Verify all 4 values are distinct and match expected
+    all_distinct = len(set(actual_values)) == 4
+    match = actual_values == expected_values
+    passed = all_distinct and match
+    print(f"  Values: {actual_values}")
+    print(f"  Expected: {expected_values}")
+    print(f"  Distinct={all_distinct} Match={match} {'PASS' if passed else 'FAIL'}")
+    return passed
 
 
-def test_double_speed_toggle(tmpdir):
-    """Double Speed toggles Full/Half speed."""
-    return _toggle_test(tmpdir, "Double Speed toggle", 4, 0)
+def test_swap_ab_behavior(tmpdir):
+    """Swap A-B: verify joycfg bit 10 set, and B acts as jump with swap enabled."""
+    print("Test: Swap A-B (behavioral)")
+    gba = tmpdir / "t.gba"
+    if not compile_sml2(gba):
+        return False
+    dump_path = str(tmpdir / "joycfg_swap.bin")
+    press_a_ss = str(tmpdir / "press_a.bmp")
+    press_b_swapped_ss = str(tmpdir / "press_b_swapped.bmp")
+    no_press_ss = str(tmpdir / "no_press.bmp")
+
+    # Run 1: Boot game, press A in gameplay (Mario jumps)
+    t = 2000
+    inputs1 = ["600:Start", "900:Start"]
+    inputs1 += [f"{t}:A"]  # jump
+    t += 300
+    run(gba, t + 500, inputs1,
+        screenshots=[f"{t}:{press_a_ss}"])
+
+    # Run 2: Boot game, enable swap A-B, then press B (which should act as A = jump)
+    t = 2000
+    inputs2 = ["600:Start", "900:Start"]
+    nav, t = navigate_to_submenu_item(t, 3, 3)  # Other Settings, Swap A-B
+    inputs2 += nav
+    tog, t = toggle_and_close_menu(t)
+    inputs2 += tog
+    inputs2 += [f"{t}:B"]  # press B (should act as A = jump with swap)
+    t += 300
+    run(gba, t + 500, inputs2,
+        screenshots=[f"{t}:{press_b_swapped_ss}"],
+        memdumps=[memdump_arg(ADDR_JOYCFG, 4, dump_path)])
+
+    # Run 3: Boot game, no button press at gameplay point (control)
+    t = 2000
+    inputs3 = ["600:Start", "900:Start"]
+    t += 600
+    run(gba, t + 500, inputs3,
+        screenshots=[f"{t}:{no_press_ss}"])
+
+    joycfg = read_u32_le(dump_path)
+    bit10_set = (joycfg & 0x400) != 0
+    # With swap, pressing B should produce a jump like pressing A.
+    # Both "press A" and "press B swapped" should differ from "no press".
+    diff_a_vs_none = pixel_diff_pct(press_a_ss, no_press_ss)
+    diff_bswap_vs_none = pixel_diff_pct(press_b_swapped_ss, no_press_ss)
+    # Both runs that pressed a jump button should show movement
+    a_jumped = diff_a_vs_none > 2
+    b_jumped = diff_bswap_vs_none > 2
+    passed = bit10_set and a_jumped and b_jumped
+    print(f"  joycfg=0x{joycfg:08X} bit10={bit10_set}, A diff={diff_a_vs_none:.1f}%, B(swap) diff={diff_bswap_vs_none:.1f}%")
+    print(f"  {'PASS' if passed else 'FAIL'}")
+    return passed
 
 
-def test_lcd_scanline_hack_toggle(tmpdir):
-    """LCD scanline hack cycles through OFF/Low/Medium/High."""
-    return _toggle_test(tmpdir, "LCD scanline hack toggle", 4, 1)
+def test_autoload_state_behavior(tmpdir):
+    """Autoload state: save state, enable autoload, reboot, verify auto-restore."""
+    print("Test: Autoload state (behavioral)")
+    gba, sav = tmpdir / "t.gba", tmpdir / "t.sav"
+    if not compile_sml2(gba):
+        return False
+    title_ss = str(tmpdir / "title.bmp")
+    gameplay_ss = str(tmpdir / "gameplay.bmp")
+    autoloaded_ss = str(tmpdir / "autoloaded.bmp")
+
+    # Run 1: Boot to gameplay, quicksave, enable autoload, close menu
+    t = 2000
+    inputs1 = ["600:Start", "900:Start"]
+    inputs1 += [f"{t}:R+Select"]  # quicksave at gameplay
+    t += 400
+    # Open menu, Other Settings, Autoload state (item 4), toggle ON
+    nav, t = navigate_to_submenu_item(t, 3, 4)
+    inputs1 += nav
+    tog, t = toggle_and_close_menu(t)
+    inputs1 += tog
+
+    run(gba, t + 500, inputs1,
+        screenshots=[f"300:{title_ss}", f"1800:{gameplay_ss}"],
+        savefile=sav,
+        memdumps=[memdump_arg(ADDR_AUTOSTATE, 1, str(tmpdir / "autostate.bin"))])
+
+    autostate_val = read_u8(str(tmpdir / "autostate.bin"))
+
+    # Run 2: Boot with same savefile. Autoload should restore to gameplay.
+    run(gba, 3000, ["600:Start", "900:Start"],
+        screenshots=[f"2500:{autoloaded_ss}"],
+        savefile=sav)
+
+    # Autoloaded should look like gameplay, not like title
+    d_title = pixel_diff_pct(title_ss, autoloaded_ss)
+    d_gameplay = pixel_diff_pct(gameplay_ss, autoloaded_ss)
+    restored = d_gameplay < d_title
+    flag_ok = autostate_val == 1
+    passed = flag_ok and restored
+    print(f"  autostate={autostate_val}, title diff={d_title:.1f}%, gameplay diff={d_gameplay:.1f}%")
+    print(f"  Restored to gameplay={restored} {'PASS' if passed else 'FAIL'}")
+    return passed
+
+
+def test_palette_behavior(tmpdir):
+    """Palette: verify changing palette produces visually different game colors."""
+    print("Test: Palette (behavioral)")
+    gba = tmpdir / "t.gba"
+    if not compile_sml2(gba):
+        return False
+    default_ss = str(tmpdir / "default_pal.bmp")
+    changed_ss = str(tmpdir / "changed_pal.bmp")
+    dump_path = str(tmpdir / "palettebank.bin")
+
+    # Run 1: Boot game, screenshot at gameplay (default palette)
+    run(gba, 2500, ["600:Start", "900:Start"],
+        screenshots=[f"2000:{default_ss}"])
+
+    # Run 2: Boot game, change palette to Grayscale (index 1), screenshot gameplay
+    t = 2000
+    inputs = ["600:Start", "900:Start"]
+    # Open menu, Display (Down×2), enter, Palette (item 0), enter palette list
+    inputs += [f"{t}:L+R"]
+    t += 300
+    inputs += menu_down(2, t)
+    t += 2 * MENU_GAP
+    inputs += [f"{t}:A"]  # enter Display
+    t += 300
+    inputs += [f"{t}:A"]  # open palette list (item 0)
+    t += 300
+    # Scroll down 1 to Grayscale (from whatever auto-detected default)
+    # Actually we need to go to index 1 absolute. The list starts at current selection.
+    # Use Left to wrap to index 0 (Pea Soup) first, then Down to Grayscale.
+    inputs += [f"{t}:Down"]  # move to next palette
+    t += MENU_GAP
+    inputs += [f"{t}:A"]  # confirm
+    t += 300
+    inputs += [f"{t}:B"]  # back to main menu
+    t += MENU_GAP
+    inputs += [f"{t}:B"]  # close menu
+    t += 1000
+    run(gba, t + 500, inputs,
+        screenshots=[f"{t}:{changed_ss}"],
+        memdumps=[memdump_arg(ADDR_PALETTEBANK, 4, dump_path)])
+
+    new_palette = read_u32_le(dump_path)
+    diff = pixel_diff_pct(default_ss, changed_ss)
+    # Palette change should produce a dramatically different color scheme
+    palette_changed = diff > 5
+    passed = palette_changed
+    print(f"  palettebank={new_palette}, color diff={diff:.1f}% {'PASS' if passed else 'FAIL'}")
+    return passed
+
+
+def test_gamma_behavior(tmpdir):
+    """Gamma: verify brightness increases with higher gamma."""
+    print("Test: Gamma (behavioral)")
+    gba = tmpdir / "t.gba"
+    if not compile_sml2(gba):
+        return False
+    low_ss = str(tmpdir / "gamma_low.bmp")
+    high_ss = str(tmpdir / "gamma_high.bmp")
+    dump_path = str(tmpdir / "gammavalue.bin")
+
+    # Run 1: Boot game, screenshot at default gamma (level I = 0)
+    run(gba, 2500, ["600:Start", "900:Start"],
+        screenshots=[f"2000:{low_ss}"])
+
+    # Run 2: Boot game, toggle gamma to V (4 presses), screenshot
+    t = 2000
+    inputs = ["600:Start", "900:Start"]
+    nav, t = navigate_to_submenu_item(t, 2, 1)  # Display, Gamma (item 1)
+    inputs += nav
+    # Press A 4 times to go from I to V
+    for _ in range(4):
+        inputs += [f"{t}:A"]
+        t += MENU_GAP
+    # Close menu
+    inputs += [f"{t}:B"]
+    t += MENU_GAP
+    inputs += [f"{t}:B"]
+    t += 1000
+    run(gba, t + 500, inputs,
+        screenshots=[f"{t}:{high_ss}"],
+        memdumps=[memdump_arg(ADDR_GAMMAVALUE, 1, dump_path)])
+
+    gamma_val = read_u8(dump_path)
+    bright_low = avg_brightness(low_ss)
+    bright_high = avg_brightness(high_ss)
+    brighter = bright_high > bright_low
+    gamma_ok = gamma_val == 4
+    passed = brighter and gamma_ok
+    print(f"  gamma={gamma_val}, brightness: low={bright_low:.1f} high={bright_high:.1f} brighter={brighter}")
+    print(f"  {'PASS' if passed else 'FAIL'}")
+    return passed
+
+
+def test_sgb_palette_number_behavior(tmpdir):
+    """SGB Palette Number: verify variable cycles through 0-3."""
+    print("Test: SGB Palette Number (behavioral)")
+    gba = tmpdir / "t.gba"
+    if not compile_sml2(gba):
+        return False
+
+    values = []
+    for i in range(4):
+        dump_path = str(tmpdir / f"sgbpal_{i}.bin")
+        t = 2000
+        inputs = ["600:Start", "900:Start"]
+        nav, t = navigate_to_submenu_item(t, 2, 2)  # Display, SGB Palette Number
+        inputs += nav
+        for _ in range(i + 1):
+            inputs += [f"{t}:A"]
+            t += MENU_GAP
+        inputs += [f"{t}:B", f"{t + MENU_GAP}:B"]
+        t += 2 * MENU_GAP
+        run(gba, t + 200, inputs,
+            memdumps=[memdump_arg(ADDR_SGB_PALNUM, 1, dump_path)])
+        values.append(read_u8(dump_path))
+
+    # Default is 0. Pressing A cycles: 0→1→2→3→0
+    # So 1 press=1, 2 presses=2, 3 presses=3, 4 presses=0
+    expected = [1, 2, 3, 0]
+    passed = values == expected
+    print(f"  Values: {values} (expected {expected}) {'PASS' if passed else 'FAIL'}")
+    return passed
+
+
+def test_double_speed_behavior(tmpdir):
+    """Double Speed: verify doubletimer changes and affects game speed."""
+    print("Test: Double Speed (behavioral)")
+    gba = tmpdir / "t.gba"
+    if not compile_sml2(gba):
+        return False
+    dump_path = str(tmpdir / "doubletimer.bin")
+    normal_ss = str(tmpdir / "normal_speed.bmp")
+    half_ss = str(tmpdir / "half_speed.bmp")
+
+    # Run 1: Boot game, default speed (doubletimer=2="Full"), screenshot
+    run(gba, 3000, ["600:Start", "900:Start"],
+        screenshots=[f"2500:{normal_ss}"])
+
+    # Run 2: Toggle to Half speed (doubletimer=1), screenshot at same frame
+    t = 2000
+    inputs = ["600:Start", "900:Start"]
+    nav, t = navigate_to_submenu_item(t, 4, 0)  # Speed Hacks, Double Speed
+    inputs += nav
+    tog, t = toggle_and_close_menu(t)
+    inputs += tog
+    # Run for same amount of gameplay frames as Run 1 after menu close
+    run_end = t + 2000
+    run(gba, run_end, inputs,
+        screenshots=[f"{run_end - 500}:{half_ss}"],
+        memdumps=[memdump_arg(ADDR_DOUBLETIMER, 1, dump_path)])
+
+    val = read_u8(dump_path)
+    # doubletimer toggles between 1 and 2. Default=2, after toggle=1
+    state_ok = val == 1
+    # At half speed, game progresses slower → screenshots should differ
+    diff = pixel_diff_pct(normal_ss, half_ss)
+    visual_diff = diff > 3
+    passed = state_ok and visual_diff
+    print(f"  doubletimer={val} (expect 1), visual diff={diff:.1f}% {'PASS' if passed else 'FAIL'}")
+    return passed
+
+
+def test_lcd_scanline_hack_behavior(tmpdir):
+    """LCD scanline hack: verify g_lcdhack cycles through all 4 values."""
+    print("Test: LCD scanline hack (behavioral)")
+    gba = tmpdir / "t.gba"
+    if not compile_sml2(gba):
+        return False
+
+    values = []
+    for i in range(4):
+        dump_path = str(tmpdir / f"lcdhack_{i}.bin")
+        t = 2000
+        inputs = ["600:Start", "900:Start"]
+        nav, t = navigate_to_submenu_item(t, 4, 1)  # Speed Hacks, LCD hack
+        inputs += nav
+        for _ in range(i + 1):
+            inputs += [f"{t}:A"]
+            t += MENU_GAP
+        inputs += [f"{t}:B", f"{t + MENU_GAP}:B"]
+        t += 2 * MENU_GAP
+        run(gba, t + 200, inputs,
+            memdumps=[memdump_arg(ADDR_G_LCDHACK, 1, dump_path)])
+        values.append(read_u8(dump_path))
+
+    # Default=0. Pressing A cycles: 0→1→2→3→0
+    expected = [1, 2, 3, 0]
+    passed = values == expected
+    print(f"  Values: {values} (expected {expected}) {'PASS' if passed else 'FAIL'}")
+    return passed
+
+
+def test_identify_as_gba_behavior(tmpdir):
+    """Identify as GBA: verify request_gba_mode variable toggles."""
+    print("Test: Identify as GBA (behavioral)")
+    gba = tmpdir / "t.gba"
+    if not compile_sml2(gba):
+        return False
+    before_dump = str(tmpdir / "gba_before.bin")
+    after_dump = str(tmpdir / "gba_after.bin")
+
+    # Run 1: Default (OFF), dump value
+    run(gba, 2500, ["600:Start", "900:Start"],
+        memdumps=[memdump_arg(ADDR_REQUEST_GBA, 1, before_dump)])
+
+    # Run 2: Toggle ON, dump value
+    t = 2000
+    inputs = ["600:Start", "900:Start"]
+    nav, t = navigate_to_submenu_item(t, 3, 7)  # Other Settings, Identify as GBA
+    inputs += nav
+    tog, t = toggle_and_close_menu(t)
+    inputs += tog
+    run(gba, t + 500, inputs,
+        memdumps=[memdump_arg(ADDR_REQUEST_GBA, 1, after_dump)])
+
+    before_val = read_u8(before_dump)
+    after_val = read_u8(after_dump)
+    # Default request_gba_mode=0. After toggle via gbatype(), it becomes 1.
+    changed = before_val != after_val
+    passed = changed
+    print(f"  Before={before_val}, After={after_val}, Changed={changed} {'PASS' if passed else 'FAIL'}")
+    return passed
+
+
+def test_gameboy_type_behavior(tmpdir):
+    """Game Boy type: verify Zelda DX boots in GBC vs DMG mode."""
+    print("Test: Game Boy type (behavioral)")
+    if not ZELDA_DX_ROM.exists():
+        print("  SKIP: Zelda DX ROM not found")
+        return True
+    gba, sav = tmpdir / "zelda.gba", tmpdir / "zelda.sav"
+    if not compile_rom(ZELDA_DX_ROM, gba):
+        return False
+    gbc_ss = str(tmpdir / "zelda_gbc.bmp")
+    dmg_ss = str(tmpdir / "zelda_dmg.bmp")
+
+    # Run 1: Default (Prefer GBC). Boot to title screen.
+    run(gba, 4000, [],
+        screenshots=[f"3500:{gbc_ss}"])
+
+    # Run 2: Set GB type to "GB" (DMG), then restart.
+    # Default request_gb_type=2. Need to cycle: 2→3 (A), 3→0 (A) = DMG.
+    t = 1000
+    inputs = [f"{t}:L+R"]
+    t += 300
+    nav, t = navigate_to_submenu_item(t, 3, 5)  # Other Settings, Game Boy type
+    # Actually navigate_to_submenu_item already opens the menu. We opened it twice.
+    # Let me restructure: don't open menu separately.
+    t = 1000
+    inputs = []
+    nav, t = navigate_to_submenu_item(t, 3, 5)
+    inputs += nav
+    # Press A twice: Prefer GBC(2) → GBC+SGB(3) → GB(0)
+    inputs += [f"{t}:A"]
+    t += MENU_GAP
+    inputs += [f"{t}:A"]
+    t += MENU_GAP
+    # Back to main menu
+    inputs += [f"{t}:B"]
+    t += MENU_GAP
+    # Navigate to Restart (item 9 in main menu)
+    inputs += menu_down(9, t)
+    t += 9 * MENU_GAP
+    inputs += [f"{t}:A"]  # Restart (calls writeconfig + jump_to_rommenu)
+    t += 3500  # wait for game to reboot to title
+    run(gba, t + 500, inputs,
+        screenshots=[f"{t}:{dmg_ss}"],
+        savefile=sav)
+
+    diff = pixel_diff_pct(gbc_ss, dmg_ss)
+    # Zelda DX GBC mode has a full-color title; DMG mode is very different
+    passed = diff > 25
+    print(f"  GBC vs DMG title diff={diff:.1f}% (expect >25%) {'PASS' if passed else 'FAIL'}")
+    return passed
+
+
+def test_auto_sgb_border_behavior(tmpdir):
+    """Auto SGB border: verify border appears/disappears with Kirby DL2."""
+    print("Test: Auto SGB border (behavioral)")
+    if not KIRBY_DL2_ROM.exists():
+        print("  SKIP: Kirby DL2 ROM not found")
+        return True
+    gba = tmpdir / "kirby.gba"
+    if not compile_rom(KIRBY_DL2_ROM, gba):
+        return False
+    border_on_ss = str(tmpdir / "border_on.bmp")
+    border_off_ss = str(tmpdir / "border_off.bmp")
+    dump_path = str(tmpdir / "auto_border.bin")
+
+    # Run 1: Default settings (auto_border=ON, gb_type=Prefer GBC).
+    # Kirby DL2 is SGB Enhanced so auto_border shows the SGB border by default.
+    run(gba, 6000, [],
+        screenshots=[f"5500:{border_on_ss}"])
+
+    # Run 2: Toggle auto_border OFF, restart, verify no border.
+    t = 1000
+    inputs = []
+    nav, t = navigate_to_submenu_item(t, 3, 6)  # Other Settings, Auto SGB border
+    inputs += nav
+    inputs += [f"{t}:A"]  # toggle OFF
+    t += MENU_GAP
+    inputs += [f"{t}:B"]  # back to main menu
+    t += MENU_GAP
+    # Restart to apply
+    inputs += menu_down(9, t)
+    t += 9 * MENU_GAP
+    inputs += [f"{t}:A"]  # Restart
+    t += 5000  # wait for Kirby to reboot
+    run(gba, t + 500, inputs,
+        screenshots=[f"{t}:{border_off_ss}"],
+        memdumps=[memdump_arg(ADDR_AUTO_BORDER, 1, dump_path)])
+
+    auto_border_val = read_u8(dump_path)
+    diff = pixel_diff_pct(border_on_ss, border_off_ss)
+    flag_ok = auto_border_val == 0
+    visual_ok = diff > 5
+    passed = flag_ok and visual_ok
+    print(f"  auto_border={auto_border_val}, diff={diff:.1f}% {'PASS' if passed else 'FAIL'}")
+    return passed
 
 
 def test_sram_persistence(tmpdir):
@@ -552,25 +1039,23 @@ def main():
         results.append(("Other Settings submenu", test_other_settings_submenu(tmpdir)))
         results.append(("Speed Hacks submenu", test_speed_hacks_submenu(tmpdir)))
         results.append(("Autofire B toggle", test_autofire_toggle(tmpdir)))
-        results.append(("Autofire A toggle", test_a_autofire_toggle(tmpdir)))
         results.append(("Manage SRAM", test_manage_sram(tmpdir)))
         results.append(("Restart", test_restart(tmpdir)))
-        # Other Settings items
-        results.append(("VSync toggle", test_vsync_toggle(tmpdir)))
-        results.append(("FPS-Meter toggle", test_fps_meter_toggle(tmpdir)))
-        results.append(("Autosleep toggle", test_autosleep_toggle(tmpdir)))
-        results.append(("Swap A-B toggle", test_swap_ab_toggle(tmpdir)))
-        results.append(("Autoload state toggle", test_autoload_state_toggle(tmpdir)))
-        results.append(("Game Boy type toggle", test_gameboy_type_toggle(tmpdir)))
-        results.append(("Auto SGB border toggle", test_auto_sgb_border_toggle(tmpdir)))
-        results.append(("Identify as GBA toggle", test_identify_as_gba_toggle(tmpdir)))
-        # Display Settings items
-        results.append(("Palette selection", test_palette_selection(tmpdir)))
-        results.append(("Gamma toggle", test_gamma_toggle(tmpdir)))
-        results.append(("SGB Palette Number toggle", test_sgb_palette_number_toggle(tmpdir)))
-        # Speed Hacks items
-        results.append(("Double Speed toggle", test_double_speed_toggle(tmpdir)))
-        results.append(("LCD scanline hack toggle", test_lcd_scanline_hack_toggle(tmpdir)))
+        # Behavioral tests: verify actual setting effects
+        results.append(("A autofire behavior", test_a_autofire_behavior(tmpdir)))
+        results.append(("VSync behavior", test_vsync_behavior(tmpdir)))
+        results.append(("FPS-Meter behavior", test_fps_meter_behavior(tmpdir)))
+        results.append(("Autosleep behavior", test_autosleep_behavior(tmpdir)))
+        results.append(("Swap A-B behavior", test_swap_ab_behavior(tmpdir)))
+        results.append(("Autoload state behavior", test_autoload_state_behavior(tmpdir)))
+        results.append(("Palette behavior", test_palette_behavior(tmpdir)))
+        results.append(("Gamma behavior", test_gamma_behavior(tmpdir)))
+        results.append(("SGB Palette Number behavior", test_sgb_palette_number_behavior(tmpdir)))
+        results.append(("Double Speed behavior", test_double_speed_behavior(tmpdir)))
+        results.append(("LCD scanline hack behavior", test_lcd_scanline_hack_behavior(tmpdir)))
+        results.append(("Identify as GBA behavior", test_identify_as_gba_behavior(tmpdir)))
+        results.append(("Game Boy type behavior", test_gameboy_type_behavior(tmpdir)))
+        results.append(("Auto SGB border behavior", test_auto_sgb_border_behavior(tmpdir)))
     results.append(("SRAM persistence", test_sram_persistence(None)))
 
     print(f"\n{'='*60}")
