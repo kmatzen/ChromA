@@ -440,42 +440,47 @@ def test_manage_sram(tmpdir):
 
 
 def test_a_autofire_behavior(tmpdir):
-    """A autofire: verify joycfg bitmask changes to enable autofire pulse."""
+    """A autofire: verify joycfg bitmask changes and autofire affects gameplay."""
     print("Test: A autofire (behavioral)")
     gba = tmpdir / "t.gba"
     if not compile_sml2(gba):
         return False
-    before_dump = str(tmpdir / "joycfg_before.bin")
-    after_dump = str(tmpdir / "joycfg_after.bin")
+    dump_path = str(tmpdir / "joycfg_af.bin")
+    no_press_ss = str(tmpdir / "no_press.bmp")
+    autofire_ss = str(tmpdir / "autofire.bmp")
 
-    # Boot game, dump joycfg before toggle
+    # Run 1: Boot game, no A press in gameplay. Screenshot as baseline.
+    run(gba, 3000, ["600:Start", "900:Start"],
+        screenshots=[f"2500:{no_press_ss}"])
+
+    # Run 2: Enable autofire A via menu, then press A in gameplay.
+    # With autofire, A pulses rapidly causing repeated jump input.
     t = 2000
     inputs = ["600:Start", "900:Start"]
-    before_frame = t
-    # Open menu, navigate to A autofire (item 1), toggle it
     inputs += [f"{t}:L+R"]
     t += 300
-    inputs += menu_down(1, t)
+    inputs += menu_down(1, t)  # A autofire (item 1)
     t += MENU_GAP
     t += 200
     inputs += [f"{t}:A"]  # toggle A autofire ON
+    t += MENU_GAP
+    inputs += [f"{t}:B"]  # close menu
     t += 300
-    after_frame = t
-
+    # Press A in gameplay - with autofire this pulses causing jumps
+    inputs += [f"{t}:A"]
+    t += 300
     run(gba, t + 500, inputs,
-        memdumps=[
-            memdump_arg(ADDR_JOYCFG, 4, before_dump.replace("before", "default")),
-            memdump_arg(ADDR_JOYCFG, 4, after_dump),
-        ],
-        screenshots=[f"{before_frame}:{before_dump}.bmp",
-                     f"{after_frame}:{after_dump}.bmp"])
+        screenshots=[f"{t}:{autofire_ss}"],
+        memdumps=[memdump_arg(ADDR_JOYCFG, 4, dump_path)])
 
-    # Actually we need the dump at two different times. memdump only runs at end.
-    # So instead: verify the final joycfg has A bit cleared (autofire active).
-    joycfg = read_u32_le(after_dump)
+    joycfg = read_u32_le(dump_path)
     a_bit_cleared = (joycfg & 0x01) == 0  # A button masked = autofire active
-    passed = a_bit_cleared
-    print(f"  joycfg=0x{joycfg:08X}, A bit cleared={a_bit_cleared} {'PASS' if passed else 'FAIL'}")
+    # Autofire A + pressing A should make Mario jump, visibly different from no press
+    diff = pixel_diff_pct(no_press_ss, autofire_ss)
+    visual_ok = diff > 2
+    passed = a_bit_cleared and visual_ok
+    print(f"  joycfg=0x{joycfg:08X}, A bit cleared={a_bit_cleared}, gameplay diff={diff:.1f}%")
+    print(f"  {'PASS' if passed else 'FAIL'}")
     return passed
 
 
@@ -785,12 +790,13 @@ def test_gamma_behavior(tmpdir):
 
 
 def test_sgb_palette_number_behavior(tmpdir):
-    """SGB Palette Number: verify variable cycles through 0-3."""
+    """SGB Palette Number: verify variable cycles and border colors change."""
     print("Test: SGB Palette Number (behavioral)")
     gba = tmpdir / "t.gba"
     if not compile_sml2(gba):
         return False
 
+    # Verify all 4 values via memdump
     values = []
     for i in range(4):
         dump_path = str(tmpdir / f"sgbpal_{i}.bin")
@@ -807,10 +813,39 @@ def test_sgb_palette_number_behavior(tmpdir):
             memdumps=[memdump_arg(ADDR_SGB_PALNUM, 1, dump_path)])
         values.append(read_u8(dump_path))
 
-    # Default is 0. Pressing A cycles: 0→1→2→3→0
-    # So 1 press=1, 2 presses=2, 3 presses=3, 4 presses=0
     expected = [1, 2, 3, 0]
-    passed = values == expected
+    cycle_ok = values == expected
+
+    # Visual verification: with Kirby DL2 (SGB game), different palette numbers
+    # produce visibly different SGB border colors.
+    visual_ok = True
+    if KIRBY_DL2_ROM.exists():
+        kirby_gba = tmpdir / "kirby_pal.gba"
+        if compile_rom(KIRBY_DL2_ROM, kirby_gba):
+            pal0_ss = str(tmpdir / "kirby_pal0.bmp")
+            pal1_ss = str(tmpdir / "kirby_pal1.bmp")
+
+            # Run 1: Default palette 0
+            run(kirby_gba, 6000, [],
+                screenshots=[f"5500:{pal0_ss}"])
+
+            # Run 2: Change to palette 1, let border redraw
+            t = 1000
+            inputs = []
+            nav, t = navigate_to_submenu_item(t, 2, 2)  # Display, SGB Palette Number
+            inputs += nav
+            inputs += [f"{t}:A"]  # toggle to 1
+            t += MENU_GAP
+            inputs += [f"{t}:B", f"{t + MENU_GAP}:B"]
+            t += 2 * MENU_GAP + 4000
+            run(kirby_gba, t + 500, inputs,
+                screenshots=[f"{t}:{pal1_ss}"])
+
+            diff = pixel_diff_pct(pal0_ss, pal1_ss)
+            visual_ok = diff > 10
+            print(f"  Kirby palette 0 vs 1 diff={diff:.1f}%")
+
+    passed = cycle_ok and visual_ok
     print(f"  Values: {values} (expected {expected}) {'PASS' if passed else 'FAIL'}")
     return passed
 
@@ -854,12 +889,15 @@ def test_double_speed_behavior(tmpdir):
 
 
 def test_lcd_scanline_hack_behavior(tmpdir):
-    """LCD scanline hack: verify g_lcdhack cycles through all 4 values."""
+    """LCD scanline hack: verify g_lcdhack cycles and High hack changes rendering."""
     print("Test: LCD scanline hack (behavioral)")
     gba = tmpdir / "t.gba"
     if not compile_sml2(gba):
         return False
+    hack_off_ss = str(tmpdir / "lcdhack_off.bmp")
+    hack_high_ss = str(tmpdir / "lcdhack_high.bmp")
 
+    # Verify all 4 values via memdump
     values = []
     for i in range(4):
         dump_path = str(tmpdir / f"lcdhack_{i}.bin")
@@ -876,10 +914,32 @@ def test_lcd_scanline_hack_behavior(tmpdir):
             memdumps=[memdump_arg(ADDR_G_LCDHACK, 1, dump_path)])
         values.append(read_u8(dump_path))
 
-    # Default=0. Pressing A cycles: 0→1→2→3→0
     expected = [1, 2, 3, 0]
-    passed = values == expected
-    print(f"  Values: {values} (expected {expected}) {'PASS' if passed else 'FAIL'}")
+    cycle_ok = values == expected
+
+    # Visual verification: LCD hack at High (3) changes rendering vs OFF
+    # Run 1: Default (hack OFF), gameplay screenshot
+    run(gba, 3000, ["600:Start", "900:Start"],
+        screenshots=[f"2500:{hack_off_ss}"])
+
+    # Run 2: Set hack to High (3 presses), gameplay screenshot
+    t = 2000
+    inputs = ["600:Start", "900:Start"]
+    nav, t = navigate_to_submenu_item(t, 4, 1)
+    inputs += nav
+    for _ in range(3):  # OFF→Low→Med→High
+        inputs += [f"{t}:A"]
+        t += MENU_GAP
+    inputs += [f"{t}:B", f"{t + MENU_GAP}:B"]
+    t += 2 * MENU_GAP + 1000
+    run(gba, t + 500, inputs,
+        screenshots=[f"{t}:{hack_high_ss}"])
+
+    diff = pixel_diff_pct(hack_off_ss, hack_high_ss)
+    visual_ok = diff > 3
+    passed = cycle_ok and visual_ok
+    print(f"  Values: {values} (expected {expected})")
+    print(f"  Hack OFF vs High diff={diff:.1f}% {'PASS' if passed else 'FAIL'}")
     return passed
 
 
