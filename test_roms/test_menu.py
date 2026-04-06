@@ -99,10 +99,10 @@ def read_u32_le(path):
 
 
 def avg_brightness(path):
-    """Compute mean pixel brightness (0-255) of an image."""
+    """Compute mean pixel brightness (0-255) across all channels."""
     img = Image.open(path).convert("RGB")
     pixels = list(img.getdata())
-    return sum(max(r, g, b) for r, g, b in pixels) / len(pixels)
+    return sum(r + g + b for r, g, b in pixels) / (len(pixels) * 3)
 
 
 def memdump_arg(addr, length, filepath):
@@ -448,34 +448,39 @@ def test_a_autofire_behavior(tmpdir):
     dump_path = str(tmpdir / "joycfg_af.bin")
     no_press_ss = str(tmpdir / "no_press.bmp")
     autofire_ss = str(tmpdir / "autofire.bmp")
+    menu_before_ss = str(tmpdir / "af_menu_before.bmp")
+    menu_after_ss = str(tmpdir / "af_menu_after.bmp")
 
     # Run 1: Boot game, no A press in gameplay. Screenshot as baseline.
     run(gba, 3000, ["600:Start", "900:Start"],
         screenshots=[f"2500:{no_press_ss}"])
 
     # Run 2: Enable autofire A via menu, then press A in gameplay.
-    # With autofire, A pulses rapidly causing repeated jump input.
     t = 2000
     inputs = ["600:Start", "900:Start"]
     inputs += [f"{t}:L+R"]
     t += 300
     inputs += menu_down(1, t)  # A autofire (item 1)
     t += MENU_GAP
+    menu_before_frame = t
     t += 200
     inputs += [f"{t}:A"]  # toggle A autofire ON
     t += MENU_GAP
+    menu_after_frame = t
+    t += 200
     inputs += [f"{t}:B"]  # close menu
     t += 300
     # Press A in gameplay - with autofire this pulses causing jumps
     inputs += [f"{t}:A"]
     t += 300
     run(gba, t + 500, inputs,
-        screenshots=[f"{t}:{autofire_ss}"],
+        screenshots=[f"{menu_before_frame}:{menu_before_ss}",
+                     f"{menu_after_frame}:{menu_after_ss}",
+                     f"{t}:{autofire_ss}"],
         memdumps=[memdump_arg(ADDR_JOYCFG, 4, dump_path)])
 
     joycfg = read_u32_le(dump_path)
-    a_bit_cleared = (joycfg & 0x01) == 0  # A button masked = autofire active
-    # Autofire A + pressing A should make Mario jump, visibly different from no press
+    a_bit_cleared = (joycfg & 0x01) == 0
     diff = pixel_diff_pct(no_press_ss, autofire_ss)
     visual_ok = diff > 2
     passed = a_bit_cleared and visual_ok
@@ -747,35 +752,47 @@ def test_palette_behavior(tmpdir):
 
 
 def test_gamma_behavior(tmpdir):
-    """Gamma: verify brightness increases with higher gamma."""
+    """Gamma: verify brightness increases with higher gamma (single-run)."""
     print("Test: Gamma (behavioral)")
     gba = tmpdir / "t.gba"
     if not compile_sml2(gba):
         return False
     low_ss = str(tmpdir / "gamma_low.bmp")
     high_ss = str(tmpdir / "gamma_high.bmp")
+    menu_before_ss = str(tmpdir / "gamma_menu_before.bmp")
+    menu_after_ss = str(tmpdir / "gamma_menu_after.bmp")
     dump_path = str(tmpdir / "gammavalue.bin")
 
-    # Run 1: Boot game, screenshot at default gamma (level I = 0)
-    run(gba, 2500, ["600:Start", "900:Start"],
-        screenshots=[f"2000:{low_ss}"])
-
-    # Run 2: Boot game, toggle gamma to V (4 presses), screenshot
+    # Single run: screenshot at default gamma, toggle to V, screenshot again.
+    # Same run ensures identical game state for fair brightness comparison.
     t = 2000
     inputs = ["600:Start", "900:Start"]
-    nav, t = navigate_to_submenu_item(t, 2, 1)  # Display, Gamma (item 1)
+    before_frame = t
+    # Open menu, Display, Gamma (item 1)
+    nav, t = navigate_to_submenu_item(t, 2, 1)
     inputs += nav
+    # Screenshot menu at gamma I (before)
+    menu_before_frame = t
+    t += 200
     # Press A 4 times to go from I to V
     for _ in range(4):
         inputs += [f"{t}:A"]
         t += MENU_GAP
+    # Screenshot menu at gamma V (after)
+    menu_after_frame = t
+    t += 200
     # Close menu
     inputs += [f"{t}:B"]
     t += MENU_GAP
     inputs += [f"{t}:B"]
-    t += 1000
+    t += 500
+    after_frame = t
+
     run(gba, t + 500, inputs,
-        screenshots=[f"{t}:{high_ss}"],
+        screenshots=[f"{before_frame}:{low_ss}",
+                     f"{menu_before_frame}:{menu_before_ss}",
+                     f"{menu_after_frame}:{menu_after_ss}",
+                     f"{after_frame}:{high_ss}"],
         memdumps=[memdump_arg(ADDR_GAMMAVALUE, 1, dump_path)])
 
     gamma_val = read_u8(dump_path)
@@ -783,9 +800,12 @@ def test_gamma_behavior(tmpdir):
     bright_high = avg_brightness(high_ss)
     brighter = bright_high > bright_low
     gamma_ok = gamma_val == 4
-    passed = brighter and gamma_ok
+    # Also verify the menu text changed between gamma I and V
+    menu_diff = pixel_diff_pct(menu_before_ss, menu_after_ss)
+    menu_ok = menu_diff > 0.1
+    passed = brighter and gamma_ok and menu_ok
     print(f"  gamma={gamma_val}, brightness: low={bright_low:.1f} high={bright_high:.1f} brighter={brighter}")
-    print(f"  {'PASS' if passed else 'FAIL'}")
+    print(f"  menu diff={menu_diff:.1f}% {'PASS' if passed else 'FAIL'}")
     return passed
 
 
