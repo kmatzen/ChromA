@@ -229,11 +229,13 @@ The build runs two validators before creating the .gba ROM:
 2. **Instruction timing** (`scripts/validate_timing.py`): Verifies all opcode fetch costs against Pan Docs reference
 
 ### Test Suite
-`test_roms/run_tests.py` runs visual regression tests:
-- Compiles test ROMs with `goomba_compile.py`
-- Runs headless via `mgba_runner` (custom mGBA wrapper)
-- Captures screenshots at specific frames
-- Compares against baseline PNGs
+All tests run headless via `mgba_runner` (custom mGBA wrapper) with `--input`, `--screenshot`, and `--memdump` support.
+
+**Visual regression** (`run_tests.py`): Compiles test ROMs with `goomba_compile.py`, captures screenshots at specific frames, and compares against baseline PNGs. Covers 26 ROMs including CPU instruction tests, game-specific rendering, and SGB border support.
+
+**Menu behavioral tests** (`test_menu.py`): 26 tests covering save states, menu navigation, and all 14 settings. Each setting test verifies actual emulator behavior — not just that menu text pixels changed — using memdump verification of internal state variables and screenshot comparison of gameplay effects across 3 ROMs (SML2, Zelda DX, Kirby DL2).
+
+**SRAM write-through** (`test_sram_writethrough.py`): Multi-session tests verifying save data persists across emulator restarts via `.sav` file reuse.
 
 ## Key Design Constraints
 

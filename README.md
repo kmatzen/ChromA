@@ -36,7 +36,7 @@ Output: `chroma.gba`
 ## Testing
 
 ```bash
-# Run all tests locally (26 visual + 26 menu/savestate + RST + SRAM)
+# Run all tests locally (26 visual + 26 menu/behavioral + RST + SRAM)
 python3 test_roms/run_all_tests.py
 
 # Quick mode (skip slow SRAM tests)
