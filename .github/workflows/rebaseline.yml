@@ -1,0 +1,89 @@
+name: Rebaseline Visual Tests
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkitarm:latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build
+      run: make
+      env:
+        DEVKITARM: /opt/devkitpro/devkitARM
+    - uses: actions/upload-artifact@v4
+      with:
+        name: chroma.gba
+        path: chroma.gba
+
+  rebaseline:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: test-roms
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download GBA binary
+      uses: actions/download-artifact@v4
+      with:
+        name: chroma.gba
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake libelf-dev libpng-dev \
+          libsqlite3-dev libedit-dev python3-pip
+        pip3 install --break-system-packages Pillow
+
+    - name: Build mGBA library
+      run: |
+        git clone --depth 1 https://github.com/mgba-emu/mgba.git /tmp/mgba-build
+        mkdir -p /tmp/mgba-build/build
+        cd /tmp/mgba-build/build
+        cmake .. -DBUILD_QT=OFF -DBUILD_SDL=OFF \
+          -DUSE_EPOXY=OFF -DUSE_FFMPEG=OFF -DUSE_LIBZIP=OFF \
+          -DUSE_DISCORD_RPC=OFF -DUSE_LUA=OFF -DUSE_LZMA=OFF \
+          -DENABLE_VFS_FD=ON -DENABLE_VFS=ON -DENABLE_DIRECTORIES=ON
+        make -j$(nproc)
+
+    - name: Build test runner
+      run: |
+        cc -O2 \
+          -I/tmp/mgba-build/include -I/tmp/mgba-build/build/include -I/tmp/mgba-build/src \
+          -include /tmp/mgba-build/build/include/mgba/flags.h \
+          -DM_CORE_GB -DM_CORE_GBA -DMGBA_DLL \
+          -o test_roms/mgba_runner test_roms/mgba_runner.c \
+          -L/tmp/mgba-build/build -lmgba -Wl,-rpath,/tmp/mgba-build/build
+
+    - name: Download game ROMs
+      run: |
+        gh release download latest \
+          --repo kmatzen/test-roms-private \
+          --pattern 'game-roms.zip' \
+          --dir /tmp
+        unzip -o /tmp/game-roms.zip -d test_roms/
+      env:
+        GH_TOKEN: ${{ secrets.TEST_ROMS_PAT }}
+
+    - name: Rebaseline all visual tests
+      run: python3 test_roms/run_tests.py --rebaseline
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
+    - name: Commit and push updated baselines
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        if git diff --quiet test_roms/baselines/; then
+          echo "Baselines unchanged — nothing to commit"
+        else
+          git add test_roms/baselines/
+          git commit -m "Rebaseline visual tests from CI (Ubuntu/mGBA)"
+          git push
+        fi
