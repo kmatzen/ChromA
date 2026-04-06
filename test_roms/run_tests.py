@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Automated visual regression testing for jagoombacolor.
+"""Automated visual regression testing for ChromA.
 
 Usage:
     python3 test_roms/run_tests.py                    # Run all tests, compare to baselines
@@ -46,7 +46,7 @@ def load_test_config():
 
 
 def compile_test_rom(rom_path, output_path):
-    """Wrap a GB/GBC ROM with jagoombacolor using goomba_compile.py."""
+    """Wrap a GB/GBC ROM with ChromA using goomba_compile.py."""
     result = subprocess.run(
         [sys.executable, str(COMPILER), "-e", str(EMULATOR), "-o", str(output_path), str(rom_path)],
         capture_output=True, text=True
@@ -228,7 +228,7 @@ def run_single_test(name, test_info, rebaseline=False, diff_dir=None, verbose=Fa
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Automated visual regression testing for jagoombacolor")
+    parser = argparse.ArgumentParser(description="Automated visual regression testing for ChromA")
     parser.add_argument("--rebaseline", action="store_true", help="Generate new baseline images")
     parser.add_argument("--test", "-t", action="append", help="Run specific test(s) by name")
     parser.add_argument("--diff-dir", "-d", default=None, help="Directory for diff images")

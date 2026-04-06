@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Automated tests for all Goomba menu features.
+"""Automated tests for all ChromA menu features.
 
 Tests save states, menu navigation, persistence, display settings,
 and all accessible menu items.

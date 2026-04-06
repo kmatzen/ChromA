@@ -44,9 +44,9 @@ def main():
     )
     results.append(("Visual regression", ok))
 
-    # 2. Menu + savestate tests (11 tests)
+    # 2. Menu + savestate tests (26 tests)
     ok, out = run_suite(
-        "Menu & Savestate Tests (11 tests)",
+        "Menu & Savestate Tests (26 tests)",
         [sys.executable, str(SCRIPT_DIR / "test_menu.py")]
     )
     results.append(("Menu & savestates", ok))
