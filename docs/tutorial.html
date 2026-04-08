@@ -1,0 +1,1498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How ChromA Works</title>
+<style>
+  @keyframes holo {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: #08080e;
+    color: #aab;
+    font-family: system-ui, -apple-system, sans-serif;
+    line-height: 1.7;
+  }
+  .page-wrap {
+    max-width: 1060px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+  h1 {
+    font-size: 3em;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    background: linear-gradient(135deg, #f0f, #0ff, #ff0, #0f0, #f0f, #0ff);
+    background-size: 300% 300%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: holo 4s ease infinite;
+    text-align: center;
+    margin-bottom: 4px;
+  }
+  h2 {
+    color: #fff;
+    font-size: 1.8em;
+    font-weight: 700;
+    border-bottom: 1px solid #2a2a3a;
+    padding-bottom: 8px;
+    margin-bottom: 20px;
+  }
+  h3 {
+    color: #dde;
+    font-size: 1.2em;
+    font-weight: 600;
+    margin: 20px 0 10px;
+  }
+  .subtitle {
+    text-align: center;
+    color: #889;
+    font-size: 0.9em;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .intro {
+    text-align: center;
+    max-width: 640px;
+    margin: 0 auto 16px;
+    font-size: 1.05em;
+  }
+  .demo-link {
+    display: inline-block;
+    color: #5bf;
+    text-decoration: none;
+    border: 1px solid #5bf;
+    border-radius: 6px;
+    padding: 8px 24px;
+    margin: 10px auto 30px;
+    transition: all 0.3s ease;
+  }
+  .demo-link:hover {
+    background: rgba(85,187,255,0.1);
+    box-shadow: 0 0 16px rgba(85,187,255,0.2);
+  }
+  .hero-links { text-align: center; }
+  section {
+    background: #0c0c14;
+    border: 1px solid #2a2a3a;
+    border-radius: 10px;
+    padding: 32px;
+    margin-bottom: 32px;
+    animation: fade-in 0.4s ease both;
+  }
+  a { color: #5bf; }
+  p { margin-bottom: 14px; }
+  pre {
+    background: #111622;
+    border-left: 3px solid #5bf;
+    border-radius: 4px;
+    padding: 14px 18px;
+    overflow-x: auto;
+    font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+    font-size: 0.88em;
+    line-height: 1.6;
+    margin: 14px 0;
+    color: #ccd;
+  }
+  code {
+    font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+    font-size: 0.9em;
+    background: #111622;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  .asm-mnem { color: #0dd; }
+  .asm-reg  { color: #fa4; }
+  .asm-comment { color: #667; font-style: italic; }
+  .asm-imm  { color: #fd0; }
+  .asm-label { color: #f8a; }
+  details {
+    margin: 16px 0;
+    border: 1px solid #1a1a2a;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  details summary {
+    cursor: pointer;
+    padding: 10px 16px;
+    background: #0a0a12;
+    color: #5bf;
+    font-weight: 600;
+    font-size: 0.95em;
+    list-style: none;
+    transition: background 0.3s;
+  }
+  details summary::-webkit-details-marker { display: none; }
+  details summary::before { content: "\25B8  "; }
+  details[open] summary::before { content: "\25BE  "; }
+  details summary:hover { background: #10101a; }
+  details .details-body { padding: 16px; }
+  .accent { color: #5bf; font-weight: 600; }
+  .diagram-wrap { overflow-x: auto; margin: 16px 0; }
+  .diagram-wrap svg { display: block; margin: 0 auto; }
+  svg text { font-family: system-ui, -apple-system, sans-serif; }
+  button {
+    background: #1a1a2a;
+    color: #aab;
+    border: 1px solid #2a2a3a;
+    border-radius: 5px;
+    padding: 6px 16px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.9em;
+    transition: all 0.3s;
+  }
+  button:hover {
+    border-color: #5bf;
+    box-shadow: 0 0 10px rgba(85,187,255,0.15);
+    color: #fff;
+  }
+  button.active {
+    background: #5bf;
+    color: #08080e;
+    border-color: #5bf;
+  }
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    background: #1a1a2a;
+    border-radius: 4px;
+    height: 6px;
+    outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: #5bf;
+    cursor: pointer;
+    box-shadow: 0 0 6px rgba(85,187,255,0.4);
+  }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 12px 0;
+  }
+  .controls label { color: #889; font-size: 0.9em; }
+  .reg-explanation {
+    background: #111622;
+    border: 1px solid #2a2a3a;
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 10px 0;
+    min-height: 60px;
+    font-size: 0.92em;
+  }
+  .hex-dump {
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 0.82em;
+    color: #7a8;
+    word-break: break-all;
+    background: #0a0a12;
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin: 8px 0;
+  }
+  .canvas-col { text-align: center; }
+  .canvas-col canvas {
+    border: 1px solid #2a2a3a;
+    border-radius: 4px;
+    cursor: pointer;
+    image-rendering: pixelated;
+  }
+  .canvas-col .label {
+    font-size: 0.85em;
+    color: #889;
+    margin-top: 6px;
+  }
+  /* Two-column grid for hardware section */
+  .hw-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin: 20px 0;
+  }
+  .hw-col {
+    background: #0a0a12;
+    border: 1px solid #1a1a2a;
+    border-radius: 8px;
+    padding: 20px;
+  }
+  .hw-col h3 {
+    text-align: center;
+    margin-top: 0;
+    margin-bottom: 16px;
+    font-size: 1.3em;
+  }
+  section ul, section ol {
+    margin-left: 20px;
+    margin-bottom: 14px;
+  }
+  section li { margin-bottom: 4px; }
+  /* Footer */
+  footer {
+    text-align: center;
+    padding: 40px 0 20px;
+    color: #556;
+    font-size: 0.9em;
+  }
+  footer a { color: #5bf; text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+  .epilogue-links {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin: 20px 0;
+  }
+  .epilogue-links a {
+    display: inline-block;
+    color: #5bf;
+    text-decoration: none;
+    border: 1px solid #2a2a3a;
+    border-radius: 6px;
+    padding: 10px 24px;
+    transition: all 0.3s;
+  }
+  .epilogue-links a:hover {
+    border-color: #5bf;
+    background: rgba(85,187,255,0.08);
+    box-shadow: 0 0 16px rgba(85,187,255,0.15);
+  }
+  /* Responsive */
+  @media (max-width: 768px) {
+    .page-wrap { padding: 20px 14px 60px; }
+    h1 { font-size: 2em; }
+    h2 { font-size: 1.4em; }
+    section { padding: 20px 16px; }
+    .hw-grid { grid-template-columns: 1fr; }
+    pre { font-size: 0.78em; padding: 10px 12px; }
+    .controls { flex-direction: column; align-items: flex-start; }
+  }
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: #08080e; }
+  ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a3a5a; }
+  ::selection { background: rgba(85,187,255,0.2); color: #fff; }
+  /* Print */
+  @media print {
+    body { background: #fff; color: #111; }
+    section { border: 1px solid #ccc; break-inside: avoid; }
+    h1 { -webkit-text-fill-color: #333; background: none; }
+    pre { background: #f5f5f5; border-left-color: #33a; }
+  }
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+<!-- ===== HERO ===== -->
+<header style="text-align:center; margin-bottom:40px;">
+  <h1>How ChromA Works</h1>
+  <p class="subtitle">An interactive guide to emulating Game Boy on Game Boy Advance</p>
+  <p class="intro">
+    ChromA runs Game Boy and Game Boy Color games on Game Boy Advance hardware.
+    It maps a Z80-derived CPU onto ARM assembly, converts 2bpp tiles to 4bpp on the fly,
+    and fits the entire CPU core in 32 KB of fast IWRAM.
+  </p>
+  <nav style="margin:24px auto; max-width:640px; font-size:0.88em;">
+    <a href="#sec-hw" style="margin:0 8px;">Hardware</a>
+    <a href="#sec-cpu" style="margin:0 8px;">CPU</a>
+    <a href="#sec-memory" style="margin:0 8px;">Memory</a>
+    <a href="#sec-gfx" style="margin:0 8px;">Graphics</a>
+    <a href="#sec-epilogue" style="margin:0 8px;">Epilogue</a>
+  </nav>
+  <div class="hero-links">
+    <a class="demo-link" href="index.html">Try the Live Demo</a>
+  </div>
+</header>
+
+<!-- ===== SECTION 1: THE HARDWARE (side-by-side) ===== -->
+<section id="sec-hw">
+  <h2>The Hardware</h2>
+
+  <div class="hw-grid">
+    <!-- Game Boy column -->
+    <div class="hw-col">
+      <h3 style="color:#8b8;">Game Boy / Color</h3>
+      <div class="diagram-wrap">
+        <svg viewBox="0 0 280 300" width="280" height="300" xmlns="http://www.w3.org/2000/svg">
+          <rect x="10" y="10" width="260" height="52" rx="6" fill="#1a3a2a" stroke="#3a6a4a"/>
+          <text x="140" y="34" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">LR35902 CPU</text>
+          <text x="140" y="50" text-anchor="middle" fill="#8b8" font-size="10">4.19 MHz (8.38 GBC)</text>
+
+          <rect x="10" y="72" width="260" height="52" rx="6" fill="#1a2a3a" stroke="#3a5a7a"/>
+          <text x="140" y="96" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">PPU</text>
+          <text x="140" y="112" text-anchor="middle" fill="#88b" font-size="10">160x144 / 2bpp tiles</text>
+
+          <rect x="10" y="134" width="125" height="48" rx="6" fill="#2a2a3a" stroke="#5a5a7a"/>
+          <text x="72" y="156" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">VRAM</text>
+          <text x="72" y="170" text-anchor="middle" fill="#99a" font-size="10">8K / 16K (GBC)</text>
+
+          <rect x="145" y="134" width="125" height="48" rx="6" fill="#3a2a1a" stroke="#7a5a3a"/>
+          <text x="207" y="156" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">WRAM</text>
+          <text x="207" y="170" text-anchor="middle" fill="#ba8" font-size="10">8K / 32K (GBC)</text>
+
+          <rect x="10" y="192" width="125" height="48" rx="6" fill="#3a1a3a" stroke="#7a3a7a"/>
+          <text x="72" y="214" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">OAM</text>
+          <text x="72" y="228" text-anchor="middle" fill="#b8b" font-size="10">160B / 40 sprites</text>
+
+          <rect x="145" y="192" width="125" height="48" rx="6" fill="#3a1a1a" stroke="#7a3a3a"/>
+          <text x="207" y="214" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">I/O + HRAM</text>
+          <text x="207" y="228" text-anchor="middle" fill="#b88" font-size="10">FF00-FFFF</text>
+
+          <rect x="10" y="250" width="260" height="42" rx="6" fill="#1a3a1a" stroke="#3a7a3a"/>
+          <text x="140" y="270" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">Cartridge ROM + MBC + SRAM</text>
+          <text x="140" y="284" text-anchor="middle" fill="#8b8" font-size="10">Up to 8 MB ROM, 128 KB SRAM</text>
+        </svg>
+      </div>
+
+      <details>
+        <summary>GB Memory Map</summary>
+        <div class="details-body">
+          <pre>0000-3FFF  ROM Bank 0 (16 KB)
+4000-7FFF  ROM Bank 1-N (switchable)
+8000-9FFF  VRAM (8K, 2 banks on GBC)
+A000-BFFF  External SRAM
+C000-CFFF  WRAM Bank 0 (4 KB)
+D000-DFFF  WRAM Bank 1-7 (GBC switchable)
+FE00-FE9F  OAM (sprite attributes)
+FF00-FF7F  I/O Registers
+FF80-FFFE  HRAM (127 bytes, fast)
+FFFF       Interrupt Enable</pre>
+        </div>
+      </details>
+    </div>
+
+    <!-- GBA column -->
+    <div class="hw-col">
+      <h3 style="color:#88b;">Game Boy Advance</h3>
+      <div class="diagram-wrap">
+        <svg viewBox="0 0 280 300" width="280" height="300" xmlns="http://www.w3.org/2000/svg">
+          <rect x="10" y="10" width="260" height="52" rx="6" fill="#1a2a3a" stroke="#3a5a8a"/>
+          <text x="140" y="34" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">ARM7TDMI CPU</text>
+          <text x="140" y="50" text-anchor="middle" fill="#8af" font-size="10">16.78 MHz (32-bit)</text>
+
+          <rect x="10" y="72" width="260" height="52" rx="6" fill="#2a1a3a" stroke="#5a3a8a"/>
+          <text x="140" y="96" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">PPU (Bitmap + Tile)</text>
+          <text x="140" y="112" text-anchor="middle" fill="#a8f" font-size="10">240x160 / 4bpp or 8bpp</text>
+
+          <rect x="10" y="134" width="125" height="48" rx="6" fill="#2a2a1a" stroke="#5a5a3a"/>
+          <text x="72" y="156" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">IWRAM</text>
+          <text x="72" y="170" text-anchor="middle" fill="#aa8" font-size="10">32 KB (fast, 32-bit)</text>
+
+          <rect x="145" y="134" width="125" height="48" rx="6" fill="#1a3a2a" stroke="#3a7a5a"/>
+          <text x="207" y="156" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">EWRAM</text>
+          <text x="207" y="170" text-anchor="middle" fill="#8b8" font-size="10">256 KB (slow, 16-bit)</text>
+
+          <rect x="10" y="192" width="125" height="48" rx="6" fill="#2a2a3a" stroke="#5a5a7a"/>
+          <text x="72" y="214" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">VRAM</text>
+          <text x="72" y="228" text-anchor="middle" fill="#99a" font-size="10">96 KB</text>
+
+          <rect x="145" y="192" width="125" height="48" rx="6" fill="#3a1a1a" stroke="#7a3a3a"/>
+          <text x="207" y="214" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">OAM + I/O</text>
+          <text x="207" y="228" text-anchor="middle" fill="#b88" font-size="10">1 KB + registers</text>
+
+          <rect x="10" y="250" width="260" height="42" rx="6" fill="#1a1a3a" stroke="#3a3a8a"/>
+          <text x="140" y="270" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">Game Pak ROM</text>
+          <text x="140" y="284" text-anchor="middle" fill="#88f" font-size="10">Up to 32 MB at 0x08000000</text>
+        </svg>
+      </div>
+
+      <details>
+        <summary>GBA Memory Map</summary>
+        <div class="details-body">
+          <pre>00000000  BIOS (16 KB)
+02000000  EWRAM (256 KB, 16-bit bus)
+03000000  IWRAM (32 KB, 32-bit bus)
+04000000  I/O Registers
+05000000  Palette RAM (1 KB)
+06000000  VRAM (96 KB)
+07000000  OAM (1 KB)
+08000000  Game Pak ROM (up to 32 MB)
+0E000000  Game Pak SRAM (64 KB)</pre>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <h3>The Challenge</h3>
+  <p>
+    The GBA's ARM7TDMI is 4x faster but speaks a completely different instruction set.
+    The screen is wider (240x160 vs 160x144). Tiles are 4bpp instead of 2bpp.
+    Every aspect must be translated&mdash;and the entire CPU core must fit in 32 KB of IWRAM,
+    because accessing EWRAM costs wait states that destroy the 3:1 cycle ratio ChromA needs
+    to keep up with the emulated Game Boy.
+  </p>
+</section>
+
+<!-- ===== SECTION 2: CPU TRANSLATION ===== -->
+<section id="sec-cpu">
+  <h2>The Translation: CPU</h2>
+  <p>
+    The Game Boy's LR35902 has 8-bit registers (A, B, C, D, E, H, L, F) and a 16-bit SP/PC.
+    ChromA maps these onto the ARM's plentiful 32-bit registers, keeping the hot path
+    entirely in registers with no memory loads.
+  </p>
+
+  <h3>Register Mapping</h3>
+  <p style="color:#889; font-size:0.9em;">Click a Z80 register to see where it lives on ARM.</p>
+
+  <div class="diagram-wrap">
+    <svg id="reg-map-svg" viewBox="0 0 700 320" width="700" height="320" xmlns="http://www.w3.org/2000/svg">
+      <!-- Z80 side -->
+      <text x="120" y="20" text-anchor="middle" fill="#889" font-size="12" font-weight="600">GB (LR35902)</text>
+      <g class="reg-z80" data-reg="AF">
+        <rect x="30" y="30" width="80" height="34" rx="5" fill="#1a3a2a" stroke="#3a6a4a" class="reg-box"/>
+        <text x="70" y="52" text-anchor="middle" fill="#8b8" font-size="13" font-weight="700">A + F</text>
+      </g>
+      <g class="reg-z80" data-reg="BC">
+        <rect x="30" y="72" width="80" height="34" rx="5" fill="#1a3a2a" stroke="#3a6a4a" class="reg-box"/>
+        <text x="70" y="94" text-anchor="middle" fill="#8b8" font-size="13" font-weight="700">B + C</text>
+      </g>
+      <g class="reg-z80" data-reg="DE">
+        <rect x="30" y="114" width="80" height="34" rx="5" fill="#1a3a2a" stroke="#3a6a4a" class="reg-box"/>
+        <text x="70" y="136" text-anchor="middle" fill="#8b8" font-size="13" font-weight="700">D + E</text>
+      </g>
+      <g class="reg-z80" data-reg="HL">
+        <rect x="30" y="156" width="80" height="34" rx="5" fill="#1a3a2a" stroke="#3a6a4a" class="reg-box"/>
+        <text x="70" y="178" text-anchor="middle" fill="#8b8" font-size="13" font-weight="700">H + L</text>
+      </g>
+      <g class="reg-z80" data-reg="SP">
+        <rect x="30" y="198" width="80" height="34" rx="5" fill="#1a3a2a" stroke="#3a6a4a" class="reg-box"/>
+        <text x="70" y="220" text-anchor="middle" fill="#8b8" font-size="13" font-weight="700">SP</text>
+      </g>
+      <g class="reg-z80" data-reg="PC">
+        <rect x="30" y="240" width="80" height="34" rx="5" fill="#1a3a2a" stroke="#3a6a4a" class="reg-box"/>
+        <text x="70" y="262" text-anchor="middle" fill="#8b8" font-size="13" font-weight="700">PC</text>
+      </g>
+      <g class="reg-z80" data-reg="CYC">
+        <rect x="30" y="282" width="80" height="34" rx="5" fill="#1a3a2a" stroke="#3a6a4a" class="reg-box"/>
+        <text x="70" y="304" text-anchor="middle" fill="#8b8" font-size="13" font-weight="700">Cycles</text>
+      </g>
+
+      <!-- ARM side — ordered to match Z80 rows for straight horizontal connections -->
+      <!-- Row order: AF→r4/r3, BC→r5, DE→r6, HL→r7, SP→r11, PC→r9, CYC→r8 -->
+      <text x="580" y="20" text-anchor="middle" fill="#889" font-size="12" font-weight="600">GBA (ARM7TDMI)</text>
+      <g class="reg-arm" data-reg="r4">
+        <rect x="530" y="30" width="100" height="34" rx="5" fill="#1a2a3a" stroke="#3a5a8a" class="reg-box"/>
+        <text x="580" y="52" text-anchor="middle" fill="#8af" font-size="13" font-weight="700">r4 / r3</text>
+      </g>
+      <g class="reg-arm" data-reg="r5">
+        <rect x="530" y="72" width="100" height="34" rx="5" fill="#1a2a3a" stroke="#3a5a8a" class="reg-box"/>
+        <text x="580" y="94" text-anchor="middle" fill="#8af" font-size="13" font-weight="700">r5</text>
+      </g>
+      <g class="reg-arm" data-reg="r6">
+        <rect x="530" y="114" width="100" height="34" rx="5" fill="#1a2a3a" stroke="#3a5a8a" class="reg-box"/>
+        <text x="580" y="136" text-anchor="middle" fill="#8af" font-size="13" font-weight="700">r6</text>
+      </g>
+      <g class="reg-arm" data-reg="r7">
+        <rect x="530" y="156" width="100" height="34" rx="5" fill="#1a2a3a" stroke="#3a5a8a" class="reg-box"/>
+        <text x="580" y="178" text-anchor="middle" fill="#8af" font-size="13" font-weight="700">r7</text>
+      </g>
+      <g class="reg-arm" data-reg="r11">
+        <rect x="530" y="198" width="100" height="34" rx="5" fill="#1a2a3a" stroke="#3a5a8a" class="reg-box"/>
+        <text x="580" y="220" text-anchor="middle" fill="#8af" font-size="13" font-weight="700">r11</text>
+      </g>
+      <g class="reg-arm" data-reg="r9">
+        <rect x="530" y="240" width="100" height="34" rx="5" fill="#1a2a3a" stroke="#3a5a8a" class="reg-box"/>
+        <text x="580" y="262" text-anchor="middle" fill="#8af" font-size="13" font-weight="700">r9</text>
+      </g>
+      <g class="reg-arm" data-reg="r8">
+        <rect x="530" y="282" width="100" height="34" rx="5" fill="#1a2a3a" stroke="#3a5a8a" class="reg-box"/>
+        <text x="580" y="304" text-anchor="middle" fill="#8af" font-size="13" font-weight="700">r8</text>
+      </g>
+
+      <!-- Connector lines (hidden by default, straight horizontal since rows are aligned) -->
+      <g id="reg-connectors">
+        <path data-pair="AF" d="M110,47 L530,47" fill="none" stroke="#5bf" stroke-width="2" opacity="0"/>
+        <path data-pair="BC" d="M110,89 L530,89" fill="none" stroke="#5bf" stroke-width="2" opacity="0"/>
+        <path data-pair="DE" d="M110,131 L530,131" fill="none" stroke="#5bf" stroke-width="2" opacity="0"/>
+        <path data-pair="HL" d="M110,173 L530,173" fill="none" stroke="#5bf" stroke-width="2" opacity="0"/>
+        <path data-pair="SP" d="M110,215 L530,215" fill="none" stroke="#5bf" stroke-width="2" opacity="0"/>
+        <path data-pair="PC" d="M110,257 L530,257" fill="none" stroke="#5bf" stroke-width="2" opacity="0"/>
+        <path data-pair="CYC" d="M110,299 L530,299" fill="none" stroke="#5bf" stroke-width="2" opacity="0"/>
+      </g>
+    </svg>
+  </div>
+  <div id="reg-explanation" class="reg-explanation" style="color:#667;">
+    Click a register to see the mapping.
+  </div>
+
+  <h3>Fetch-Execute Loop</h3>
+  <p>
+    Each GB instruction is a handler in IWRAM. The main loop reads one opcode byte from
+    the ROM pointer (mapped GB PC), uses it as an index into a 256-entry jump table,
+    and branches. Each handler does its work, updates the cycle counter, and jumps back.
+  </p>
+  <pre><span class="asm-label">cpu_loop:</span>
+    <span class="asm-mnem">ldrb</span>    <span class="asm-reg">r0</span>, [<span class="asm-reg">r6</span>], #1       <span class="asm-comment">@ fetch opcode, advance PC</span>
+    <span class="asm-mnem">ldr</span>     <span class="asm-reg">r1</span>, [<span class="asm-reg">r12</span>, <span class="asm-reg">r0</span>, lsl #2]  <span class="asm-comment">@ jump table lookup</span>
+    <span class="asm-mnem">sub</span>     <span class="asm-reg">r9</span>, <span class="asm-reg">r9</span>, #4        <span class="asm-comment">@ subtract base cycles</span>
+    <span class="asm-mnem">bx</span>      <span class="asm-reg">r1</span>                <span class="asm-comment">@ execute handler</span></pre>
+  <p>
+    Every handler ends by jumping back to <code>cpu_loop</code>. The cycle counter in <code>r9</code>
+    counts down; when it hits zero, ChromA yields to handle PPU and timer updates.
+  </p>
+
+  <details>
+    <summary>Deep Dive: Flag Mapping</summary>
+    <div class="details-body">
+      <p>
+        The GB's flag register (F) has 4 flags: Z, N, H, C in bits 7-4.
+        The ARM CPSR also has Z and C flags, so ChromA uses native ARM flag operations
+        for many instructions&mdash;an <code>adds</code> sets Z and C natively.
+        The half-carry (H) and subtract (N) flags have no ARM equivalent and must be
+        computed manually and stored in the upper bits of the AF register pair.
+      </p>
+    </div>
+  </details>
+</section>
+
+<!-- ===== SECTION 3: MEMORY TRANSLATION ===== -->
+<section id="sec-memory">
+  <h2>The Translation: Memory</h2>
+  <p>
+    The GB's 64 KB address space must be mapped onto the GBA's flat 32-bit memory.
+    ROM stays in the Game Pak. Everything else goes into EWRAM buffers, except
+    the hottest state variables which live in IWRAM alongside the CPU core.
+  </p>
+  <p style="color:#889; font-size:0.9em;">Click any region on either side to see the mapping.</p>
+
+  <div class="diagram-wrap">
+    <svg id="mem-map-svg" viewBox="0 0 740 340" width="740" height="340" xmlns="http://www.w3.org/2000/svg">
+      <!-- GB side labels -->
+      <text x="105" y="18" text-anchor="middle" fill="#889" font-size="12" font-weight="600">Game Boy</text>
+      <!-- GBA side labels -->
+      <text x="635" y="18" text-anchor="middle" fill="#889" font-size="12" font-weight="600">Game Boy Advance</text>
+
+      <!-- GB regions (ordered to minimize crossings) -->
+      <g class="mem-region" data-pair="rom">
+        <rect x="10" y="30" width="190" height="38" rx="5" fill="#1a3a1a" stroke="#3a7a3a" class="mem-box"/>
+        <text x="105" y="48" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">ROM</text>
+        <text x="105" y="62" text-anchor="middle" fill="#8b8" font-size="9">0x0000-0x7FFF</text>
+      </g>
+      <g class="mem-region" data-pair="vram">
+        <rect x="10" y="76" width="190" height="38" rx="5" fill="#2a2a3a" stroke="#5a5a7a" class="mem-box"/>
+        <text x="105" y="94" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">VRAM</text>
+        <text x="105" y="108" text-anchor="middle" fill="#99a" font-size="9">0x8000-0x9FFF</text>
+      </g>
+      <g class="mem-region" data-pair="sram">
+        <rect x="10" y="122" width="190" height="38" rx="5" fill="#3a2a1a" stroke="#7a5a3a" class="mem-box"/>
+        <text x="105" y="140" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">SRAM</text>
+        <text x="105" y="154" text-anchor="middle" fill="#ba8" font-size="9">0xA000-0xBFFF</text>
+      </g>
+      <g class="mem-region" data-pair="wram">
+        <rect x="10" y="168" width="190" height="38" rx="5" fill="#3a2a1a" stroke="#7a5a3a" class="mem-box"/>
+        <text x="105" y="186" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">WRAM</text>
+        <text x="105" y="200" text-anchor="middle" fill="#ba8" font-size="9">0xC000-0xDFFF</text>
+      </g>
+      <g class="mem-region" data-pair="oam">
+        <rect x="10" y="214" width="190" height="38" rx="5" fill="#3a1a3a" stroke="#7a3a7a" class="mem-box"/>
+        <text x="105" y="232" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">OAM</text>
+        <text x="105" y="246" text-anchor="middle" fill="#b8b" font-size="9">0xFE00-0xFE9F</text>
+      </g>
+      <g class="mem-region" data-pair="io">
+        <rect x="10" y="260" width="190" height="38" rx="5" fill="#3a1a1a" stroke="#7a3a3a" class="mem-box"/>
+        <text x="105" y="278" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">I/O Registers</text>
+        <text x="105" y="292" text-anchor="middle" fill="#b88" font-size="9">0xFF00-0xFF7F</text>
+      </g>
+      <g class="mem-region" data-pair="hram">
+        <rect x="10" y="306" width="190" height="32" rx="5" fill="#2a1a3a" stroke="#5a3a7a" class="mem-box"/>
+        <text x="105" y="326" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">HRAM</text>
+      </g>
+
+      <!-- GBA regions (matched order) -->
+      <g class="mem-region" data-pair="rom">
+        <rect x="540" y="30" width="190" height="38" rx="5" fill="#1a1a3a" stroke="#3a3a8a" class="mem-box"/>
+        <text x="635" y="48" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">Game Pak ROM</text>
+        <text x="635" y="62" text-anchor="middle" fill="#88f" font-size="9">0x08000000+</text>
+      </g>
+      <g class="mem-region" data-pair="vram">
+        <rect x="540" y="76" width="190" height="38" rx="5" fill="#1a3a2a" stroke="#3a7a5a" class="mem-box"/>
+        <text x="635" y="94" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">EWRAM (VRAM buf)</text>
+        <text x="635" y="108" text-anchor="middle" fill="#8b8" font-size="9">XGB_VRAM in EWRAM</text>
+      </g>
+      <g class="mem-region" data-pair="sram">
+        <rect x="540" y="122" width="190" height="38" rx="5" fill="#1a3a2a" stroke="#3a7a5a" class="mem-box"/>
+        <text x="635" y="140" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">EWRAM (SRAM copy)</text>
+        <text x="635" y="154" text-anchor="middle" fill="#8b8" font-size="9">Buffered in EWRAM</text>
+      </g>
+      <g class="mem-region" data-pair="wram">
+        <rect x="540" y="168" width="190" height="38" rx="5" fill="#1a3a2a" stroke="#3a7a5a" class="mem-box"/>
+        <text x="635" y="186" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">EWRAM (WRAM buf)</text>
+        <text x="635" y="200" text-anchor="middle" fill="#8b8" font-size="9">XGB_WRAM in EWRAM</text>
+      </g>
+      <g class="mem-region" data-pair="oam">
+        <rect x="540" y="214" width="190" height="38" rx="5" fill="#1a3a2a" stroke="#3a7a5a" class="mem-box"/>
+        <text x="635" y="232" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">EWRAM (OAM buf)</text>
+        <text x="635" y="246" text-anchor="middle" fill="#8b8" font-size="9">OAM shadow buffer</text>
+      </g>
+      <g class="mem-region" data-pair="io">
+        <rect x="540" y="260" width="190" height="38" rx="5" fill="#2a2a1a" stroke="#5a5a3a" class="mem-box"/>
+        <text x="635" y="278" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">IWRAM (handlers)</text>
+        <text x="635" y="292" text-anchor="middle" fill="#aa8" font-size="9">Trap + emulate in code</text>
+      </g>
+      <g class="mem-region" data-pair="hram">
+        <rect x="540" y="306" width="190" height="32" rx="5" fill="#2a2a1a" stroke="#5a5a3a" class="mem-box"/>
+        <text x="635" y="326" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">IWRAM (state vars)</text>
+      </g>
+
+      <!-- Connecting beziers -->
+      <g id="mem-connectors">
+        <path data-pair="rom"  d="M200,49 C370,49 370,49 540,49" fill="none" stroke="#3a5a3a" stroke-width="1.5"/>
+        <path data-pair="vram" d="M200,95 C370,95 370,95 540,95" fill="none" stroke="#3a5a3a" stroke-width="1.5"/>
+        <path data-pair="sram" d="M200,141 C370,141 370,141 540,141" fill="none" stroke="#3a5a3a" stroke-width="1.5"/>
+        <path data-pair="wram" d="M200,187 C370,187 370,187 540,187" fill="none" stroke="#3a5a3a" stroke-width="1.5"/>
+        <path data-pair="oam"  d="M200,233 C370,233 370,233 540,233" fill="none" stroke="#3a5a3a" stroke-width="1.5"/>
+        <path data-pair="io"   d="M200,279 C370,279 370,279 540,279" fill="none" stroke="#3a5a3a" stroke-width="1.5"/>
+        <path data-pair="hram" d="M200,322 C370,322 370,322 540,322" fill="none" stroke="#3a5a3a" stroke-width="1.5"/>
+      </g>
+    </svg>
+  </div>
+  <div id="mem-explanation" class="reg-explanation" style="color:#667;">
+    Click a memory region to see how it maps.
+  </div>
+
+  <details>
+    <summary>Deep Dive: Memory Read/Write Handlers</summary>
+    <div class="details-body">
+      <p>
+        When the emulated CPU reads from or writes to an address, ChromA must decode which region
+        it falls in and route it to the correct GBA memory. ROM reads use the GB PC pointer directly
+        into the Game Pak. VRAM, WRAM, and SRAM reads use base pointers into EWRAM buffers.
+        I/O writes are the most complex: each register (LCDC, STAT, SCX, SCY, etc.) has its own
+        handler that may trigger side effects like DMA transfers or PPU mode changes.
+      </p>
+      <pre><span class="asm-comment">@ Example: reading from HL (common pattern)</span>
+<span class="asm-comment">@ r5 = HL, r7 = memory base table</span>
+<span class="asm-mnem">mov</span>     <span class="asm-reg">r0</span>, <span class="asm-reg">r5</span>, <span class="asm-mnem">lsr</span> #12    <span class="asm-comment">@ page = addr >> 12</span>
+<span class="asm-mnem">ldr</span>     <span class="asm-reg">r1</span>, [<span class="asm-reg">r7</span>, <span class="asm-reg">r0</span>, lsl #2]  <span class="asm-comment">@ base = table[page]</span>
+<span class="asm-mnem">ldrb</span>    <span class="asm-reg">r0</span>, [<span class="asm-reg">r1</span>, <span class="asm-reg">r5</span>]         <span class="asm-comment">@ value = base[addr]</span></pre>
+    </div>
+  </details>
+</section>
+
+<!-- ===== SECTION 4: GRAPHICS ===== -->
+<section id="sec-gfx">
+  <h2>The Translation: Graphics</h2>
+
+  <!-- 5a: Tile Format Conversion -->
+  <h3>Tile Format Conversion</h3>
+  <p>
+    GB tiles are 2bpp with <span class="accent">bitplane interleaving</span>: each row of 8 pixels
+    is encoded as 2 bytes. Byte 0 holds the <span style="color:#6cf;">low bit</span> of each pixel,
+    byte 1 holds the <span style="color:#f86;">high bit</span>. The GBA needs 4bpp linear:
+    2 pixels per byte, 4 bytes per row.
+  </p>
+  <p>
+    The trick: <code>CHR_DECODE</code> is a 256-entry lookup table. Each byte (8 bits representing
+    one bitplane for a row) is expanded to 8 nibbles (32 bits). One lookup per bitplane byte, OR them
+    together with a shift, and you have 4bpp output. No per-pixel bit twiddling needed.
+  </p>
+
+  <h3 style="margin-top:20px;">Worked Example</h3>
+  <p>
+    Consider a row where pixels are: <code>3, 1, 2, 0, 1, 3, 0, 2</code>.
+    The bitplane encoding works like this:
+  </p>
+  <pre><span class="asm-comment">Pixel colors:    3  1  2  0  1  3  0  2</span>
+<span class="asm-comment">In binary:      11 01 10 00 01 11 00 10</span>
+
+<span style="color:#6cf;">Bitplane 0 (low bits):  1 1 0 0 1 1 0 0  = 0xCC</span>
+<span style="color:#f86;">Bitplane 1 (high bits): 1 0 1 0 0 1 0 1  = 0xA5</span>
+
+<span class="asm-comment">GB stores this as two bytes per row: CC A5</span>
+
+<span class="asm-comment">CHR_DECODE[0xCC] expands 8 bits to 8 nibbles:</span>
+<span style="color:#6cf;">0x01010010 01010010  (each bit becomes a nibble: 1,1,0,0,1,1,0,0)</span>
+
+<span class="asm-comment">CHR_DECODE[0xA5] expands similarly:</span>
+<span style="color:#f86;">0x01000001 00010100  (1,0,1,0,0,1,0,1)</span>
+
+<span class="asm-comment">Final 4bpp = decode[0xCC] | (decode[0xA5] << 1):</span>
+<span style="color:#5bf;">Each nibble: 3,1,2,0,1,3,0,2  -- the original colors!</span></pre>
+
+  <h3 style="margin-top:24px;">Paint a tile and see the encoding</h3>
+  <p style="color:#889; font-size:0.9em;">Click cells to cycle colors (0-3). Watch how the bytes change.</p>
+
+  <div style="display:flex; gap:32px; flex-wrap:wrap; align-items:flex-start; margin:16px 0;">
+    <div class="canvas-col">
+      <canvas id="tile-canvas" width="160" height="160"></canvas>
+      <div class="label">8x8 Tile Editor</div>
+    </div>
+    <div style="flex:1; min-width:280px;">
+      <div style="margin-bottom:12px;">
+        <strong style="color:#dde;">GB Format (2bpp interleaved):</strong>
+        <div id="gb-bytes" class="hex-dump" style="min-height:60px;"></div>
+        <div style="font-size:0.82em; margin-top:4px;">
+          <span style="color:#6cf;">Blue</span> = bitplane 0 (low bits),
+          <span style="color:#f86;">Orange</span> = bitplane 1 (high bits)
+        </div>
+      </div>
+      <div style="margin-bottom:12px;">
+        <strong style="color:#dde;">CHR_DECODE expansion:</strong>
+        <div id="chr-decode-output" class="hex-dump" style="min-height:60px;"></div>
+        <div style="font-size:0.82em; margin-top:4px;">
+          Each byte becomes 4 bytes (8 bits become 8 nibbles)
+        </div>
+      </div>
+      <div>
+        <strong style="color:#dde;">GBA Format (4bpp linear):</strong>
+        <div id="gba-bytes" class="hex-dump" style="min-height:60px;"></div>
+        <div style="font-size:0.82em; margin-top:4px;">
+          <code>decode[bp0] | (decode[bp1] &lt;&lt; 1)</code> per row
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="background:#111622; border:1px solid #2a2a3a; border-radius:6px; padding:14px 18px; margin:20px 0;">
+    <strong style="color:#5bf;">Key insight:</strong> Without CHR_DECODE, converting one 8x8 tile would require
+    extracting 128 individual bits (64 pixels x 2 bitplanes), shifting and masking each one.
+    The lookup table converts 8 pixels per table read&mdash;just 16 reads per tile instead of 128 bit operations.
+    At ~6000 tiles per frame, this is the difference between making the deadline and not.
+  </div>
+
+  <!-- 5b: Scanline Rendering -->
+  <h3 style="margin-top:32px;">Scanline Rendering</h3>
+  <p>
+    The Game Boy doesn't render its screen all at once. It draws one horizontal line at a time,
+    from top to bottom, exactly like a CRT television. Each of the 154 lines per frame goes through
+    a fixed sequence of phases totaling 456 clock cycles. ChromA must emulate this precise rhythm
+    because games depend on it — they read PPU status registers to know which phase is active and
+    time their VRAM writes around it.
+  </p>
+  <p style="color:#889; font-size:0.9em;">
+    Below, the Y axis is scanlines (0–153) and the X axis is time within each scanline (456 cycles).
+    The 160 pixels of actual screen output are produced only during the Pixel Transfer phase.
+  </p>
+
+  <div class="controls" style="margin-top:16px;">
+    <button id="beam-play">Play</button>
+    <button id="beam-step">Step Line</button>
+    <button id="beam-reset">Reset</button>
+    <label>Speed: <input type="range" id="beam-speed" min="1" max="20" value="5" style="width:100px;"></label>
+    <span id="beam-info" style="color:#889; font-size:0.85em;">Line: 0 / Mode: OAM Scan</span>
+  </div>
+
+  <div style="display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start; margin:16px 0;">
+    <div style="flex-shrink:0;">
+      <canvas id="beam-canvas" width="530" height="482"></canvas>
+    </div>
+    <div id="beam-events" style="flex:1; min-width:240px; max-height:482px; overflow-y:auto; padding-right:8px;">
+      <div style="font-size:0.85em; color:#889; margin-bottom:12px;">
+        <strong style="color:#dde;">Phases of each scanline:</strong>
+      </div>
+
+      <div style="font-size:0.82em; margin-bottom:10px;">
+        <span style="display:inline-block; width:12px; height:12px; background:#0aa; border-radius:2px; vertical-align:middle;"></span>
+        <strong style="color:#0cc;">Mode 2: OAM Scan</strong> (80 cycles)
+        <div style="color:#778; margin:2px 0 0 20px; font-size:0.95em;">
+          The PPU autonomously scans Object Attribute Memory (OAM) to find which sprites
+          overlap this scanline (up to 10). The CPU is free to run game code — but OAM is locked,
+          so any writes to it are silently dropped.
+        </div>
+      </div>
+
+      <div style="font-size:0.82em; margin-bottom:10px;">
+        <span style="display:inline-block; width:12px; height:12px; background:#c8f; border-radius:2px; vertical-align:middle;"></span>
+        <strong style="color:#d9f;">Mode 3: Pixel Transfer</strong> (172 cycles)
+        <div style="color:#778; margin:2px 0 0 20px; font-size:0.95em;">
+          The PPU renders 160 pixels for this scanline — reading tile data from VRAM,
+          combining background, window, and sprite layers, and pushing them to the LCD.
+          This is fully automatic; the CPU keeps running game logic but both OAM and VRAM
+          are locked. Games that need mid-scanline effects must wait for HBlank.
+        </div>
+      </div>
+
+      <div style="font-size:0.82em; margin-bottom:10px;">
+        <span style="display:inline-block; width:12px; height:12px; background:#4b4; border-radius:2px; vertical-align:middle;"></span>
+        <strong style="color:#5c5;">Mode 0: HBlank</strong> (204 cycles)
+        <div style="color:#778; margin:2px 0 0 20px; font-size:0.95em;">
+          The line is done. This is free time before the next line starts — games use it to update
+          scroll registers or switch VRAM banks mid-frame. ChromA fires four GBA DMA channels here:
+          DMA0–2 transfer per-scanline scroll, display control, and window state. DMA3 handles palettes.
+        </div>
+        <div style="color:#778; margin:8px 0 0 20px; font-size:0.95em;">
+          <strong style="color:#aab;">How palette delivery works:</strong>
+          At frame start, ChromA snapshots the full palette (128 bytes) into <code>pal_before</code>.
+          At VBlank, <code>transfer_palette_</code> copies this snapshot to GBA PALRAM — providing a
+          stable baseline unaffected by mid-frame game writes. DMA3 is always armed during display:
+        </div>
+        <div style="color:#778; margin:8px 0 0 20px; font-size:0.95em;">
+          <strong style="color:#dde;">Most games (≤4 writes per GBA frame):</strong>
+          DMA3 does a 1-word PALRAM self-refresh — reads and writes the same 4 bytes, a harmless
+          no-op (~4 cycles/HBlank). If the game changes palettes a few times mid-frame (e.g., a
+          status bar), VCount interrupts patch PALRAM at the exact scanline boundaries.
+        </div>
+        <div style="color:#778; margin:8px 0 0 20px; font-size:0.95em;">
+          <strong style="color:#dde;">Per-scanline games (&gt;4 writes, e.g., Hercules GBC):</strong>
+          DMA3 switches to 64-word mode, replaying a 36KB per-scanline buffer filled by the
+          FF69 write handler. Hercules hits ~70 counts per GBA frame (half of its 143
+          per-scanline writes, since one GB frame spans two GBA frames).
+        </div>
+        <div style="color:#778; margin:8px 0 0 20px; font-size:0.95em;">
+          <strong style="color:#aab;">Why a counter, not a boolean flag?</strong>
+          One GB frame takes ~2 GBA frames to process. A boolean flag cleared at either
+          GB line 0 or GBA VBlank creates a race condition — the clear can happen mid-GBA-frame,
+          causing alternating 1-word/64-word modes (visible flicker). A counter cleared at GBA
+          VBlank accumulates across the frame, so per-scanline games always exceed the threshold.
+        </div>
+        <div style="color:#778; margin:8px 0 0 20px; font-size:0.95em;">
+          <strong style="color:#aab;">Why not always use 64-word mode?</strong>
+          GBA DMA has no source-reload. With fixed source + 64 words, DMA reads the same 4 bytes
+          and smears them across all palette slots — corrupting colors. The per-scanline buffer
+          uses incrementing source (unique data per scanline), but pre-filling it for games
+          that don't need it costs ~27K VBlank cycles — too expensive.
+        </div>
+      </div>
+
+      <div style="font-size:0.82em; margin-bottom:10px;">
+        <span style="display:inline-block; width:12px; height:12px; background:#c44; border-radius:2px; vertical-align:middle;"></span>
+        <strong style="color:#e55;">Mode 1: VBlank</strong> (lines 144–153)
+        <div style="color:#778; margin:2px 0 0 20px; font-size:0.95em;">
+          All 144 visible lines are drawn. The PPU is idle for 10 GB lines. ChromA uses the corresponding
+          GBA VBlank (68 GBA scanlines) to do bulk work: render all sprites, convert dirty 2bpp tiles
+          to 4bpp, transfer the final palette, and set up DMA for the next frame.
+        </div>
+        <div style="color:#778; margin:8px 0 0 20px; font-size:0.95em;">
+          <strong style="color:#aab;">Why not spread this work across active scanlines?</strong>
+          Two reasons. First, writing to GBA VRAM or OAM during active display would cause visible
+          tearing — VBlank is the only safe window. Second, ChromA's per-scanline hook runs between
+          every GB scanline to keep the two CPUs in sync, and it has a budget of only ~70 ARM cycles
+          before timing-sensitive games break (e.g., Hercules GBC busy-waits on the STAT register in
+          a tight loop). Any extra work per scanline blows that budget.
+        </div>
+        <div style="color:#778; margin:8px 0 0 20px; font-size:0.95em;">
+          In practice, even the heaviest game (Shantae) uses only 35% of the VBlank budget. The
+          worst offender is sprite processing (~15 GBA scanlines), but there's still comfortable
+          headroom. The constraint isn't total compute — it's <em>where</em> that compute can run.
+        </div>
+      </div>
+
+      <div style="font-size:0.85em; color:#889; margin-top:16px; margin-bottom:8px;">
+        <strong style="color:#dde;">ChromA Events:</strong>
+      </div>
+      <div id="beam-event-log" style="font-size:0.82em; max-height:200px; overflow-y:auto;"></div>
+    </div>
+  </div>
+
+  <details>
+    <summary>Deep Dive: timeout.s State Machine</summary>
+    <div class="details-body">
+      <p>
+        ChromA's <code>timeout.s</code> manages the per-scanline state machine. After the CPU
+        executes enough cycles for one scanline (456 GB cycles = ~152 ARM cycles at 3:1),
+        the timeout handler fires. It checks the current LY (scanline counter) and decides
+        what to do:
+      </p>
+      <ul>
+        <li><strong>Line 0:</strong> Frame start. Refresh input, snapshot the full palette into <code>pal_before</code> (128 bytes). This frozen snapshot feeds <code>transfer_palette_</code> at VBlank — insulating PALRAM from mid-frame game writes.</li>
+        <li><strong>Lines 0-143:</strong> Run pixel pipeline. DMA0-2 transfer scroll/display/window state per HBlank. DMA3 refreshes palettes (1-word self-refresh for normal games, 64-word per-scanline buffer for gradient games). Palette splits recorded by <code>ff69_w_tail</code> on every 32nd write when the scanline changes.</li>
+        <li><strong>Line 144:</strong> Enter VBlank. Copy <code>pal_before</code> to PALRAM, render sprites, convert dirty tiles. Read and clear the <code>pal_scanline_active</code> counter, arm DMA3 (1-word if ≤4, 64-word if &gt;4), set up VCount splits for the next frame.</li>
+        <li><strong>Lines 145-153:</strong> Continue VBlank work. Remaining tile rows converted, SRAM flushed if dirty.</li>
+      </ul>
+      <p>
+        The 3:1 cycle ratio is critical here: every GB cycle costs ~3 ARM cycles. With IWRAM full
+        (the entire CPU core lives there), there is zero margin for EWRAM wait states in the hot loop.
+      </p>
+    </div>
+  </details>
+</section>
+
+<!-- ===== SECTION 5: EPILOGUE ===== -->
+<section id="sec-epilogue">
+  <h2>Epilogue</h2>
+  <p>
+    ChromA translates an entire platform: CPU instructions one-by-one via a jump table,
+    memory through page-table indirection, tiles through lookup-table expansion, and timing
+    through a scanline-locked state machine. Every byte of IWRAM is spoken for.
+  </p>
+  <p>
+    The source is open. The demo runs in your browser.
+  </p>
+  <div class="epilogue-links">
+    <a href="index.html">Live Demo</a>
+    <a href="https://github.com/chromaemu/chroma">Source Code</a>
+  </div>
+</section>
+
+</div><!-- .page-wrap -->
+
+<footer>
+  <p>ChromA &mdash; Game Boy on Game Boy Advance</p>
+</footer>
+
+<script type="module">
+// ============================================================
+// Register Mapping Interactive
+// ============================================================
+const regMap = {
+  AF:  { arm: 'r4',  text: '<b>A</b> lives in the upper 8 bits of <b>r4</b>. <b>F</b> (flags) is in <b>r3</b> — Z is tested via ARM\'s own zero check, C via ARM carry, but H and N are stored as explicit bits. The r4/r3 label reflects both.' },
+  BC:  { arm: 'r5',  text: '<b>B</b> and <b>C</b> are packed into <b>r5</b> as a 16-bit pair in the upper half. Storing in upper bits means 8-bit arithmetic naturally wraps without masking.' },
+  DE:  { arm: 'r6',  text: '<b>D</b> and <b>E</b> are packed into <b>r6</b>. Often used as a destination pointer in block copy instructions.' },
+  HL:  { arm: 'r7',  text: '<b>H</b> and <b>L</b> live in <b>r7</b>. HL is the primary memory pointer — most GB memory ops go through it.' },
+  SP:  { arm: 'r11', text: 'The GB stack pointer maps to <b>r11</b>. Upper 16 bits hold the logical SP value. Points into the WRAM buffer in EWRAM.' },
+  PC:  { arm: 'r9',  text: 'The GB program counter maps to <b>r9</b> as a <em>direct physical pointer</em> into mapped ROM memory. Advancing PC is just incrementing r9 — no address translation needed per instruction.' },
+  CYC: { arm: 'r8',  text: '<b>r8</b> holds the cycle countdown. Each instruction subtracts its cost. When it hits zero, ChromA yields to the per-scanline timeout handler.' }
+};
+
+const regSvg = document.getElementById('reg-map-svg');
+const regExpl = document.getElementById('reg-explanation');
+
+function clearRegHighlights() {
+  regSvg.querySelectorAll('.reg-box').forEach(r => {
+    r.setAttribute('stroke-width', '1');
+    r.removeAttribute('filter');
+  });
+  regSvg.querySelectorAll('#reg-connectors path').forEach(p => p.setAttribute('opacity', '0'));
+}
+
+regSvg.querySelectorAll('.reg-z80').forEach(g => {
+  g.style.cursor = 'pointer';
+  g.addEventListener('click', () => {
+    const reg = g.dataset.reg;
+    const info = regMap[reg];
+    if (!info) return;
+    clearRegHighlights();
+
+    // Highlight Z80 box
+    g.querySelector('.reg-box').setAttribute('stroke', '#5bf');
+    g.querySelector('.reg-box').setAttribute('stroke-width', '2.5');
+
+    // Highlight ARM box
+    const armG = regSvg.querySelector(`.reg-arm[data-reg="${info.arm}"]`);
+    if (armG) {
+      armG.querySelector('.reg-box').setAttribute('stroke', '#5bf');
+      armG.querySelector('.reg-box').setAttribute('stroke-width', '2.5');
+    }
+
+    // Show connector
+    const connector = regSvg.querySelector(`#reg-connectors path[data-pair="${reg}"]`);
+    if (connector) {
+      connector.setAttribute('opacity', '1');
+      connector.setAttribute('stroke-dasharray', '6 3');
+      // Animate
+      const len = connector.getTotalLength();
+      connector.style.strokeDashoffset = len;
+      connector.style.transition = 'stroke-dash-offset 0.4s ease';
+      requestAnimationFrame(() => { connector.style.strokeDashoffset = '0'; });
+    }
+
+    regExpl.innerHTML = `<span class="accent">${reg}</span> &rarr; <span class="accent">${info.arm}</span>: ${info.text}`;
+    regExpl.style.color = '#aab';
+  });
+});
+
+// ============================================================
+// Memory Map Interactive
+// ============================================================
+const memDescs = {
+  rom:  'GB ROM (0x0000-0x7FFF) maps directly to the GBA Game Pak at 0x08000000. The emulated PC is a real pointer into this memory — no copying needed. Bank switching updates the pointer to the correct 16 KB window.',
+  vram: 'GB VRAM (0x8000-0x9FFF) lives in an EWRAM buffer (XGB_VRAM). Writes to VRAM are intercepted and mark tiles as dirty. During VBlank, dirty tiles are converted from 2bpp to 4bpp and DMA\'d to GBA VRAM.',
+  sram: 'GB cartridge SRAM (0xA000-0xBFFF) is buffered in EWRAM. Writes are tracked; on save, the buffer is flushed to the real Game Pak SRAM (which has slow 8-bit access).',
+  wram: 'GB Work RAM (0xC000-0xDFFF) maps to an EWRAM buffer (XGB_WRAM). GBC bank switching (banks 1-7) adjusts the pointer within this buffer.',
+  oam:  'GB OAM (sprite attribute table, 160 bytes) lives in an EWRAM shadow buffer. During VBlank, ChromA converts GB sprite entries into GBA OAM format and copies them via DMA.',
+  io:   'GB I/O registers (0xFF00-0xFF7F) have no direct GBA equivalent. Each register is trap-and-emulate: writes call handler functions in IWRAM that update internal state and trigger side effects (PPU mode changes, DMA, timer reloads).',
+  hram: 'GB HRAM (0xFF80-0xFFFE, 127 bytes) holds the hottest state variables. ChromA stores these in IWRAM alongside the CPU core for single-cycle access — critical for the 3:1 cycle budget.'
+};
+
+const memSvg = document.getElementById('mem-map-svg');
+const memExpl = document.getElementById('mem-explanation');
+
+function clearMemHighlights() {
+  memSvg.querySelectorAll('.mem-box').forEach(r => {
+    r.removeAttribute('filter');
+    r.style.stroke = '';
+    r.style.strokeWidth = '';
+  });
+  memSvg.querySelectorAll('#mem-connectors path').forEach(p => {
+    p.style.stroke = '#3a5a3a';
+    p.style.strokeWidth = '1.5';
+    p.removeAttribute('filter');
+  });
+}
+
+memSvg.querySelectorAll('.mem-region').forEach(g => {
+  g.style.cursor = 'pointer';
+  g.addEventListener('click', () => {
+    const pair = g.dataset.pair;
+    clearMemHighlights();
+
+    // Highlight all boxes with this pair
+    memSvg.querySelectorAll(`.mem-region[data-pair="${pair}"] .mem-box`).forEach(box => {
+      box.style.stroke = '#5bf';
+      box.style.strokeWidth = '2.5';
+      box.setAttribute('filter', 'drop-shadow(0 0 6px rgba(85,187,255,0.4))');
+    });
+
+    // Highlight connector
+    const conn = memSvg.querySelector(`#mem-connectors path[data-pair="${pair}"]`);
+    if (conn) {
+      conn.style.stroke = '#5bf';
+      conn.style.strokeWidth = '2.5';
+      conn.setAttribute('filter', 'drop-shadow(0 0 6px rgba(85,187,255,0.4))');
+    }
+
+    memExpl.innerHTML = memDescs[pair] || '';
+    memExpl.style.color = '#aab';
+  });
+});
+
+// ============================================================
+// Tile Editor
+// ============================================================
+const TILE_SIZE = 8;
+const CELL_PX = 20;
+const tileCanvas = document.getElementById('tile-canvas');
+const tileCtx = tileCanvas.getContext('2d');
+
+// HiDPI for tile canvas
+{
+  const dpr = window.devicePixelRatio || 1;
+  const cw = tileCanvas.width, ch = tileCanvas.height;
+  tileCanvas.style.width = cw + 'px';
+  tileCanvas.style.height = ch + 'px';
+  tileCanvas.width = cw * dpr;
+  tileCanvas.height = ch * dpr;
+  tileCtx.scale(dpr, dpr);
+}
+const tileData = new Uint8Array(64); // 8x8, values 0-3
+
+const gbColors = ['#0f380f', '#306230', '#8bac0f', '#9bbc0f'];
+const gbColorsDark = ['#081808', '#183018', '#4b6c08', '#5b7c08'];
+
+function drawTile() {
+  tileCtx.clearRect(0, 0, tileCanvas.width, tileCanvas.height);
+  for (let y = 0; y < TILE_SIZE; y++) {
+    for (let x = 0; x < TILE_SIZE; x++) {
+      const c = tileData[y * TILE_SIZE + x];
+      tileCtx.fillStyle = gbColors[c];
+      tileCtx.fillRect(x * CELL_PX, y * CELL_PX, CELL_PX, CELL_PX);
+      tileCtx.strokeStyle = '#2a2a3a';
+      tileCtx.strokeRect(x * CELL_PX, y * CELL_PX, CELL_PX, CELL_PX);
+    }
+  }
+}
+
+function updateByteDisplays() {
+  // Encode as GB 2bpp
+  const gbBytesEl = document.getElementById('gb-bytes');
+  const chrDecodeEl = document.getElementById('chr-decode-output');
+  const gbaBytesEl = document.getElementById('gba-bytes');
+
+  let gbHtml = '';
+  let chrHtml = '';
+  let gbaHtml = '';
+
+  for (let row = 0; row < 8; row++) {
+    let bp0 = 0, bp1 = 0;
+    for (let col = 0; col < 8; col++) {
+      const c = tileData[row * 8 + col];
+      if (c & 1) bp0 |= (1 << (7 - col));
+      if (c & 2) bp1 |= (1 << (7 - col));
+    }
+
+    // GB bytes (2 per row, interleaved: bp0 then bp1)
+    const bp0Hex = bp0.toString(16).toUpperCase().padStart(2, '0');
+    const bp1Hex = bp1.toString(16).toUpperCase().padStart(2, '0');
+    gbHtml += `<span style="color:#6cf;">${bp0Hex}</span> <span style="color:#f86;">${bp1Hex}</span>`;
+    if (row < 7) gbHtml += '  ';
+
+    // CHR_DECODE: expand each byte to 4 bytes (8 bits -> 8 nibbles)
+    let dec0 = 0, dec1 = 0;
+    for (let bit = 7; bit >= 0; bit--) {
+      const nibbleIdx = 7 - bit;
+      const shift = nibbleIdx * 4;
+      if (bp0 & (1 << bit)) {
+        if (shift < 32) dec0 |= (1 << shift);
+      }
+      if (bp1 & (1 << bit)) {
+        if (shift < 32) dec1 |= (1 << shift);
+      }
+    }
+    // Show as hex words
+    const d0Hex = (dec0 >>> 0).toString(16).toUpperCase().padStart(8, '0');
+    const d1Hex = (dec1 >>> 0).toString(16).toUpperCase().padStart(8, '0');
+    chrHtml += `<span style="color:#6cf;">${d0Hex}</span> <span style="color:#f86;">${d1Hex}</span>`;
+    if (row < 7) chrHtml += '\n';
+
+    // GBA 4bpp: combine dec0 | (dec1 << 1)
+    // Each nibble: low bit from bp0, high bit from bp1
+    let gbaWord = 0;
+    for (let px = 0; px < 8; px++) {
+      const lo = (bp0 >> (7 - px)) & 1;
+      const hi = (bp1 >> (7 - px)) & 1;
+      const color = lo | (hi << 1);
+      gbaWord |= (color << (px * 4));
+    }
+    const gbaHex = (gbaWord >>> 0).toString(16).toUpperCase().padStart(8, '0');
+    gbaHtml += `<span style="color:#5bf;">${gbaHex}</span>`;
+    if (row < 7) gbaHtml += '  ';
+  }
+
+  gbBytesEl.innerHTML = gbHtml;
+  chrDecodeEl.innerHTML = chrHtml;
+  gbaBytesEl.innerHTML = gbaHtml;
+}
+
+tileCanvas.addEventListener('click', (e) => {
+  const rect = tileCanvas.getBoundingClientRect();
+  const sx = tileCanvas.width / rect.width;
+  const sy = tileCanvas.height / rect.height;
+  const x = Math.floor((e.clientX - rect.left) * sx / CELL_PX);
+  const y = Math.floor((e.clientY - rect.top) * sy / CELL_PX);
+  if (x >= 0 && x < 8 && y >= 0 && y < 8) {
+    const idx = y * 8 + x;
+    tileData[idx] = (tileData[idx] + 1) % 4;
+    drawTile();
+    updateByteDisplays();
+  }
+});
+
+// Initialize with a sample pattern (arrow shape)
+const sample = [
+  0,0,0,1,1,0,0,0,
+  0,0,1,2,2,1,0,0,
+  0,1,2,3,3,2,1,0,
+  1,2,3,3,3,3,2,1,
+  0,0,1,3,3,1,0,0,
+  0,0,1,3,3,1,0,0,
+  0,0,1,3,3,1,0,0,
+  0,0,1,1,1,1,0,0,
+];
+for (let i = 0; i < 64; i++) tileData[i] = sample[i];
+drawTile();
+updateByteDisplays();
+
+// ============================================================
+// Scanline Beam Visualization
+// ============================================================
+const beamCanvas = document.getElementById('beam-canvas');
+const beamCtx = beamCanvas.getContext('2d');
+const SCREEN_W = 160;
+const SCREEN_H = 144;
+const SCALE = 3; // 160*3 = 480, 144*3 = 432
+const TOTAL_LINES = 154; // 144 visible + 10 vblank
+
+// HiDPI: scale canvas backing store for crisp rendering on Retina displays
+const DPR = window.devicePixelRatio || 1;
+const CSS_W = 530, CSS_H = 482;
+beamCanvas.width = CSS_W * DPR;
+beamCanvas.height = CSS_H * DPR;
+beamCanvas.style.width = CSS_W + 'px';
+beamCanvas.style.height = CSS_H + 'px';
+beamCtx.scale(DPR, DPR);
+const CYCLES_PER_LINE = 456;
+// Mode durations in cycles
+const MODE2_CYC = 80;  // OAM scan
+const MODE3_CYC = 172; // Pixel transfer
+const MODE0_CYC = 204; // HBlank (456 - 80 - 172)
+
+let beamLine = 0;
+let beamDot = 0; // cycle within line (0..455)
+let beamPlaying = false;
+let beamAnimId = null;
+let beamSpeedVal = 5;
+
+// Buffer of pixel colors already drawn
+const screenBuf = new Uint8Array(SCREEN_W * SCREEN_H);
+
+function getMode(line, dot) {
+  if (line >= 144) return 1; // VBlank
+  if (dot < MODE2_CYC) return 2; // OAM Scan
+  if (dot < MODE2_CYC + MODE3_CYC) return 3; // Pixel Transfer
+  return 0; // HBlank
+}
+
+const modeColors = {
+  0: '#4b4',  // HBlank green
+  1: '#c44',  // VBlank red
+  2: '#0aa',  // OAM teal
+  3: '#c8f',  // Pixel transfer purple
+};
+const modeDimColors = {
+  0: '#1a2a1a',  // dim HBlank
+  1: '#2a1a1a',  // dim VBlank
+  2: '#1a2a2a',  // dim OAM
+  3: '#221a2a',  // dim Pixel transfer
+};
+const modeNames = {
+  0: 'HBlank',
+  1: 'VBlank',
+  2: 'OAM Scan',
+  3: 'Pixel Transfer',
+};
+
+const MARGIN_LEFT = 36;  // space for scanline numbers
+const MARGIN_TOP = 16;   // space for cycle axis label
+
+function clearBeamCanvas() {
+  beamCtx.fillStyle = '#111';
+  beamCtx.fillRect(0, 0, CSS_W, CSS_H);
+
+  // Grid area
+  const gx = MARGIN_LEFT, gy = MARGIN_TOP;
+  const gw = SCREEN_W * SCALE, gh = TOTAL_LINES * SCALE;
+
+  beamCtx.strokeStyle = '#1a1a2a';
+  beamCtx.lineWidth = 1;
+  beamCtx.strokeRect(gx, gy, gw, gh);
+
+  // Line 144 boundary
+  beamCtx.strokeStyle = 'rgba(200,68,68,0.3)';
+  beamCtx.setLineDash([4, 4]);
+  beamCtx.beginPath();
+  beamCtx.moveTo(gx, gy + SCREEN_H * SCALE);
+  beamCtx.lineTo(gx + gw, gy + SCREEN_H * SCALE);
+  beamCtx.stroke();
+  beamCtx.setLineDash([]);
+
+  // X axis label (cycles)
+  beamCtx.fillStyle = '#667';
+  beamCtx.font = '9px system-ui';
+  beamCtx.textAlign = 'left';
+  beamCtx.fillText('0', gx, gy - 4);
+  beamCtx.textAlign = 'center';
+  const m2x = gx + Math.round(MODE2_CYC / 456 * gw);
+  const m3x = gx + Math.round((MODE2_CYC + MODE3_CYC) / 456 * gw);
+  beamCtx.fillText('80', m2x, gy - 4);
+  beamCtx.fillText('252', m3x, gy - 4);
+  beamCtx.textAlign = 'right';
+  beamCtx.fillText('456 cycles', gx + gw, gy - 4);
+
+  // Y axis labels (scanline numbers)
+  beamCtx.fillStyle = '#667';
+  beamCtx.font = '8px system-ui';
+  beamCtx.textAlign = 'right';
+  for (const ly of [0, 143, 153]) {
+    beamCtx.fillText(String(ly), gx - 4, gy + ly * SCALE + SCALE / 2 + 3);
+  }
+  beamCtx.textAlign = 'left';
+}
+
+function drawBeamState() {
+  // Redraw entire screen state
+  clearBeamCanvas();
+  beamCtx.save();
+  beamCtx.translate(MARGIN_LEFT, MARGIN_TOP);
+
+  // Draw already-rendered lines with dimmed mode colors
+  for (let ly = 0; ly < Math.min(beamLine, TOTAL_LINES); ly++) {
+    if (ly < SCREEN_H) {
+      // Visible scanline: paint each mode zone with its dim color
+      const m2w = Math.round(MODE2_CYC / 456 * SCREEN_W * SCALE);
+      const m3w = Math.round(MODE3_CYC / 456 * SCREEN_W * SCALE);
+      const m0w = SCREEN_W * SCALE - m2w - m3w;
+      beamCtx.fillStyle = modeDimColors[2];
+      beamCtx.fillRect(0, ly * SCALE, m2w, SCALE);
+      beamCtx.fillStyle = modeDimColors[3];
+      beamCtx.fillRect(m2w, ly * SCALE, m3w, SCALE);
+      beamCtx.fillStyle = modeDimColors[0];
+      beamCtx.fillRect(m2w + m3w, ly * SCALE, m0w, SCALE);
+    } else {
+      // VBlank scanline
+      beamCtx.fillStyle = modeDimColors[1];
+      beamCtx.fillRect(0, ly * SCALE, SCREEN_W * SCALE, SCALE);
+    }
+  }
+
+  const mode = getMode(beamLine, beamDot);
+  const ly = beamLine;
+  const dotFrac = beamDot / CYCLES_PER_LINE;
+
+  if (beamLine < SCREEN_H) {
+
+    // OAM scan region (first ~80 cycles = first ~28 pixels)
+    const oamEndPx = Math.floor((MODE2_CYC / CYCLES_PER_LINE) * SCREEN_W);
+    const mode3EndPx = Math.floor(((MODE2_CYC + MODE3_CYC) / CYCLES_PER_LINE) * SCREEN_W);
+
+    // Draw mode zones on current line
+    if (beamDot >= 0) {
+      // OAM zone
+      const oamW = Math.min(beamDot, MODE2_CYC) / CYCLES_PER_LINE * SCREEN_W;
+      if (oamW > 0) {
+        beamCtx.fillStyle = 'rgba(0,170,170,0.35)';
+        beamCtx.fillRect(0, ly * SCALE, oamW * SCALE, SCALE);
+      }
+    }
+    if (beamDot >= MODE2_CYC) {
+      // Pixel transfer zone
+      const ptStart = oamEndPx;
+      const ptDot = Math.min(beamDot - MODE2_CYC, MODE3_CYC);
+      const ptW = ptDot / CYCLES_PER_LINE * SCREEN_W;
+      if (ptW > 0) {
+        beamCtx.fillStyle = 'rgba(200,136,255,0.35)';
+        beamCtx.fillRect(ptStart * SCALE, ly * SCALE, ptW * SCALE, SCALE);
+      }
+    }
+    if (beamDot >= MODE2_CYC + MODE3_CYC) {
+      // HBlank zone
+      const hbStart = mode3EndPx;
+      const hbDot = Math.min(beamDot - MODE2_CYC - MODE3_CYC, MODE0_CYC);
+      const hbW = hbDot / CYCLES_PER_LINE * SCREEN_W;
+      if (hbW > 0) {
+        beamCtx.fillStyle = 'rgba(75,180,75,0.35)';
+        beamCtx.fillRect(hbStart * SCALE, ly * SCALE, hbW * SCALE, SCALE);
+
+        // DMA transfer arrows during HBlank
+        const arrowX = (hbStart + hbW * 0.5) * SCALE;
+        beamCtx.fillStyle = '#fd0';
+        beamCtx.font = 'bold 8px system-ui';
+        beamCtx.textAlign = 'center';
+        if (hbW > 10) {
+          beamCtx.fillText('DMA', arrowX, ly * SCALE + SCALE - 1);
+        }
+      }
+
+    }
+
+    // Beam cursor
+    const beamX = Math.floor(dotFrac * SCREEN_W);
+    beamCtx.fillStyle = '#fff';
+    beamCtx.fillRect(beamX * SCALE, ly * SCALE, SCALE, SCALE);
+    // Glow
+    beamCtx.fillStyle = 'rgba(255,255,255,0.3)';
+    beamCtx.fillRect(beamX * SCALE - SCALE, ly * SCALE, SCALE * 3, SCALE);
+
+  } else {
+    // VBlank: draw beam on the actual VBlank scanline rows (144-153)
+    // Current VBlank line - bright red
+    beamCtx.fillStyle = '#c44';
+    beamCtx.fillRect(0, ly * SCALE, SCREEN_W * SCALE, SCALE);
+    // Beam cursor sweeps across
+    const beamX = Math.floor(dotFrac * SCREEN_W);
+    beamCtx.fillStyle = '#fff';
+    beamCtx.fillRect(beamX * SCALE, ly * SCALE, SCALE, SCALE);
+    beamCtx.fillStyle = 'rgba(255,255,255,0.3)';
+    beamCtx.fillRect(beamX * SCALE - SCALE, ly * SCALE, SCALE * 3, SCALE);
+    // Label on first VBlank line
+    if (beamLine === SCREEN_H) {
+      beamCtx.fillStyle = '#c44';
+      beamCtx.font = 'bold 9px system-ui';
+      beamCtx.textAlign = 'right';
+      beamCtx.fillText('VBlank', SCREEN_W * SCALE - 4, SCREEN_H * SCALE + SCALE - 1);
+      beamCtx.textAlign = 'left';
+    }
+  }
+
+  // Mode indicator line at bottom
+  beamCtx.fillStyle = modeColors[mode];
+  beamCtx.fillRect(0, TOTAL_LINES * SCALE - 2, SCREEN_W * SCALE, 2);
+
+  beamCtx.restore();
+
+  // Update info text
+  document.getElementById('beam-info').textContent =
+    `Line: ${beamLine} / Mode: ${modeNames[mode]}`;
+
+  // Update event log
+  updateBeamEvents(mode);
+}
+
+function updateBeamEvents(mode) {
+  const log = document.getElementById('beam-event-log');
+  let html = '';
+
+  if (beamLine < 144) {
+    if (mode === 2) {
+      html += '<div style="color:#0aa;">Scanning OAM for sprites on line ' + beamLine + '...</div>';
+    } else if (mode === 3) {
+      html += '<div style="color:#c8f;">Drawing pixels for line ' + beamLine + '</div>';
+    } else if (mode === 0) {
+      html += '<div style="color:#4b4;">HBlank &mdash; DMA0-2: scroll/display, DMA3: palette refresh</div>';
+    }
+  } else {
+    html += '<div style="color:#c44; font-weight:600;">VBlank (line ' + beamLine + ')</div>';
+    if (beamLine === 144) {
+      html += '<div style="color:#fa4;">Sprite rendering (convert GB OAM to GBA OAM)</div>';
+      html += '<div style="color:#fa4;">Bulk tile conversion (2bpp to 4bpp)</div>';
+      html += '<div style="color:#fa4;">Palette transfer to GBA palette RAM</div>';
+    } else {
+      html += '<div style="color:#889;">Remaining tile conversion, SRAM flush if dirty</div>';
+    }
+  }
+
+  log.innerHTML = html;
+}
+
+function beamAdvanceDot(count) {
+  beamDot += count;
+  while (beamDot >= CYCLES_PER_LINE) {
+    beamDot -= CYCLES_PER_LINE;
+    beamLine++;
+    if (beamLine >= TOTAL_LINES) {
+      beamLine = 0;
+    }
+  }
+}
+
+function beamStep() {
+  // Advance to next line
+  beamDot = 0;
+  beamLine++;
+  if (beamLine >= TOTAL_LINES) beamLine = 0;
+  drawBeamState();
+}
+
+function beamAnimate() {
+  if (!beamPlaying) return;
+  const speed = beamSpeedVal;
+  // Advance by speed * 20 dots
+  beamAdvanceDot(speed * 20);
+  drawBeamState();
+  beamAnimId = requestAnimationFrame(beamAnimate);
+}
+
+document.getElementById('beam-play').addEventListener('click', () => {
+  beamPlaying = !beamPlaying;
+  document.getElementById('beam-play').textContent = beamPlaying ? 'Pause' : 'Play';
+  document.getElementById('beam-play').classList.toggle('active', beamPlaying);
+  if (beamPlaying) beamAnimate();
+  else if (beamAnimId) cancelAnimationFrame(beamAnimId);
+});
+
+document.getElementById('beam-step').addEventListener('click', () => {
+  beamPlaying = false;
+  document.getElementById('beam-play').textContent = 'Play';
+  document.getElementById('beam-play').classList.remove('active');
+  if (beamAnimId) cancelAnimationFrame(beamAnimId);
+  beamStep();
+});
+
+document.getElementById('beam-reset').addEventListener('click', () => {
+  beamPlaying = false;
+  document.getElementById('beam-play').textContent = 'Play';
+  document.getElementById('beam-play').classList.remove('active');
+  if (beamAnimId) cancelAnimationFrame(beamAnimId);
+  beamLine = 0;
+  beamDot = 0;
+  drawBeamState();
+});
+
+document.getElementById('beam-speed').addEventListener('input', (e) => {
+  beamSpeedVal = parseInt(e.target.value);
+});
+
+// Initialize beam
+clearBeamCanvas();
+drawBeamState();
+
+</script>
+</body>
+</html>
