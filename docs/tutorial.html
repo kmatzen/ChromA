@@ -824,41 +824,26 @@ FFFF       Interrupt Enable</pre>
         <span style="display:inline-block; width:12px; height:12px; background:#4b4; border-radius:2px; vertical-align:middle;"></span>
         <strong style="color:#5c5;">Mode 0: HBlank</strong> (204 cycles)
         <div style="color:#778; margin:2px 0 0 20px; font-size:0.95em;">
-          The line is done. This is free time before the next line starts — games use it to update
-          scroll registers or switch VRAM banks mid-frame. ChromA fires four GBA DMA channels here:
-          DMA0–2 transfer per-scanline scroll, display control, and window state. DMA3 handles palettes.
+          Line done. ChromA fires all 4 GBA DMA channels:
+        </div>
+        <div style="color:#778; margin:4px 0 0 20px; font-size:0.88em; font-family:'SF Mono',Consolas,monospace;">
+          DMA0: scroll + BG control (6 words from bigbuffer)<br>
+          DMA1: DISPCNT (1 word)<br>
+          DMA2: WIN0H (1 word)<br>
+          DMA3: palette — 1-word self-refresh or 64-word buffer
         </div>
         <div style="color:#778; margin:8px 0 0 20px; font-size:0.95em;">
-          <strong style="color:#aab;">How palette delivery works:</strong>
-          At frame start, ChromA snapshots the full palette (128 bytes) into <code>pal_before</code>.
-          At VBlank, <code>transfer_palette_</code> copies this snapshot to GBA PALRAM — providing a
-          stable baseline unaffected by mid-frame game writes. DMA3 is always armed during display:
+          DMA3 mode is chosen by a write counter (cleared each GBA VBlank).
+          ≤4 palette writes during visible scanlines → <strong style="color:#aab;">1-word</strong>: reads and writes
+          the same PALRAM word, a no-op. >4 writes → <strong style="color:#aab;">64-word</strong>: replays a per-scanline
+          buffer from EWRAM. A counter (not a boolean) is needed because
+          one GB frame spans ~2 GBA frames — a flag would race with the clear.
         </div>
-        <div style="color:#778; margin:8px 0 0 20px; font-size:0.95em;">
-          <strong style="color:#dde;">Most games (≤4 writes per GBA frame):</strong>
-          DMA3 does a 1-word PALRAM self-refresh — reads and writes the same 4 bytes, a harmless
-          no-op (~4 cycles/HBlank). If the game changes palettes a few times mid-frame (e.g., a
-          status bar), VCount interrupts patch PALRAM at the exact scanline boundaries.
-        </div>
-        <div style="color:#778; margin:8px 0 0 20px; font-size:0.95em;">
-          <strong style="color:#dde;">Per-scanline games (&gt;4 writes, e.g., Hercules GBC):</strong>
-          DMA3 switches to 64-word mode, replaying a 36KB per-scanline buffer filled by the
-          FF69 write handler. Hercules hits ~70 counts per GBA frame (half of its 143
-          per-scanline writes, since one GB frame spans two GBA frames).
-        </div>
-        <div style="color:#778; margin:8px 0 0 20px; font-size:0.95em;">
-          <strong style="color:#aab;">Why a counter, not a boolean flag?</strong>
-          One GB frame takes ~2 GBA frames to process. A boolean flag cleared at either
-          GB line 0 or GBA VBlank creates a race condition — the clear can happen mid-GBA-frame,
-          causing alternating 1-word/64-word modes (visible flicker). A counter cleared at GBA
-          VBlank accumulates across the frame, so per-scanline games always exceed the threshold.
-        </div>
-        <div style="color:#778; margin:8px 0 0 20px; font-size:0.95em;">
-          <strong style="color:#aab;">Why not always use 64-word mode?</strong>
-          GBA DMA has no source-reload. With fixed source + 64 words, DMA reads the same 4 bytes
-          and smears them across all palette slots — corrupting colors. The per-scanline buffer
-          uses incrementing source (unique data per scanline), but pre-filling it for games
-          that don't need it costs ~27K VBlank cycles — too expensive.
+        <div style="color:#778; margin:6px 0 0 20px; font-size:0.95em;">
+          64-word can't be used for all games: EWRAM DMA is too slow
+          (~256 cycles) and overruns HBlank, corrupting normal gameplay.
+          Fixed-source + 64 words is also impossible — GBA has no source-reload,
+          so it smears one 4-byte value across all palette slots.
         </div>
       </div>
 
@@ -903,8 +888,8 @@ FFFF       Interrupt Enable</pre>
       </p>
       <ul>
         <li><strong>Line 0:</strong> Frame start. Refresh input, snapshot the full palette into <code>pal_before</code> (128 bytes). This frozen snapshot feeds <code>transfer_palette_</code> at VBlank — insulating PALRAM from mid-frame game writes.</li>
-        <li><strong>Lines 0-143:</strong> Run pixel pipeline. DMA0-2 transfer scroll/display/window state per HBlank. DMA3 refreshes palettes (1-word self-refresh for normal games, 64-word per-scanline buffer for gradient games). Palette splits recorded by <code>ff69_w_tail</code> on every 32nd write when the scanline changes.</li>
-        <li><strong>Line 144:</strong> Enter VBlank. Copy <code>pal_before</code> to PALRAM, render sprites, convert dirty tiles. Read and clear the <code>pal_scanline_active</code> counter, arm DMA3 (1-word if ≤4, 64-word if &gt;4), set up VCount splits for the next frame.</li>
+        <li><strong>Lines 0-143:</strong> Per HBlank: DMA0 (scroll+BG, 6 words), DMA1 (DISPCNT, 1 word), DMA2 (WIN0H, 1 word), DMA3 (palette, 1 or 64 words). Palette splits recorded by <code>ff69_w_tail</code> every 32nd FF69 write when scanline changes.</li>
+        <li><strong>Line 144 (VBlank):</strong> Copy <code>pal_before</code> → PALRAM. Render sprites. Convert dirty tiles. Read/clear <code>pal_scanline_active</code> counter. Arm DMA0-3 for next frame. Set up VCount splits if detected.</li>
         <li><strong>Lines 145-153:</strong> Continue VBlank work. Remaining tile rows converted, SRAM flushed if dirty.</li>
       </ul>
       <p>
@@ -1415,7 +1400,9 @@ function updateBeamEvents(mode) {
     } else if (mode === 3) {
       html += '<div style="color:#c8f;">Drawing pixels for line ' + beamLine + '</div>';
     } else if (mode === 0) {
-      html += '<div style="color:#4b4;">HBlank &mdash; DMA0-2: scroll/display, DMA3: palette refresh</div>';
+      html += '<div style="color:#4b4;">HBlank &mdash; 4 DMA transfers:</div>';
+      html += '<div style="color:#5a5; margin-left:12px; font-size:0.95em;">DMA0: scroll+BG (6w) · DMA1: DISPCNT (1w) · DMA2: WIN0H (1w)</div>';
+      html += '<div style="color:#5a5; margin-left:12px; font-size:0.95em;">DMA3: palette (' + (beamLine < 144 ? '1w self-refresh or 64w buffer' : 'idle') + ')</div>';
     }
   } else {
     html += '<div style="color:#c44; font-weight:600;">VBlank (line ' + beamLine + ')</div>';
