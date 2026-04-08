@@ -71,7 +71,7 @@ sleep_,restart,showlicense,exit_};
 
 const fptr fnlist2[]={vblset,fpsset,sleepset,swapAB,autostateset,
 gbtype,changeautoborder,gbatype};
-const fptr fnlist3[]={chpalette,brightset,sgbpalnum};
+const fptr fnlist3[]={chpalette,sgbpalnum};
 
 const fptr fnlist4[]={timermode,changelcdhack};
 
@@ -413,7 +413,7 @@ void drawui3()
 	cls(2);
 	drawtext(32,"      Display Settings",0);
 	print_2("Palette: ",paltxt[palettebank]);
-	print_2("Gamma: ",brightxt[gammavalue]);
+	//Gamma removed — simplifies palette DMA pipeline
 	print_2("SGB Palette Number: ",palnumtxt[sgb_palette_number]);
 }
 

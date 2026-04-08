@@ -2,15 +2,19 @@
 
 ## Per-scanline palette rendering (Hercules GBC title screen)
 
-**Status**: Partially working — good colors with residual flicker
+**Status**: Mostly working — no flicker, residual vertical banding
 
 ### Current State
 
-The Hercules GBC title screen renders with improved per-scanline palette colors via DMA3 HBlank repeat. The DMA buffer is filled directly from `FF69_W` (the palette write handler) with zero per-scanline hook overhead. However, two artifacts remain:
+DMA3 is always armed during active display. For most games it performs a 1-word PALRAM self-refresh per HBlank (harmless no-op). When per-scanline palette writes are detected (>10 FF69 writes during visible scanlines), DMA3 switches to 64-word mode replaying a per-scanline buffer filled by `ff69_w_tail`. Games with a few mid-frame palette changes (≤10) use VCount interrupts to patch PALRAM at split boundaries.
 
-1. **Flickering**: The GBC frame takes ~2 GBA frames to process (ARM/GBC cycle ratio is ~3:1). The top and bottom halves of the screen receive fresh palette data on alternating GBA frames. Unlike a real GBC LCD which persists between frames, the GBA display shows the half-stale state, causing visible flicker.
+One artifact remains on the Hercules title screen:
 
-2. **Half-palette mixing**: The VBlank handler writes 32 bytes per scanline (4 of 8 palettes). The DMA buffer fill triggers every 32 writes, but at that point only half the palettes are current — the other half has the previous scanline's data. This causes columns using palettes 4-7 to show slightly wrong colors.
+1. **Half-palette vertical banding**: The game writes 32 bytes per scanline (palettes 0-3 only). Tiles using palettes 4-7 don't participate in the per-scanline gradient effect, causing visible vertical bands where those tile columns show static colors instead of the gradient.
+
+### Why DMA3 can't use 64 words for all games
+
+GBA DMA has no source-reload option. With fixed source + 64 words, DMA reads the same 4 bytes and smears them across all 64 destination words — corrupting palettes 9-15. The per-scanline buffer (36KB) works because the source increments through unique data per scanline. Filling that buffer at VBlank costs ~27K cycles (DMA from PALRAM), which is too expensive for the VBlank budget. The 1-word self-refresh avoids both problems.
 
 ### How it works
 
