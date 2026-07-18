@@ -43,6 +43,14 @@ EWRAM_DATA u32 save_start = SAVE_START;
 #define CONFIGSAVE 2
 #define MBC_SAV 2
 
+//How much SRAM the savestate list uses. NOTE: the three walkers below do NOT
+//agree on the base, and callers must not rely on a stale value:
+//  FindStateByIndex()  sets it to  sum(size)          -- what updatestates() wants
+//  findstate()         sets it to  sum(size) + 8
+//  drawstates()        sets it to  sum(size) + 8      (it needs +8 for freespace)
+//  updatestates()      leaves it as sum(size) + 4     (end-of-records offset)
+//updatestates() is safe only because it calls FindStateByIndex() itself before
+//reading this. Do not add a consumer that reads it without re-deriving first.
 EWRAM_BSS int totalstatesize;		//how much SRAM is used
 EWRAM_BSS u32 sram_owner=0;
 
@@ -116,6 +124,24 @@ void probe_sram_size()
 }
 
 
+//The savestate/config heap occupies [0, save_start) and the game SRAM
+//write-through region occupies [GBA_SRAM_SIZE - game_sram_size, GBA_SRAM_SIZE).
+//They must never overlap.  probe_sram_size() derives save_start from the
+//detected chip size alone, so this clamp has to be re-applied every time it
+//runs -- otherwise probing silently undoes it and the heap grows back over
+//the write-through region.
+void clamp_save_start(void)
+{
+	if(!using_flashcart())
+		return;
+	if(!(g_cartflags&MBC_SAV))
+		return;
+
+	u32 wt_offset = GBA_SRAM_SIZE - (g_rammask + 1);
+	if (wt_offset < save_start)
+		save_start = wt_offset;
+}
+
 void getsram()	//copy GBA sram to sram_copy
 {
 	//called by: managesram, deletemenu, savestatemenu, findstate, loadstatemenu
@@ -134,6 +160,8 @@ void getsram()	//copy GBA sram to sram_copy
 	if(sramCopy32[0] != STATEID)	//if sram hasn't been copied already
 	{
 		probe_sram_size();  //stop NO$GBA from copying out-of-range data
+		clamp_save_start();	//probe_sram_size() resets save_start to the chip
+					//size; keep it out of the write-through region
 		bytecopy(sramCopy, sram, save_start);	//copy everything to sram_copy
 		if(!(sramCopy32[0] == STATEID || sramCopy32[0] == STATEID2)) //valid gba save ram data?
 		{
@@ -715,7 +743,7 @@ int get_saved_sram(void)
 	u32 game_sram_size = g_rammask + 1;
 	u32 wt_offset = GBA_SRAM_SIZE - game_sram_size;
 	if (wt_offset < save_start) {
-		save_start = wt_offset;
+		clamp_save_start();
 		sram_copy = NULL;  // force getsram to re-read with new boundary
 	}
 
