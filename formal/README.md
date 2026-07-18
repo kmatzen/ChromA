@@ -1,78 +1,95 @@
 # Formal specs
 
-TLA+ models of ChromA's concurrent state machines. These verify *designs*, not
-the assembly — see "What this does not prove" below.
+TLA+ models of ChromA's shared-state structure. These verify *designs*, not the
+assembly — see "What this does not prove".
 
 ## Running
 
 Needs Java and [`tla2tools.jar`](https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar).
 
 ```sh
-# current behaviour -- expect an invariant violation
+# safety -- expect "no error has been found"
 java -cp tla2tools.jar tlc2.TLC -deadlock -config DirtyTiles.cfg DirtyTiles.tla
 
-# candidate fix -- expect "no error has been found"
-java -cp tla2tools.jar tlc2.TLC -deadlock -config DirtyTilesFixed.cfg DirtyTiles.tla
+# efficiency -- expect NoRedundantFlag violated (this is the finding)
+java -cp tla2tools.jar tlc2.TLC -deadlock -config Redundant.cfg DirtyTiles.tla
 ```
 
 ## DirtyTiles.tla
 
-Models the `DIRTY_TILE_BITS` race between two unsynchronised contexts:
+Models `DIRTY_TILE_BITS`, shared between:
 
-- **Producer** — emulated-CPU context. `DoDma()` (`src/dma.c:97`) rewrites tile
-  data in VRAM, then `SetBits()` (`src/dma.c:57-81`) marks the tiles with a
-  plain `base[i] |= mask` — a non-atomic load / or / store.
-- **Consumer** — GBA VBlank IRQ. `consume_dirty_tiles` (`src/lcd.s:812`) renders
-  what it observes, then `ClearDirtyTiles` (`src/lcd.s:933`) zeroes the whole
-  bitmap with `memset32(DIRTY_TILE_BITS, 0, 48)`.
+- **Producer — foreground (emulated-CPU context).** `DoDma()` rewrites tile data
+  in VRAM, then `SetBits()` (`src/dma.c:57-81`) marks the tiles with a plain
+  `base[i] |= mask` — a non-atomic load / or / store. Reached only from
+  `FF55_W` (`src/io.s:790`) and `tick_hdma` (`src/timeout.s:391`).
+- **Consumer — GBA hardware IRQ.** `consume_dirty_tiles` (`src/lcd.s:812`) has
+  exactly one caller, `src/lcd.s:1644`, inside `vblankinterrupt`
+  (`src/lcd.s:1589`), reached via `irqhandler` → `jmpintr`.
 
-`GFX_init_irq` (`src/lcd.s:227-247`) leaves IME=1 permanently and `jmpintr`
-(`src/lcd.s:1559-1568`) re-enables IRQ inside the handler, so the producer is
-preemptible at any instruction boundary. Nothing in `dma.c` uses `volatile`, a
-critical section, or a barrier. HDMA drives the consumer per-HBlank
-(`src/timeout.s:391`), so the interleaving is routine, not exotic.
+The IRQ preempts foreground; foreground never preempts the IRQ. `jmpintr`
+re-enabling IRQ/FIQ lets *other handlers* nest — it does not resume the emulated
+CPU. So the consumer's walk-and-clear is **atomic with respect to the producer**
+and is modelled as a single action.
 
-### Invariant
+The one genuine interleaving is the IRQ landing between `SetBits`' load and its
+store.
 
-`NoLostTile` — a tile whose VRAM bytes changed is still flagged in `bits`, or is
-in the producer's in-flight store. If neither, the bit was dropped and the tile
-stays stale on screen until something else dirties it.
+### Results
 
-### Result
+| Property | Meaning | Result |
+|---|---|---|
+| `NoLostTile` | a changed tile is still flagged, or in the in-flight store | **holds** (27 states / 2 tiles, 357 / 4) |
+| `NoRedundantFlag` | every flagged tile actually needs rendering | **violated** |
 
-TLC violates `NoLostTile` in 5 states:
+`NoLostTile` holding is the important result: **no tile is ever left stale.**
+
+`NoRedundantFlag` fails as follows — the producer loads the bitmap, the IRQ
+renders and clears it, then the producer stores back `old | mask`, resurrecting
+bits that were just rendered:
 
 ```
-State 2: P_Load   -- DoDma dirties t1; SetBits loaded bits={} but has not stored
-State 3: C_Read   -- VBlank preempts, observes bits={} -> nothing to render
-State 4: P_Store  -- producer completes its store: bits={t1}
-State 5: C_Clear  -- ClearDirtyTiles zeroes everything; t1 was never rendered
+State 4: P_Load    -- SetBits loads bits={t1}; dirtyData={t1}
+State 5: C_Vblank  -- IRQ renders and clears: bits={}, dirtyData={}
+State 6: P_Store   -- stores preg|{ptile} = {t1}: t1 re-flagged, nothing to do
 ```
 
-The IRQ lands *inside* `SetBits`' load/store window. The consumer then clears a
-bit it never observed.
+The consequence is **redundant tile conversion, not incorrect output**. Given how
+tight the per-scanline cycle budget is (see KNOWN_ISSUES.md), a fix would
+plausibly cost more than the wasted work — this is documented, not actioned.
 
-With `ClearOnlyObserved = TRUE` (consumer clears only what it rendered) the
-invariant holds exhaustively: 100 distinct states for 2 tiles, 611 for 3.
+## Correction: an earlier version of this spec was wrong
+
+The first version of `DirtyTiles.tla` split the consumer into separate `C_Read`
+and `C_Clear` actions and found a 5-state "lost tile" trace. **That trace was an
+artefact of the model, not a real defect.**
+
+The error was assuming producer and consumer interleave freely. They do not: the
+consumer runs only in IRQ context, the producer only in foreground, and the IRQ
+cannot be interrupted by the emulated CPU. Modelling the consumer's read and
+clear as separately schedulable admitted an interleaving the hardware cannot
+produce.
+
+The same mistake invalidated a companion claim about `vram_packets_registered_*`
+being raced between `RegisterDmaPackets` and `store_dirty_packets`. Tracing the
+callers: `RegisterDmaPackets` runs from `DoDma` (`src/dma.c:146`, foreground),
+and `store_dirty_packets` from `newframe_vblank` (`src/lcd.s:3346`), whose only
+caller is `src/timeout.s:220` — the *emulated* VBlank in the foreground scanline
+state machine, not the hardware IRQ. Both foreground, therefore sequential. No
+race.
+
+**Lesson worth keeping:** establish which context each side runs in by tracing
+call sites *before* writing the model. A spec inherits every assumption you put
+into it, and model checking cannot tell you the structure is wrong — it will
+happily produce a confident counterexample to a premise you invented.
 
 ## What this does not prove
 
-The model shows the *design* "clear only what you observed" is sound. It does
-not show any particular implementation is. On ARM7TDMI there are no atomics
-(no LDREX/STREX), so realising it needs one of:
-
-- **Snapshot-and-swap** — swap the bitmap to a shadow buffer with IRQs masked
-  for the swap only, render from the shadow, never clear the live one. Costs 48
-  bytes and a short critical section.
-- **IME masking** around both `SetBits`' RMW and `ClearDirtyTiles`. Simpler, but
-  adds cycles to a hot path, and ARCHITECTURE.md is emphatic about the
-  per-scanline budget.
-
-Note that clearing each word as the walker consumes it is *not* a fix — a
-producer setting a bit between that read and write still loses it. It only
-narrows the window.
-
-The model also abstracts the bitmap as a set of tiles rather than 48 words of
-packed bits, and treats `render_dirty_tiles` as taking one snapshot, whereas the
-real walker reads the bitmap incrementally while rendering. Both abstractions
-make the real code *more* interleaved, not less, so the violation stands.
+- The model abstracts the bitmap as a set of tiles, not 48 bytes of packed bits
+  split into two 24-byte per-VRAM-bank halves (`src/lcd.s:4873`).
+- It treats `render_dirty_tiles` as rendering everything flagged in one step. The
+  real walker (`GetNextTileAndLength_dirty`, `src/lcd.s:945+`) reads the bitmap
+  incrementally — but since no producer step can interleave, that is a faithful
+  abstraction here.
+- It says nothing about `dirty_map_words`, `vram_packets_dirty`, or
+  `RECENT_TILES`, which have their own lifecycles.

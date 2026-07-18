@@ -1,121 +1,112 @@
 ---------------------------- MODULE DirtyTiles ----------------------------
 (***************************************************************************)
-(* Models the DIRTY_TILE_BITS race in ChromA.                              *)
+(* DIRTY_TILE_BITS: producer/consumer structure in ChromA.                 *)
 (*                                                                         *)
-(* Two execution contexts share DIRTY_TILE_BITS with no synchronisation:   *)
+(* CONTEXTS (established by tracing call sites, not assumed):              *)
 (*                                                                         *)
-(*   Producer -- emulated-CPU context.  DoDma() (src/dma.c:97) copies tile *)
-(*     data into VRAM and then marks the affected tiles via SetBits()      *)
-(*     (src/dma.c:57-81), which is a plain `base[i] |= mask` -- a          *)
-(*     non-atomic load / or / store.                                       *)
+(*   Producer -- FOREGROUND (emulated-CPU context).  DoDma() rewrites tile *)
+(*     data in VRAM, then SetBits() (src/dma.c:57-81) marks the tiles with *)
+(*     a plain `base[i] |= mask` -- a non-atomic load / or / store.        *)
+(*     Reached only from FF55_W (src/io.s:790) and tick_hdma               *)
+(*     (src/timeout.s:391).  Both foreground.                              *)
 (*                                                                         *)
-(*   Consumer -- GBA VBlank IRQ.  consume_dirty_tiles (src/lcd.s:812)      *)
-(*     renders the tiles it observes and then calls ClearDirtyTiles to     *)
-(*     zero the bitmap.                                                    *)
+(*   Consumer -- GBA HARDWARE IRQ.  consume_dirty_tiles (src/lcd.s:812)    *)
+(*     has exactly one caller, src/lcd.s:1644, inside vblankinterrupt      *)
+(*     (src/lcd.s:1589), reached via irqhandler -> jmpintr.                *)
 (*                                                                         *)
-(* GFX_init_irq (src/lcd.s:227-247) leaves IME=1 permanently and jmpintr   *)
-(* (src/lcd.s:1559-1568) re-enables IRQ inside the handler, so the         *)
-(* producer is preemptible at any instruction boundary -- including        *)
-(* between SetBits' load and its store.  Nothing in dma.c uses volatile,   *)
-(* a critical section, or a barrier.                                       *)
+(* The IRQ preempts foreground; foreground never preempts the IRQ.         *)
+(* jmpintr re-enabling IRQ/FIQ lets OTHER HANDLERS nest -- it does not     *)
+(* resume the emulated CPU.  So the consumer's walk-and-clear is a single  *)
+(* atomic step with respect to the producer, and is modelled as one action.*)
 (*                                                                         *)
-(* HDMA drives the consumer on a per-HBlank cadence (src/timeout.s:391),   *)
-(* so this interleaving is not exotic.                                     *)
+(* This is the corrected model.  An earlier version of this spec split the *)
+(* consumer into separate read and clear actions, which admitted a         *)
+(* lost-update trace that the real system cannot exhibit.  Modelling the   *)
+(* consumer as interleavable was the error; see formal/README.md.          *)
+(*                                                                         *)
+(* The one genuine interleaving is the IRQ landing between SetBits' load   *)
+(* and its store.  That is what this spec is for.                          *)
 (***************************************************************************)
 EXTENDS FiniteSets
 
 CONSTANTS Tiles, NoTile
 
-(***************************************************************************)
-(* Candidate fix.  When FALSE, ClearDirtyTiles zeroes the whole bitmap --   *)
-(* current behaviour.  When TRUE, it clears only the bits the consumer      *)
-(* actually observed and rendered, leaving anything the producer set in     *)
-(* the meantime intact.                                                     *)
-(***************************************************************************)
-CONSTANT ClearOnlyObserved
+ASSUME NoTile \notin Tiles
 
 VARIABLES
     bits,        \* DIRTY_TILE_BITS: tiles currently flagged for conversion
-    dirtyData,   \* tiles whose VRAM bytes differ from what has been rendered
-                 \* (the outstanding obligation -- NOT a real variable, this
-                 \*  is the specification-level ghost we check against)
-    ppc, preg, ptile,   \* producer: pc, the value loaded by SetBits, target tile
-    cpc, csnap          \* consumer: pc, the bitmap it observed before clearing
+    dirtyData,   \* ghost: tiles whose VRAM bytes differ from what was
+                 \* rendered -- the outstanding obligation
+    ppc,         \* producer pc: "idle" or "store" (mid read-modify-write)
+    preg,        \* the word SetBits loaded, not yet stored back
+    ptile        \* the tile SetBits is in the middle of flagging
 
-vars == <<bits, dirtyData, ppc, preg, ptile, cpc, csnap>>
-
-ASSUME NoTile \notin Tiles
+vars == <<bits, dirtyData, ppc, preg, ptile>>
 
 TypeOK ==
     /\ bits      \subseteq Tiles
     /\ dirtyData \subseteq Tiles
     /\ preg      \subseteq Tiles
-    /\ csnap     \subseteq Tiles
     /\ ptile     \in Tiles \cup {NoTile}
     /\ ppc       \in {"idle", "store"}
-    /\ cpc       \in {"idle", "clear"}
 
 Init ==
     /\ bits      = {}
     /\ dirtyData = {}
     /\ ppc = "idle" /\ preg = {} /\ ptile = NoTile
-    /\ cpc = "idle" /\ csnap = {}
 
 (***************************************************************************)
-(* Producer.  DoDma has just rewritten tile t's VRAM bytes, creating the    *)
-(* obligation to re-render it; SetBits then loads the current bitmap word.  *)
+(* Producer, foreground.  The ldr half of `base[i] |= mask`.  DoDma has     *)
+(* already rewritten tile t's bytes, so the obligation exists from here.    *)
 (***************************************************************************)
 P_Load ==
     /\ ppc = "idle"
     /\ \E t \in Tiles :
         /\ dirtyData' = dirtyData \cup {t}
         /\ ptile'     = t
-        /\ preg'      = bits          \* the ldr half of `base[i] |= mask`
+        /\ preg'      = bits
     /\ ppc' = "store"
-    /\ UNCHANGED <<bits, cpc, csnap>>
+    /\ UNCHANGED bits
 
-(* The str half.  Writes back a value computed from a possibly stale read. *)
+(* The str half.  Writes back a value computed before any preemption. *)
 P_Store ==
     /\ ppc = "store"
     /\ bits'  = preg \cup {ptile}
     /\ ppc'   = "idle"
     /\ preg'  = {}
     /\ ptile' = NoTile
-    /\ UNCHANGED <<dirtyData, cpc, csnap>>
+    /\ UNCHANGED dirtyData
 
 (***************************************************************************)
-(* Consumer.  render_dirty_tiles walks the bitmap, then ClearDirtyTiles     *)
-(* zeroes it.  The clear is NOT restricted to what was observed.            *)
+(* Consumer, IRQ.  ONE action: render_dirty_tiles walks the bitmap and      *)
+(* ClearDirtyTiles (src/lcd.s:933) zeroes it, with no producer step         *)
+(* possible in between.  May fire while ppc = "store" -- that is the        *)
+(* mid-RMW preemption.                                                      *)
 (***************************************************************************)
-C_Read ==
-    /\ cpc = "idle"
-    /\ csnap' = bits
-    /\ cpc'   = "clear"
-    /\ UNCHANGED <<bits, dirtyData, ppc, preg, ptile>>
-
-C_Clear ==
-    /\ cpc = "clear"
-    /\ dirtyData' = dirtyData \ csnap   \* only what it actually rendered
-    /\ bits'      = IF ClearOnlyObserved
-                    THEN bits \ csnap   \* candidate fix
-                    ELSE {}             \* current behaviour: clears everything
-    /\ csnap'     = {}
-    /\ cpc'       = "idle"
+C_Vblank ==
+    /\ dirtyData' = dirtyData \ bits    \* everything flagged gets rendered
+    /\ bits'      = {}
     /\ UNCHANGED <<ppc, preg, ptile>>
 
-Next == P_Load \/ P_Store \/ C_Read \/ C_Clear
+Next == P_Load \/ P_Store \/ C_Vblank
 
 Spec == Init /\ [][Next]_vars /\ WF_vars(Next)
 
-(***************************************************************************)
-(* Safety.  A tile whose data changed must still be flagged, or be in the   *)
-(* producer's in-flight store.  If it is in neither, the bit was dropped    *)
-(* and the tile stays stale on screen until something else dirties it.      *)
-(***************************************************************************)
 InFlight == IF ppc = "store" THEN {ptile} ELSE {}
 
+(***************************************************************************)
+(* SAFETY -- expected to HOLD.                                             *)
+(* A tile whose data changed is still flagged, or is in the producer's      *)
+(* in-flight store.  If this holds, no tile is ever left stale.             *)
+(***************************************************************************)
 NoLostTile == dirtyData \subseteq (bits \cup InFlight)
 
-(* Liveness: every obligation is eventually discharged. *)
-AllEventuallyRendered == []( dirtyData /= {} => <>(dirtyData = {}) )
+(***************************************************************************)
+(* EFFICIENCY -- expected to FAIL, and that failure is the real finding.   *)
+(* Every flagged tile actually needs rendering.  Mid-RMW preemption breaks  *)
+(* this: the producer stores back `old | mask`, resurrecting bits the IRQ   *)
+(* just rendered and cleared.  Consequence is redundant conversion work,    *)
+(* not incorrect output.                                                    *)
+(***************************************************************************)
+NoRedundantFlag == bits \subseteq dirtyData
 =============================================================================
