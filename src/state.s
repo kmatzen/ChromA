@@ -252,18 +252,19 @@ AfterLoadState:
 	bl memset32_
 
 	@clear all VRAM packets (Shantae)
+	@sizes must match equates.h: 24 packets * 8 bytes = 192, dirty list 196
 	mov r1,#0
 	ldr r0,=vram_packets_incoming
-	mov r2,#128
+	mov r2,#192
 	bl memset32_
 	ldr r0,=vram_packets_registered_bank0
-	mov r2,#128
+	mov r2,#192
 	bl memset32_
 	ldr r0,=vram_packets_registered_bank1
-	mov r2,#128
+	mov r2,#192
 	bl memset32_
 	ldr r0,=vram_packets_dirty
-	mov r2,#132
+	mov r2,#196
 	bl memset32_
 	
 	@load banks

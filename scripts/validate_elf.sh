@@ -33,7 +33,10 @@ IWRAM_LIMIT=32512  # 32KB minus 256 bytes minimum for stack + IRQ
 IWRAM_STACK=$((32768 - IWRAM_TOTAL))
 
 EWRAM_LIMIT=262144  # 256KB
-VRAM1_LIMIT=4096    # 4KB
+# Must match the vram1 MEMORY region in src/gba_cart_my.ld (LENGTH = 3584).
+# 0x0600F000 + 3584 = 0x0600FE00, which is bank_1 in cache.c -- the GB ROM
+# bank 0 copy. Anything past that overwrites emulated ROM.
+VRAM1_LIMIT=3584
 
 echo "=== Memory Validation ==="
 echo "  IWRAM: code=${IWRAM_CODE} bss=${IWRAM_BSS} total=${IWRAM_TOTAL} stack=${IWRAM_STACK}"

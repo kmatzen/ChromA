@@ -411,6 +411,12 @@ static void RegisterDmaPackets()
 			}
 			else if (in->dest + in->length <= out->dest)
 			{
+				//list full: drop the packet rather than writing past the end.
+				//outList[MAX_PACKETS] aliases the next list in equates.h.
+				if (outCount >= MAX_PACKETS)
+				{
+					goto inserted;
+				}
 				InsertIntoPacketList(outList, outCount, outIndex);
 				outCount++;
 				*out = *in;
@@ -419,9 +425,12 @@ static void RegisterDmaPackets()
 				goto inserted;
 			}
 		}
-		outList[outIndex] = *in;
-		outCount++;
-		StoreDirtyPacket(in);
+		if (outCount < MAX_PACKETS)
+		{
+			outList[outIndex] = *in;
+			outCount++;
+			StoreDirtyPacket(in);
+		}
 	inserted:
 		;
 	}

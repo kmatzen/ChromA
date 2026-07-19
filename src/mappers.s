@@ -136,7 +136,7 @@ MBC2RamEnable:
 @----------------------------------------------------------------------------
 mbc3init:
 @----------------------------------------------------------------------------
-	.word RamEnable,map4567_,mbc3bank,mbc3latchtime
+	.word RamEnable,MBC3map,mbc3bank,mbc3latchtime
 
 	ldr r0,=empty_W					@ Disable RAM = $00
 	str_ r0,writemem_tbl+40
@@ -220,6 +220,13 @@ mbc5init:
 	mov pc,lr
 	.popsection
 @----------------------------------------------------------------------------
+MBC3map:
+@----------------------------------------------------------------------------
+	@7-bit ROM bank; bank 0 selects bank 1 on real MBC3
+	ands r0,r0,#0x7f
+	moveq r0,#1
+	b map4567_
+@----------------------------------------------------------------------------
 MBC5map0:
 @----------------------------------------------------------------------------
 	tst addy,#0x1000
@@ -231,8 +238,9 @@ MBC5map0:
 @----------------------------------------------------------------------------
 MBC5RAMB:
 @----------------------------------------------------------------------------
+	@Full byte is stored, including the rumble bit (bit 3) on rumble carts.
+	@mapAB_ clamps it against rammask, so it cannot escape the RAM window.
 	strb_ r0,mapperdata+4
-	and r0,r0,#0x8
 	b RamSelect
 
 	.pushsection .text
