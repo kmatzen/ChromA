@@ -2400,13 +2400,8 @@ display_frame:	@called at vblank (moved to ROM — runs once per frame)
 
 	bl_long transfer_palette_
 
-	@ No wait needed if gamma is already using the slow path.
-	ldr globalptr,=GLOBAL_PTR_BASE
-	ldrb_ r0,_gammavalue
-	movs r0,r0
-	bne no_bg_wait
-
 	@ No wait needed if SGB mask is active; display_bg will just return.
+	ldr globalptr,=GLOBAL_PTR_BASE
 	ldrb_ r0,sgb_mask
 	movs r0,r0
 	bne no_bg_wait
@@ -2558,26 +2553,9 @@ transfer_palette_:	@moved to ROM — runs once per frame
 	tst r2,#0x80 @screen off?
 	beq_long white_palette
 	
-	ldr r5,=gbc_palette2
+	ldr r5,=pal_before
 	
 	mov r8,#16 @16 palettes
-
-	ldrb_ r1,_gammavalue
-	movs r1,r1   
-	beq nogamma1
-	
-pal_loop1:
-	mov r9,#4
-pal_loop11:
-	bl_long gamma_convert_one
-	
-	subs r9,r9,#1
-	bne pal_loop11
-	add r4,r4,#24
-	subs r8,r8,#1
-	bne pal_loop1
-	b aftergamma
-nogamma1:
 pal_loop2:
 	ldmia r5!,{r0,r1}
 	stmia r4,{r0,r1}
@@ -2683,19 +2661,8 @@ update_the_border_palette:
 	
 	ldr r4,=PALETTE_BASE+32
 	ldr r5,=BORDER_PALETTE
-	
-	mov r9,#64 @64 colors
 
-	ldrb_ r1,_gammavalue
-	movs r1,r1
-	beq 1f
-	
-0:
-	bl_long gamma_convert_one
-	subs r9,r9,#1
-	bne 0b
-	ldmfd sp!,{pc}
-	
+	mov r9,#64 @64 colors
 1:
 	ldr r0,[r5],#4
 	str r0,[r4],#4
@@ -2780,19 +2747,49 @@ ff69_w_tail:
 	ldrb_ r2,scanline
 	cmp r2,#144
 	bxge lr				@ VBlank scanline → skip
-	@ Count visible-scanline palette writes; only activate DMA3 after 10+
-	@ (Normal games: 0-3 tail calls/frame. Hercules: ~143.)
+
+	@ Record palette split if scanline changed since last split
+	ldr r0,=pal_last_split_line
+	ldrb r1,[r0]
+	cmp r1,r2
+	beq ff69_w_no_split			@ same scanline — skip
+	strb r2,[r0]			@ update last split line
+	@ Check split count limit (max 8)
+	ldr r0,=pal_split_count
+	ldrb r1,[r0]
+	cmp r1,#8
+	bge ff69_w_no_split
+	@ Record: save scanline number and BG palette snapshot
+	stmfd sp!,{r2-r9,lr}
+	ldr r3,=pal_split_lines
+	strb r2,[r3,r1]			@ split_lines[count] = scanline
+	ldr r3,=pal_split_palettes
+	add r3,r3,r1,lsl#6		@ &split_palettes[count * 64]
+	ldr r4,=gbc_palette
+	ldmia r4!,{r5-r9,r2}		@ copy 24 bytes
+	stmia r3!,{r5-r9,r2}
+	ldmia r4!,{r5-r9,r2}		@ copy 24 bytes
+	stmia r3!,{r5-r9,r2}
+	ldmia r4!,{r5-r9}		@ copy 16 bytes (total 64)
+	stmia r3!,{r5-r9}		@ (6+6+4 = 16 words = 64 bytes)
+	@ Increment split count
+	ldr r0,=pal_split_count
+	ldrb r1,[r0]
+	add r1,r1,#1
+	strb r1,[r0]
+	ldmfd sp!,{r2-r9,lr}
+ff69_w_no_split:
+
+	@ Count visible-scanline palette writes.
 	ldr r0,=pal_scanline_active
 	ldr r1,[r0]
 	add r1,r1,#1
 	str r1,[r0]
-	cmp r1,#10
-	bxlt lr				@ not enough activity yet → skip fill
 	stmfd sp!,{r0-r6,lr}
 	ldr r0,=pal_dma_buffer
 	add r0,r0,r2,lsl#8		@ buffer[scanline * 256]
 	ldr r2,=gbc_palette
-	mov r3,#8
+	mov r3,#8			@ copy all 8 palettes (unchanged ones still needed in buffer)
 1:	ldr r4,[r2],#4
 	ldr r5,[r2],#4
 	str r4,[r0],#4
@@ -3169,46 +3166,156 @@ end_gba_hdma:
 @ Wrapper around do_gba_hdma that adds mid-frame palette split support.
 @ Placed in .text to avoid IWRAM pressure.
 @----------------------------------------------------------------------------
+@----------------------------------------------------------------------------
+@ Fill all 144 DMA buffer entries with current PALRAM data using doubling DMA.
+@ Step 1: DMA copy PALRAM → entry 0 (64 words, incrementing)
+@ Step 2: CPU copy entry 0 → entry 1 (64 words)
+@ Steps 3-8: DMA double-copy to fill remaining entries
+@ Total: ~36KB via hardware DMA, minimal CPU involvement.
+@----------------------------------------------------------------------------
+fill_dma_buffer_doubling:
+	stmfd sp!,{r0-r9,lr}
+	mov r9,#REG_BASE
+
+	@ Step 1: DMA3 immediate — copy 256 bytes from PALRAM to entry 0
+	ldr r0,=PALETTE_BASE+256
+	str r0,[r9,#REG_DM3SAD]
+	ldr r0,=pal_dma_buffer
+	str r0,[r9,#REG_DM3DAD]
+	ldr r0,=0x84000040		@ 64 words, enable, 32-bit, src inc, dest inc, immediate
+	str r0,[r9,#REG_DM3CNT_L]
+
+	@ Step 2: CPU copy entry 0 → entry 1 (256 bytes = 64 words)
+	ldr r0,=pal_dma_buffer
+	add r1,r0,#256
+	ldmia r0!,{r2-r8,lr}
+	stmia r1!,{r2-r8,lr}
+	ldmia r0!,{r2-r8,lr}
+	stmia r1!,{r2-r8,lr}
+	ldmia r0!,{r2-r8,lr}
+	stmia r1!,{r2-r8,lr}
+	ldmia r0!,{r2-r8,lr}
+	stmia r1!,{r2-r8,lr}
+	ldmia r0!,{r2-r8,lr}
+	stmia r1!,{r2-r8,lr}
+	ldmia r0!,{r2-r8,lr}
+	stmia r1!,{r2-r8,lr}
+	ldmia r0!,{r2-r8,lr}
+	stmia r1!,{r2-r8,lr}
+	ldmia r0!,{r2-r8,lr}
+	stmia r1!,{r2-r8,lr}
+
+	@ Steps 3-8: DMA doubling — src and dest both increment
+	ldr r4,=pal_dma_buffer
+	@ entries 0-1 → 2-3 (128 words)
+	add r0,r4,#0
+	str r0,[r9,#REG_DM3SAD]
+	add r0,r4,#512
+	str r0,[r9,#REG_DM3DAD]
+	ldr r0,=0x84000080		@ 128 words
+	str r0,[r9,#REG_DM3CNT_L]
+	@ entries 0-3 → 4-7 (256 words)
+	add r0,r4,#0
+	str r0,[r9,#REG_DM3SAD]
+	add r0,r4,#1024
+	str r0,[r9,#REG_DM3DAD]
+	ldr r0,=0x84000100		@ 256 words
+	str r0,[r9,#REG_DM3CNT_L]
+	@ entries 0-7 → 8-15 (512 words)
+	add r0,r4,#0
+	str r0,[r9,#REG_DM3SAD]
+	add r0,r4,#2048
+	str r0,[r9,#REG_DM3DAD]
+	ldr r0,=0x84000200		@ 512 words
+	str r0,[r9,#REG_DM3CNT_L]
+	@ entries 0-15 → 16-31 (1024 words)
+	add r0,r4,#0
+	str r0,[r9,#REG_DM3SAD]
+	ldr r0,=256*16
+	add r0,r4,r0
+	str r0,[r9,#REG_DM3DAD]
+	ldr r0,=0x84000400		@ 1024 words
+	str r0,[r9,#REG_DM3CNT_L]
+	@ entries 0-31 → 32-63 (2048 words)
+	add r0,r4,#0
+	str r0,[r9,#REG_DM3SAD]
+	ldr r0,=256*32
+	add r0,r4,r0
+	str r0,[r9,#REG_DM3DAD]
+	ldr r0,=0x84000800		@ 2048 words
+	str r0,[r9,#REG_DM3CNT_L]
+	@ entries 0-63 → 64-127 (4096 words)
+	add r0,r4,#0
+	str r0,[r9,#REG_DM3SAD]
+	ldr r0,=256*64
+	add r0,r4,r0
+	str r0,[r9,#REG_DM3DAD]
+	ldr r0,=0x84001000		@ 4096 words
+	str r0,[r9,#REG_DM3CNT_L]
+	@ entries 0-15 → 128-143 (1024 words, fills remaining 16 entries)
+	add r0,r4,#0
+	str r0,[r9,#REG_DM3SAD]
+	ldr r0,=256*128
+	add r0,r4,r0
+	str r0,[r9,#REG_DM3DAD]
+	ldr r0,=0x84000400		@ 1024 words
+	str r0,[r9,#REG_DM3CNT_L]
+
+	ldmfd sp!,{r0-r9,pc}
+
+@----------------------------------------------------------------------------
 pal_hdma_wrapper:
 	stmfd sp!,{r10,lr}
 	bl_long do_gba_hdma
-	@ Check if mid-frame palette split is active
+	@ Read the per-scanline write counter, then clear it for next frame.
+	@ The `cmp r0,#4` below consumes it -- without this load r0 holds
+	@ whatever do_gba_hdma left behind, so the mode is chosen at random and
+	@ per-scanline games fall back to the flat 1-word refresh.
+	ldr r1,=pal_scanline_active
+	ldr r0,[r1]
+	mov r2,#0
+	str r2,[r1]
+	@ DMA3 always armed, counter-based mode:
+	@ ≤4: 1-word PALRAM self-refresh (no-op, fits in HBlank)
+	@ >4: 64-word per-scanline buffer (EWRAM, only for games that tolerate it)
+	@ 64-word EWRAM DMA overruns HBlank for normal games — the counter
+	@ correctly discriminates per-scanline games that tolerate this.
+	cmp r0,#4
+	mov r2,#REG_BASE
+	bgt pal_hdma_perscanline
+	@ VCount splits patch PALRAM for mid-frame palette changes
 	ldr r0,=pal_split_count_screen
 	ldrb r0,[r0]
 	cmp r0,#0
-	beq pal_hdma_done
-	@ Start at split index 0
+	beq pal_hdma_normal
 	ldr r1,=pal_vcount_index
-	mov r2,#0
-	strb r2,[r1]
-	@ Set VCount to fire at the first split scanline
-	ldr r2,=pal_split_lines
-	ldrb r0,[r2]
+	mov r3,#0
+	strb r3,[r1]
+	ldr r3,=pal_split_lines
+	ldrb r0,[r3]
 	add r0,r0,#SCREEN_Y_START
 	ldr r1,=pal_vcount_handler
 	ldr r3,=vcountfptr
 	str r1,[r3]
-	mov r2,#REG_BASE
-	mov r0,r0,lsl#8		@ VCount trigger value in bits 8-15
-	orr r0,r0,#0x28		@ enable vblank+vcount interrupts
+	mov r0,r0,lsl#8
+	orr r0,r0,#0x28
 	strh r0,[r2,#REG_DISPSTAT]
-pal_hdma_done:
-	@ Check for per-scanline DMA3 mode, then clear flag for next frame
-	@ (FF69_W tail re-sets it during the GBC frame if palette writes occur)
-	ldr r1,=pal_scanline_active
-	ldr r0,[r1]
-	mov r2,#0
-	str r2,[r1]			@ clear for next frame
-	cmp r0,#10
-	ble pal_hdma_no_dma3
-	mov r2,#REG_BASE
+pal_hdma_normal:
+	@ 1-word PALRAM self-refresh
+	ldr r0,=PALETTE_BASE+256
+	str r0,[r2,#REG_DM3SAD]
+	str r0,[r2,#REG_DM3DAD]
+	ldr r0,=0xA7600001		@ 1 word, 32-bit, HBlank repeat, src fixed, dest reload
+	str r0,[r2,#REG_DM3CNT_L]
+	ldmfd sp!,{r10,pc}
+pal_hdma_perscanline:
+	@ 64-word per-scanline buffer
 	ldr r0,=pal_dma_buffer
 	str r0,[r2,#REG_DM3SAD]
 	ldr r0,=PALETTE_BASE+256
 	str r0,[r2,#REG_DM3DAD]
-	ldr r0,=0xA6600040		@ 64 words, 32-bit, HBlank repeat, dest reload
+	ldr r0,=0xA6600040		@ 64 words, 32-bit, HBlank repeat, src inc, dest reload
 	str r0,[r2,#REG_DM3CNT_L]
-pal_hdma_no_dma3:
 	ldmfd sp!,{r10,pc}
 
 @----------------------------------------------------------------------------
@@ -3426,26 +3533,9 @@ newframe_vblank:	@called at line 144	(??? safe to use)
 	movle r2,r0
 	ldr r1,=pal_split_count_screen
 	strb r2,[r1]
-	@ DMA3 per-scanline mode: activate if >16 changes, stay active until
-	@ screen turns off (lcdctrl bit 7 = 0) to avoid flicker
-	ldr r1,=pal_scanline_active
-	cmp r0,#16
-	movgt r2,#1
-	bgt 1f
-	ldr r2,[r1]			@ keep current state (buffer data persists)
-	ldrb_ r0,lcdctrl
-	tst r0,#0x80
-	moveq r2,#0			@ deactivate only when screen off
-1:	str r2,[r1]
-
-	@ Apply gamma correction to split palettes if needed
-	cmp r0,#0
-	beq no_split_gamma
-	ldrb_ r1,_gammavalue
-	cmp r1,#0
-	beq no_split_gamma
-	bl_long gamma_correct_splits
-no_split_gamma:
+	@ pal_scanline_active is a simple flag: set by ff69_w_tail during
+	@ visible scanlines, cleared by pal_hdma_wrapper at VBlank.
+	@ No persistence needed — the flag naturally reflects each frame.
 
 	@swap "big" buffer
 	ldr_ r0,bigbufferbase

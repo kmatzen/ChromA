@@ -109,6 +109,23 @@ line0x:
 	strb r0,[r1]
 	ldr r1,=pal_split_count_screen
 	strb r0,[r1]
+	ldr r1,=pal_last_split_line
+	mov r0,#0xFF
+	strb r0,[r1]			@ no split recorded yet
+
+	@ Snapshot full palette (BG+OBJ, 128 bytes) as pal_before baseline
+	stmfd sp!,{r2-r9}
+	ldr r0,=gbc_palette
+	ldr r1,=pal_before
+	ldmia r0!,{r2-r9}
+	stmia r1!,{r2-r9}
+	ldmia r0!,{r2-r9}
+	stmia r1!,{r2-r9}
+	ldmia r0!,{r2-r9}
+	stmia r1!,{r2-r9}
+	ldmia r0!,{r2-r9}
+	stmia r1!,{r2-r9}		@ 128 bytes copied
+	ldmfd sp!,{r2-r9}
 
 	@now do double speed vblank stuff:
 	ldr_ r0,doubletimer_
@@ -150,20 +167,13 @@ line1_to_71: @------------------------
 	ldrb_ r1,scanline
 	add r1,r1,#1
 	strb_ r1,scanline
+
 	cmp r1,#75		@was 71
 	ldrmi_ pc,scanlinehook
 @--------------------------------------------- between 71 and 72
 
 	ldrb_ r0,lcdctrl
 	strb_ r0,lcdctrl0midframe		@Chase HQ likes this
-	
-	ldrb_ r0,sgb_mask
-	movs r0,r0
-	bleq_long copy_gbc_palette
-	
-	@@@
-	@@@bl gbc_chr_update
-	@@@
 
 	adr addy,line72_to_143
 	str_ addy,nexttimeout

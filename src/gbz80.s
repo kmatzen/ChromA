@@ -2953,7 +2953,7 @@ CANARY2:	.skip 4
  .global pal_after
  .global pal_after_gba
 gbc_palette2:	.skip 128	@ moved to EWRAM (accessed once/frame)
-pal_before:	.skip 64	@ BG palette at frame start
+pal_before:	.skip 128	@ full palette (BG+OBJ) at frame start
 pal_after:	.skip 64	@ BG palette after mid-frame change
 pal_after_gba:	.skip 64	@ gamma-corrected pal_after for VCount handler
 
@@ -2964,6 +2964,8 @@ pal_after_gba:	.skip 64	@ gamma-corrected pal_after for VCount handler
  .global pal_vcount_index
 pal_split_count:	.skip 1		@ number of palette splits this frame
 pal_split_count_screen:	.skip 1		@ double-buffered split count for display
+ .global pal_last_split_line
+pal_last_split_line:	.skip 1		@ scanline of most recent split (0xFF = none)
 pal_vcount_index:	.skip 1		@ current split index during VCount chain
  .skip 1				@ padding for alignment
 pal_split_lines:	.skip 8		@ scanline number for each split (up to 8)
@@ -2971,8 +2973,11 @@ pal_split_palettes:	.skip 64*8	@ BG palette snapshot for each split (64 bytes ×
 
  .global pal_scanline_active
  .global pal_dma_buffer
+ .global pal_dma_uniform
  .align 2
 pal_scanline_active:	.skip 4		@ nonzero = DMA3 per-scanline mode active
+ .align 2
+pal_dma_uniform:	.skip 256	@ single-scanline palette for DMA3 fixed-source mode
 pal_dma_buffer:		.skip 256*144	@ per-scanline PALRAM data for HBlank DMA3
 
 	@.end
