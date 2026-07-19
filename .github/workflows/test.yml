@@ -18,7 +18,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     container:
       image: devkitpro/devkitarm:20260221
 
@@ -38,7 +38,7 @@ jobs:
 
   test:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
     - uses: actions/checkout@v4
@@ -95,7 +95,7 @@ jobs:
 
   test-full:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     # Runs on main pushes AND on same-repo PRs.  Fork PRs are excluded because
     # GitHub withholds secrets from them, so TEST_ROMS_PAT would be empty and
     # the private ROM download would fail for reasons unrelated to the change.
@@ -182,7 +182,7 @@ jobs:
 
   release:
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
@@ -212,7 +212,7 @@ jobs:
   deploy-demo:
     needs: [test, test-full]
     if: always() && needs.test.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     permissions:
       pages: write
       id-token: write
