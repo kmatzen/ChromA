@@ -6,11 +6,21 @@ on:
   pull_request:
     branches: [main]
 
+# Pinned toolchain.  Both of these were floating refs (devkitarm:latest and
+# mgba master, re-pulled every run), which made CI non-reproducible: the
+# April 2026 known-green tree fails today with an identical set of visual
+# failures, purely from toolchain drift.  devkitarm:latest was retagged
+# 2026-06-10; 20260221 is the tag that was 'latest' when these baselines
+# were generated.  Bump these deliberately, and regenerate baselines in the
+# same change.
+env:
+  MGBA_PIN: 81fa2e982c107a8d337e46cf858aaf99fe4d2e49  # 2026-04-04
+
 jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: devkitpro/devkitarm:latest
+      image: devkitpro/devkitarm:20260221
 
     steps:
     - uses: actions/checkout@v4
@@ -47,7 +57,8 @@ jobs:
 
     - name: Build mGBA library
       run: |
-        git clone --depth 1 https://github.com/mgba-emu/mgba.git /tmp/mgba-build
+        git clone https://github.com/mgba-emu/mgba.git /tmp/mgba-build
+        git -C /tmp/mgba-build checkout $MGBA_PIN
         mkdir -p /tmp/mgba-build/build
         cd /tmp/mgba-build/build
         cmake .. -DBUILD_QT=OFF -DBUILD_SDL=OFF \
@@ -115,7 +126,8 @@ jobs:
 
     - name: Build mGBA library
       run: |
-        git clone --depth 1 https://github.com/mgba-emu/mgba.git /tmp/mgba-build
+        git clone https://github.com/mgba-emu/mgba.git /tmp/mgba-build
+        git -C /tmp/mgba-build checkout $MGBA_PIN
         mkdir -p /tmp/mgba-build/build
         cd /tmp/mgba-build/build
         cmake .. -DBUILD_QT=OFF -DBUILD_SDL=OFF \
