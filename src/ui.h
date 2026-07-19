@@ -8,7 +8,7 @@ extern int selected;//selected menuitem.  used by all menus.
 extern int mainmenuitems;//? or CARTMENUITEMS, depending on whether saving is allowed
 extern u32 oldkey;//init this before using getmenuinput
 
-extern char str[32];
+extern char str[48];
 
 
 u32 getmenuinput(int menuitems);
