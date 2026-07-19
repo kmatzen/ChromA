@@ -38,6 +38,7 @@ COMPILER = SCRIPT_DIR / "goomba_compile.py"
 EMULATOR = PROJECT_DIR / "chroma.gba"
 CONTROL_ROM = SCRIPT_DIR / "nexttimeout_control.gb"
 HAZARD_ROM = SCRIPT_DIR / "nexttimeout_nesting_test.gb"
+EIDW_ROM = SCRIPT_DIR / "ei_dispatch_window_test.gb"
 
 PHASES = {
     0x00: "never started (SRAM not written)",
@@ -95,9 +96,33 @@ def evaluate(res):
     return bad
 
 
+def evaluate_eidw(res):
+    """Failures for the EI-inside-dispatch-window ROM (different layout).
+
+    The ROM spams `ei / nop` with a timer IRQ pending at nearly every
+    scanline boundary.  Every SM83 instruction duration is a multiple of
+    4 T-cycles, so any boundary overshoot is <= 8 cycles and the
+    checkMasterIRQ_minus12 window opens on every pending boundary -- a
+    deferring EI lands inside it within scanlines.  If _FB saves
+    nexttimeout (== minus12) into nexttimeout_alt there, the parked
+    scanline handler is lost, minus12 becomes self-referential, and LY
+    freezes.
+    """
+    bad = []
+    if res[15] != 0xFF:
+        bad.append(f"EIDW ROM did not reach the end (stopped at phase 0x{res[0]:02X})")
+    if res[2] != 0xAA:
+        bad.append("EIDW: LY stopped advancing -- EI inside the delayed-IRQ "
+                   "dispatch window wedged the scanline state machine")
+    if res[1] == 0:
+        bad.append("EIDW: timer ISR never fired")
+    return bad
+
+
 def main():
     for path, what in ((RUNNER, "mgba_runner"), (EMULATOR, "chroma.gba"),
-                       (CONTROL_ROM, CONTROL_ROM.name), (HAZARD_ROM, HAZARD_ROM.name)):
+                       (CONTROL_ROM, CONTROL_ROM.name), (HAZARD_ROM, HAZARD_ROM.name),
+                       (EIDW_ROM, EIDW_ROM.name)):
         if not path.exists():
             print(f"ERROR: {what} not found at {path}")
             sys.exit(2)
@@ -125,16 +150,30 @@ def main():
     print()
 
     hazard_bad = evaluate(hazard)
-    if not hazard_bad:
-        print("PASS: both unguarded nexttimeout_alt pairs survived")
+
+    eidw, err = run_rom(EIDW_ROM)
+    if err:
+        print(f"ERROR: EI-dispatch-window ROM: {err}")
+        sys.exit(2)
+    print(f"eidw    (ei/nop spam):   phase=0x{eidw[0]:02X} isr={eidw[1]} "
+          f"result=0x{eidw[2]:02X} LY {eidw[4]}->{eidw[5]} sentinel=0x{eidw[15]:02X}")
+    print()
+
+    eidw_bad = evaluate_eidw(eidw)
+
+    if not hazard_bad and not eidw_bad:
+        print("PASS: all nexttimeout_alt hazard pairs survived")
         sys.exit(0)
 
     for b in hazard_bad:
         print(f"FAIL: {b}")
-    print()
-    print("Control passed and the hazard ROM differs by exactly one NOP, so the")
-    print("failure is attributable to the instruction landing inside the EI")
-    print("deferral window while nexttimeout_alt is live.")
+    if hazard_bad:
+        print()
+        print("Control passed and the hazard ROM differs by exactly one NOP, so the")
+        print("failure is attributable to the instruction landing inside the EI")
+        print("deferral window while nexttimeout_alt is live.")
+    for b in eidw_bad:
+        print(f"FAIL: {b}")
     sys.exit(1)
 
 
