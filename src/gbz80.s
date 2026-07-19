@@ -1683,7 +1683,6 @@ _D9:@	RETI, return and enable interrupt (immediate, no delay)
 	sub cycles,cycles,#16*CYCLE
 	b checkIRQ
 @----------------------------------------------------------------------------
-	.global ei_finish
 _FB:@	EI, enable interrupt (delayed: takes effect after next instruction)
 @----------------------------------------------------------------------------
 	@ Real hardware: EI enables interrupts AFTER the next instruction.
@@ -1711,16 +1710,7 @@ _FB:@	EI, enable interrupt (delayed: takes effect after next instruction)
 	ldrpl pc,[gb_optbl,r0,lsl#2]
 	ldr_ pc,nexttimeout
 ei_finish:
-	@Restore the saved cycle COUNT but keep the flag bits as they stand now.
-	@The deferred instruction may have changed them -- notably FF40_W sets
-	@CYC_LCD_ENABLED in cycles when the LCD is switched on, and restoring
-	@the pre-EI word wholesale would clear it again and stall the scanline
-	@state machine.  Subtracting whole CYCLEs never disturbs the low bits,
-	@so cycles & CYC_MASK is still the live flag set here.
-	ldmfd sp!,{r0}
-	and cycles,cycles,#CYC_MASK
-	bic r0,r0,#CYC_MASK
-	orr cycles,cycles,r0
+	ldmfd sp!,{cycles}
 	orr cycles,cycles,#CYC_IE
 	ldr_ r0,nexttimeout_alt
 	str_ r0,nexttimeout
@@ -2597,7 +2587,6 @@ cpu_reset:
 @	str_ r1,gb_ime		@disable all IRQ
 	strb_ r1,gb_if
 	strb_ r1,gb_ie
-	str_ r1,nexttimeout_alt	@release the nexttimeout hijack slot
 	str_ r1,dividereg
 	str_ r1,timercounter	@reset timers
 	str_ r1,timermodulo	@reset timers
