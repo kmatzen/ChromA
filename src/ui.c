@@ -17,7 +17,10 @@ void loadstate(int foo, void* dest){}
 void quicksave(){} void quickload(){}
 #endif
 
-EWRAM_BSS char str[32]; //ZOMG global variable!
+//48: "Palette: " + the longest paltxt entries (28-29 chars) need 38-40
+//bytes; 32 overflowed into the adjacent EWRAM_BSS globals every time
+//the settings menu drew those palette names.
+EWRAM_BSS char str[48]; //ZOMG global variable!
 int print_2_func(int row, const char *src1, const char *src2);
 int print_1_func(int row, const char *src1, const char *src2);
 int strmerge_str(int unused, const char *src1, const char *src2);

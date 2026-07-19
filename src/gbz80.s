@@ -258,8 +258,11 @@ _18x:@	JR *	relative jump
 _18x_modify:
 	cmp r0,#-4
 	bleq speedhack_check
-fetch8:
-	fetch 8
+	@Unconditional JR is 12 cycles.  This variant replaces op_table[0x18]
+	@globally when a JR speedhack installs, so `fetch 8` here silently
+	@re-introduced the JR timing bug (KNOWN_ISSUES.md) for every JR in
+	@the game.  validate_timing.py only checks the canonical _18 label.
+	fetch 12
 #endif
 @----------------------------------------------------------------------------
 _19:@	ADD HL,DE
