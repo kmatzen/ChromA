@@ -82,6 +82,11 @@ jobs:
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
 
+    - name: Run nexttimeout_alt nesting test
+      run: python3 test_roms/test_nexttimeout_nesting.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
   test-full:
     needs: build
     runs-on: ubuntu-latest
