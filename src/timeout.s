@@ -376,26 +376,15 @@ immediate_check_irq_2:
 	cmp r0,r1
 	bxeq lr
 	sub cycles,cycles,#1024*CYCLE  @this just makes it go somewhere else instead of the next instruction
-
-	@Chain rather than share: save into our OWN slot.  nexttimeout may be
-	@ei_finish (an EI deferral is live), and that deferral's real scanline
-	@state is parked in nexttimeout_alt -- writing there would destroy it,
-	@leaving nexttimeout self-referential and the scanline machine dead.
-	@Saving here means no_more_irq_hack hands control back to ei_finish,
-	@which then restores the real state.  Preserves the original dispatch
-	@timing, which games depend on.
-	@Kept outside the globalptr block: adding a word there shifts xgb_ram
-	@from 0x25c0 to 0x25c4, which is not an encodable ARM immediate.
-	ldr r1,=nexttimeout_alt2
-	str r0,[r1]
+	
+	str_ r0,nexttimeout_alt
 	ldr r1,=no_more_irq_hack
 	str_ r1,nexttimeout
 	bx lr
 
 no_more_irq_hack:
 	add cycles,cycles,#1024*CYCLE
-	ldr r1,=nexttimeout_alt2
-	ldr r0,[r1]
+	ldr_ r0,nexttimeout_alt
 	str_ r0,nexttimeout
 	b_long checkIRQ
 	.popsection
@@ -558,11 +547,11 @@ checkIRQDelayed:
 	subs r12,cycles,r12
 	bmi irqGBZ80_nothalt
 	mov cycles,r12
-
+	
 	ldrb r0,lcdstat
 	orr r0,r0,#2
 	strb r0,lcdstat
-
+	
 	ldr_ r0,nexttimeout
 	str_ r0,nexttimeout_alt
 	adr r0,checkMasterIRQ_minus12
