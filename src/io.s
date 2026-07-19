@@ -1268,7 +1268,10 @@ _FF07W:@		TAC - Timer Control
 @----------------------------------------------------------------------------
 _FF0FW:
 @----------------------------------------------------------------------------
-	@store interrupt flags
+	@store interrupt flags -- only 5 exist.  Storing all 8 bits let
+	@IE&IF match on the phantom upper bits (checkIRQ has no 0x1F mask)
+	@and dispatch a spurious interrupt through the vector-0x40 fallback.
+	and r0,r0,#0x1F
 	strb_ r0,gb_if
 	b_long immediate_check_irq
 @----------------------------------------------------------------------------
@@ -1342,6 +1345,7 @@ _FF07R:@		TAC - Timer Control
 _FF0FR:
 @----------------------------------------------------------------------------
 	ldrb_ r0,gb_if
+	orr r0,r0,#0xE0		@upper 3 bits of IF always read 1 on hardware
 	mov pc,lr
 
 FF51_R:	@HDMA1
