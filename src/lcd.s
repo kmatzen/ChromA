@@ -3267,8 +3267,12 @@ fill_dma_buffer_doubling:
 pal_hdma_wrapper:
 	stmfd sp!,{r10,lr}
 	bl_long do_gba_hdma
-	@ Clear per-scanline write counter for next frame
+	@ Read the per-scanline write counter, then clear it for next frame.
+	@ The `cmp r0,#4` below consumes it -- without this load r0 holds
+	@ whatever do_gba_hdma left behind, so the mode is chosen at random and
+	@ per-scanline games fall back to the flat 1-word refresh.
 	ldr r1,=pal_scanline_active
+	ldr r0,[r1]
 	mov r2,#0
 	str r2,[r1]
 	@ DMA3 always armed, counter-based mode:
