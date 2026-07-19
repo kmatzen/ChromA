@@ -85,7 +85,17 @@ jobs:
   test-full:
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Runs on main pushes AND on same-repo PRs.  Fork PRs are excluded because
+    # GitHub withholds secrets from them, so TEST_ROMS_PAT would be empty and
+    # the private ROM download would fail for reasons unrelated to the change.
+    #
+    # This exists because the visual and menu suites only ran after merge,
+    # which let a timing regression reach main across three red pushes before
+    # anyone could see it (see #29 / #30).
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
     environment: test-roms
 
     steps:
