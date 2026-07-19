@@ -151,6 +151,14 @@ RECENT_TILENUM_SIZE = 128
  ewram_canary_1 = Next - 4
  Next = ewram_canary_1
 
+@Second nexttimeout save slot, owned by immediate_check_irq_2 alone so it can
+@chain over a live EI deferral instead of clobbering nexttimeout_alt.
+@Deliberately an absolute EWRAM address rather than a globalptr slot: adding a
+@word to that block shifts xgb_ram from 0x25c0 to 0x25c4, which is not an
+@encodable ARM immediate.  It must be RAM -- .text is ROM on a cart build.
+ nexttimeout_alt2 = Next - 4
+ Next = nexttimeout_alt2
+
 
 @ _FF41_PC_4 = Next - 168
 @ Next = _FF41_PC_4
