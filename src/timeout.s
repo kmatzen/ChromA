@@ -408,6 +408,16 @@ default_scanlinehook_nohblank:
     ldrb_ r1,dma_blocks_total
     cmp r1,#0
     beq _checkScanlineIRQ  @ If not mid-hdma, continue normal execution.
+    @ HBlank DMA only transfers at HBlanks of visible lines with the LCD on.
+    @ The hook runs after scanline is incremented, so scanline==N here means
+    @ line N-1 just ended: its HBlank is visible for N-1 in [0,143], i.e.
+    @ scanline in [1,144].  VBlank lines and LCD-off get no blocks.
+    tst cycles,#CYC_LCD_ENABLED
+    beq _checkScanlineIRQ
+    ldrb_ r1,scanline
+    sub r1,r1,#1
+    cmp r1,#144
+    bhs _checkScanlineIRQ
     @ Else, fall through to tick_hdma
 tick_hdma:
     @ Transfer one 16-byte block per HBlank (matching real GBC behavior)

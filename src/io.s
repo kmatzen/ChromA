@@ -781,11 +781,11 @@ FF55_W:	@HDMA5
     cmp r1,#0
     beq general_dma
 cancel_hdma:
-    @ Elapsed blocks already transferred per-HBlank, just clear counters
+    @ Terminate the HBlank DMA but keep dma_blocks_remaining: hardware FF55
+    @ reads back 0x80 | (remaining-1) after a cancel so games can restart
+    @ from where they stopped.  start_hdma rewrites both counters anyway.
     ldr r1,=_dma_blocks_total
     mov r2,#0
-    strb r2,[r1]
-    ldr r1,=_dma_blocks_remaining
     strb r2,[r1]
     bx lr
 general_dma:
@@ -1357,8 +1357,14 @@ FF54_R:	@HDMA4
 	ldrb_ r0,dma_dest
 	mov pc,lr
 FF55_R:	@HDMA5
+    @ Active: bit7=0, low bits = remaining-1.  Inactive (completed or
+    @ cancelled): bit7=1 — completed reads 0xFF (remaining==0 → -1),
+    @ cancelled reads 0x80 | (remaining-1).
     ldrb_ r0,dma_blocks_remaining
+    ldrb_ r1,dma_blocks_total
+    cmp r1,#0
     sub r0,r0,#1
+    orreq r0,r0,#0x80
 	mov pc,lr
 
 
