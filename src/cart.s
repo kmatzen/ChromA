@@ -228,6 +228,13 @@ loadcart: @called from C:  r0=rom number, r1=emuflags
 	ldrb r1,[r3,#0x148]	@get size in 32kByte chunks.
 	mov r1,r2,lsl r1
 	sub r1,r1,#1
+	@INSTANT_PAGES has only 256 entries (equates.h: Next-1024), and the TRIM
+	@header offset table is 256 entries too, so bank index (rommask>>14) must
+	@stay <=255. Clamp to 4MB: >4MB carts alias banks instead of indexing
+	@past the end of the table and loading an arbitrary word as the ROM base.
+	cmp r1,#0x400000
+	movcs r1,#0x400000
+	subcs r1,r1,#1
 	str_ r1,rommask		@rommask=romsize-1
 	
 	ldrb r0,[r3,#0x147]
@@ -723,11 +730,16 @@ flush:		@update gb_pc & lastbank
 
 @----------------------------------------------------------------------------
 mapAB_:
+	ldr_ r2,rammask
+	@Clamp the bank to the cart's RAM size before storing it. sram_W2 uses
+	@srambank unmasked for write-through to real GBA cart SRAM, so an
+	@out-of-range bank (e.g. MBC5 with the rumble bit in bit 3) would write
+	@outside the SRAM window while reads stayed masked.
+	@bank & (rammask>>13) == ((bank<<13) & rammask) >> 13
+	and r0,r0,r2,lsr#13
 	str_ r0,srambank
 	ldr r1,=XGB_SRAM-0xA000
-	ldr_ r2,rammask
-	and r0,r2,r0,lsl#13
-	add r0,r1,r0
+	add r0,r1,r0,lsl#13
 	str_ r0,memmap_tbl+40
 	str_ r0,memmap_tbl+44
 	b flush
