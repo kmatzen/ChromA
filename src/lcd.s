@@ -3845,17 +3845,31 @@ FF40W_entry:
 	and r2,r2,r0
 	tst r2,#0x80		@Is LCD turned on?
 	beq 0f
+	@If the EI deferral is live, nexttimeout holds ei_finish and the real
+	@scanline state is saved in nexttimeout_alt.  Overwriting nexttimeout
+	@here would strand ei_finish: CYC_IE would never be set (the EI is
+	@silently lost) and its stack push orphaned.  Update the saved copy
+	@instead.  Tested against ei_finish specifically rather than the shared
+	@sentinel, so this cannot misfire when some other hijack is live.
+	ldr_ r3,nexttimeout
+	ldr r1,=ei_finish
+	cmp r3,r1
 #if EARLY_LINE_0
 	ldr r2,=toLineZero
-	str_ r2,nexttimeout
-	mov r2,#0
-	strb_ r2,scanline
 #else
 	ldr r2,=line145_to_end
-	str_ r2,nexttimeout
-	mov r2,#152
-	strb_ r2,scanline
 #endif
+	bne 4f
+	str_ r2,nexttimeout_alt
+	b 5f
+4:	str_ r2,nexttimeout
+5:
+#if EARLY_LINE_0
+	mov r2,#0
+#else
+	mov r2,#152
+#endif
+	strb_ r2,scanline
 
 	and cycles,cycles,#CYC_MASK
 0:	
