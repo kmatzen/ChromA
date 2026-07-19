@@ -36,6 +36,16 @@ jobs:
         name: chroma.gba
         path: chroma.gba
 
+    # test_menu.py reads symbol addresses from this map.  Without it, it
+    # silently falls back to hardcoded defaults that go stale the moment the
+    # memory layout shifts -- 12 of 13 were wrong, so the menu tests were
+    # poking unrelated memory and reporting behavioural failures.
+    - name: Upload ELF map
+      uses: actions/upload-artifact@v4
+      with:
+        name: chroma.elf.map
+        path: build/chroma.elf.map
+
   test:
     needs: build
     runs-on: ubuntu-latest
@@ -47,6 +57,12 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: chroma.gba
+
+    - name: Download ELF map
+      uses: actions/download-artifact@v4
+      with:
+        name: chroma.elf.map
+        path: build
 
     - name: Install dependencies
       run: |
@@ -121,6 +137,12 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: chroma.gba
+
+    - name: Download ELF map
+      uses: actions/download-artifact@v4
+      with:
+        name: chroma.elf.map
+        path: build
 
     - name: Install dependencies
       run: |
