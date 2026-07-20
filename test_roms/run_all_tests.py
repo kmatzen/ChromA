@@ -58,7 +58,15 @@ def main():
     )
     results.append(("RST timing", ok))
 
-    # 4. SRAM write-through tests (slow — involves multiple ROM runs)
+    # 4. MBC2 SRAM echo/write-through regression (issue #47) — fast, custom ROM
+    ok, out = run_suite(
+        "MBC2 SRAM Write-Through Test",
+        [sys.executable, str(SCRIPT_DIR / "test_mbc2_sram.py")],
+        timeout=180
+    )
+    results.append(("MBC2 write-through", ok))
+
+    # 5. SRAM write-through tests (slow — involves multiple ROM runs)
     if not quick:
         ok, out = run_suite(
             "SRAM Write-Through Tests",
