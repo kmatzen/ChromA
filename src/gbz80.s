@@ -1020,8 +1020,22 @@ _76:@	HALT, wait for interrupt.
 	@orr cycles,cycles,#CYC_HALT
 	fetch 4
 _noHalt:
-	sub cycles,cycles,#4*CYCLE
-	b checkMasterIRQ
+	@With IME set, the pending interrupt dispatches with the return
+	@address already past the HALT (hardware-correct).
+	tst cycles,#CYC_IE
+	subne cycles,cycles,#4*CYCLE
+	bne checkMasterIRQ
+	@IME clear + pending: the SM83 HALT bug (DMG and CGB alike) -- PC
+	@fails to increment, so the byte after HALT is read twice.  Dispatch
+	@it WITHOUT consuming it: a multi-byte instruction then re-reads its
+	@own opcode byte as the first operand (76 3E 12 -> LD A,$3E), and a
+	@single-byte instruction runs again on the next fetch -- exactly the
+	@hardware behavior.  If the scanline budget expires right here, the
+	@byte executes once instead of twice; harmless corner.
+	subs cycles,cycles,#4*CYCLE
+	ldrplb r0,[gb_pc]
+	ldrpl pc,[gb_optbl,r0,lsl#2]
+	ldr_ pc,nexttimeout
 @----------------------------------------------------------------------------
 _77:@	LD (HL),A
 @----------------------------------------------------------------------------

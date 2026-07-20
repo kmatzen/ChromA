@@ -109,6 +109,13 @@ jobs:
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
 
+    # The visual halt_bug_test entry compares a blank screen and passes
+    # regardless of behavior; this checks the ROM's SRAM result protocol.
+    - name: Run HALT bug behavioral test
+      run: python3 test_roms/test_halt_bug.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
     - name: Run nexttimeout_alt nesting test
       run: python3 test_roms/test_nexttimeout_nesting.py
       env:
