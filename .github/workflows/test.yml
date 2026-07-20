@@ -114,6 +114,11 @@ jobs:
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
 
+    - name: Run MBC2 SRAM write-through test
+      run: python3 test_roms/test_mbc2_sram.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
   test-full:
     needs: build
     runs-on: ubuntu-latest
