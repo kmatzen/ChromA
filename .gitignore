@@ -6,4 +6,5 @@ SymbolTable.txt
 *.elf
 build
 test_roms/mgba_runner
+test_roms/unit/test_rle
 !docs/chroma.gba

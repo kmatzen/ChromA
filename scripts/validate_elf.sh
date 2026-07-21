@@ -13,15 +13,34 @@ fi
 SIZE=$(which arm-none-eabi-size 2>/dev/null || echo "${DEVKITARM}/bin/arm-none-eabi-size")
 OBJDUMP=$(which arm-none-eabi-objdump 2>/dev/null || echo "${DEVKITARM}/bin/arm-none-eabi-objdump")
 
+if [ ! -x "$OBJDUMP" ]; then
+    echo "ERROR: objdump not found or not executable: $OBJDUMP"
+    exit 1
+fi
+
 ERRORS=0
 
-# Parse section sizes
-eval $($OBJDUMP -h "$ELF" | awk '
+# Parse section sizes. Capture objdump's output (and exit status) separately
+# from the awk parse -- piping straight into `eval $(...)` let a failing or
+# missing objdump silently fall through: `set -e` doesn't see the failure
+# (it's masked by awk's own zero exit), the awk patterns then match nothing,
+# and every size variable below defaulted to 0, so every check passed
+# vacuously.
+OBJDUMP_OUT=$($OBJDUMP -h "$ELF") || { echo "ERROR: objdump failed on $ELF"; exit 1; }
+
+eval $(echo "$OBJDUMP_OUT" | awk '
     /\.iwram / && !/iwram[0-9]/ { printf "IWRAM_CODE=0x%s\n", $3 }
     /\.bss /                     { printf "IWRAM_BSS=0x%s\n", $3 }
     /\.sbss /                    { printf "EWRAM_BSS=0x%s\n", $3 }
     /\.vram1 /                   { printf "VRAM1_CODE=0x%s\n", $3 }
 ')
+
+for var in IWRAM_CODE IWRAM_BSS EWRAM_BSS VRAM1_CODE; do
+    if [ -z "$(eval echo \$$var)" ]; then
+        echo "ERROR: failed to find section for $var in objdump output -- ELF layout changed?"
+        exit 1
+    fi
+done
 
 IWRAM_CODE=$((IWRAM_CODE))
 IWRAM_BSS=$((IWRAM_BSS))
