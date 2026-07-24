@@ -128,11 +128,13 @@ def main():
 
     # Compare
     errors = []
+    unchecked = []
     checked = 0
     for op in sorted(EXPECTED):
         exp = EXPECTED[op]
         act = actual.get(op)
         if act is None:
+            unchecked.append(op)
             continue
         checked += 1
         if act != exp:
@@ -140,6 +142,18 @@ def main():
 
     print(f"=== Instruction Timing Validation ===")
     print(f"  Checked {checked}/{len(EXPECTED)} opcodes")
+    if unchecked:
+        # These opcodes were silently dropped from the report entirely --
+        # a parsing regression (e.g. a source file rename, or the label
+        # format in gbz80.s changing) would shrink `checked` without a
+        # trace, so a build could keep reporting "All timings correct"
+        # while covering fewer and fewer opcodes. Surface what's excluded.
+        print(f"  {len(unchecked)} opcode(s) not found in source (excluded from validation):")
+        print("    " + ", ".join(f"0x{op:02X}" for op in unchecked))
+
+    if checked == 0:
+        print("  ERROR: parsed zero opcode fetch costs -- source files missing or format changed?")
+        sys.exit(1)
 
     if errors:
         print(f"  FOUND {len(errors)} TIMING ERROR(S):")
@@ -147,7 +161,7 @@ def main():
             print(f"    0x{op:02X}: expected {exp}, actual {act} ({act-exp:+d} cycles)")
         sys.exit(1)
     else:
-        print(f"  All timings correct")
+        print(f"  All checked timings correct")
 
 
 if __name__ == '__main__':
