@@ -1,4 +1,12 @@
 {
+    "nexttimeout_control": {
+        "description": "nexttimeout_alt nesting control ROM - verified via SRAM reads in test_nexttimeout_nesting.py, not a screenshot",
+        "skip_visual": true
+    },
+    "nexttimeout_nesting_test": {
+        "description": "nexttimeout_alt nesting hazard ROM - verified via SRAM reads in test_nexttimeout_nesting.py, not a screenshot",
+        "skip_visual": true
+    },
     "ei_delay_test": {
         "description": "EI delay test - verifies EI enables interrupts after next instruction",
         "frames": 600,

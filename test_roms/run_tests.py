@@ -109,6 +109,14 @@ def discover_tests():
         for rom in SCRIPT_DIR.glob(ext):
             name = rom.stem
             test_cfg = config.get(name, {})
+            if test_cfg.get("skip_visual"):
+                # This ROM is exercised by a dedicated harness (SRAM/state
+                # reads, not a screenshot) -- e.g. test_nexttimeout_nesting.py.
+                # Without this, the glob above picked it up anyway, it had no
+                # baseline image and never would, and MISSING-baseline used
+                # to be silently excluded from the exit code, so it "passed"
+                # while verifying nothing here.
+                continue
             tests[name] = {
                 "rom": rom,
                 "frames": test_cfg.get("frames", 7200),
@@ -160,11 +168,19 @@ def run_single_test(name, test_info, rebaseline=False, diff_dir=None, verbose=Fa
 
         # Collect all screenshots to compare
         all_screenshots = [("final", output_png)]
+        missing_screenshots = []
         for frame, bmp, ss_name in screenshot_bmps:
             if bmp.exists():
                 png = tmpdir / f"{name}_{ss_name}.png"
                 Image.open(bmp).save(png)
                 all_screenshots.append((ss_name, png))
+            else:
+                # A screenshot scheduled at/after the run's frame count (or
+                # otherwise never written by mgba_runner) used to be dropped
+                # here silently, so the comparison against its baseline
+                # never happened and the test still reported PASS.
+                print(f"  {ss_name}: FAIL (screenshot at frame {frame} was never written)")
+                missing_screenshots.append(ss_name)
 
         if rebaseline:
             # Save as new baselines
@@ -220,10 +236,22 @@ def run_single_test(name, test_info, rebaseline=False, diff_dir=None, verbose=Fa
                     comparison.save(diff_path / f"{name}_{ss_name}_comparison.png")
                     print(f"  Diff saved to: {diff_path / f'{name}_{ss_name}_comparison.png'}")
 
+        if missing_screenshots:
+            results.append("FAIL")
+
         if "FAIL" in results:
-            return "XFAIL" if test_info.get("expected_fail") else "FAIL"
+            if test_info.get("expected_fail"):
+                return "XFAIL"
+            return "FAIL"
         if "MISSING" in results:
             return "MISSING"
+        if test_info.get("expected_fail"):
+            # Test is marked expected_fail but every screenshot matched its
+            # baseline -- the underlying bug it exists to track was
+            # apparently fixed. Flag it instead of silently reporting PASS,
+            # so test_config.json gets updated rather than the regression
+            # coverage quietly staying disabled forever.
+            return "XPASS"
         return "PASS"
 
 
@@ -264,12 +292,20 @@ def main():
     # Filter tests if --test specified
     if args.test:
         filtered = {}
+        unknown = []
         for t in args.test:
             if t in tests:
                 filtered[t] = tests[t]
             else:
+                unknown.append(t)
                 print(f"WARNING: Test '{t}' not found")
         tests = filtered
+        if not tests:
+            # A typo'd -t name used to fall through to the "no tests ran"
+            # summary with an exit code of 0 -- silently running zero tests
+            # instead of failing.
+            print(f"ERROR: none of the requested tests exist: {', '.join(unknown)}")
+            sys.exit(1)
 
     # Run tests
     results = {}
@@ -287,13 +323,14 @@ def main():
     passed = sum(1 for r in results.values() if r == "PASS")
     failed = sum(1 for r in results.values() if r == "FAIL")
     xfailed = sum(1 for r in results.values() if r == "XFAIL")
+    xpassed = sum(1 for r in results.values() if r == "XPASS")
     missing = sum(1 for r in results.values() if r == "MISSING")
     errors = sum(1 for r in results.values() if r == "ERROR")
     baselined = sum(1 for r in results.values() if r == "BASELINED")
 
     for name, result in sorted(results.items()):
-        status_char = {"PASS": ".", "FAIL": "F", "XFAIL": "x", "MISSING": "?",
-                       "ERROR": "E", "BASELINED": "B"}.get(result, "?")
+        status_char = {"PASS": ".", "FAIL": "F", "XFAIL": "x", "XPASS": "X",
+                       "MISSING": "?", "ERROR": "E", "BASELINED": "B"}.get(result, "?")
         print(f"  [{status_char}] {name}: {result}")
 
     print()
@@ -301,12 +338,17 @@ def main():
     if passed: parts.append(f"{passed} passed")
     if failed: parts.append(f"{failed} FAILED")
     if xfailed: parts.append(f"{xfailed} expected failures")
+    if xpassed: parts.append(f"{xpassed} UNEXPECTED PASSES")
     if missing: parts.append(f"{missing} missing baselines")
     if errors: parts.append(f"{errors} errors")
     if baselined: parts.append(f"{baselined} baselined")
     print(", ".join(parts))
 
-    sys.exit(1 if failed or errors else 0)
+    # MISSING baselines used to be excluded from the exit-code check entirely,
+    # so tests with no baseline (verifying nothing) always reported success.
+    # XPASS means a test config claims a known failure that no longer
+    # reproduces -- that's a stale test_config.json entry, not a green build.
+    sys.exit(1 if (failed or errors or missing or xpassed) else 0)
 
 
 if __name__ == "__main__":

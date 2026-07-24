@@ -37,6 +37,13 @@ def main():
     start = time.time()
     results = []
 
+    # 0. RLE codec unit tests (host-native, no ROM/toolchain needed)
+    ok, out = run_suite(
+        "RLE Codec Unit Tests",
+        [sys.executable, str(SCRIPT_DIR / "test_rle_unit.py")]
+    )
+    results.append(("RLE codec unit tests", ok))
+
     # 1. Visual regression tests (26 ROMs)
     ok, out = run_suite(
         "Visual Regression Tests (26 ROMs)",

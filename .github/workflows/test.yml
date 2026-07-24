@@ -53,6 +53,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Run RLE codec unit tests
+      run: python3 test_roms/test_rle_unit.py
+
     - name: Download GBA binary
       uses: actions/download-artifact@v4
       with:
