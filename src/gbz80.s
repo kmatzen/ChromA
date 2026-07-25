@@ -1701,7 +1701,20 @@ _FB:@	EI, enable interrupt (delayed: takes effect after next instruction)
 	cmp r0,#0xF3				@DI?
 	beq ei_skip				@EI;DI = no change
 	@ Defer: force timeout after next instruction, then enable.
+	@ EXCEPT while a delayed IRQ dispatch is parked (nexttimeout ==
+	@ checkMasterIRQ_minus12): its real scanline handler is already in
+	@ nexttimeout_alt, and saving nexttimeout here would overwrite it
+	@ with minus12 itself.  minus12's restore would then load minus12
+	@ back into nexttimeout forever -- line handlers never run again
+	@ and the emulator hangs.  Enable immediately instead: in this
+	@ window IME is almost always already set (the window is only
+	@ entered with CYC_IE on), so EI is a no-op; in the DI;EI corner
+	@ the dispatch lands at most one instruction early.  Same guard
+	@ as immediate_check_irq_2.
 	ldr_ r0,nexttimeout
+	ldr r1,=checkMasterIRQ_minus12
+	cmp r0,r1
+	beq ei_immediate
 	str_ r0,nexttimeout_alt
 	adr r0,ei_finish
 	str_ r0,nexttimeout
