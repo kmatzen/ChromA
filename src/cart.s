@@ -240,11 +240,16 @@ loadcart: @called from C:  r0=rom number, r1=emuflags
 	ldrb r0,[r3,#0x147]
 	cmp r0,#5 @mbc2 has that funky 512 nibbles of ram
 	cmpne r0,#6
-	moveq r0,#5 @invalid value used just for mbc2
-	
+	moveq r0,#6 @rammasktbl index 6 is reserved for mbc2's 512B
+
 	ldrneb r0,[r3,#0x149]	@get ram size.
-	strneb_ r0,sramsize
-	
+	cmpne r0,#5		@garbage header bytes >5 would index off the
+	movhi r0,#0		@table and install a junk rammask -> no RAM
+	@Store unconditionally: this used to be strneb, which skipped MBC2 and
+	@left sramsize holding the previous ROM's value (or 0 at boot), so
+	@MBC2 savestates omitted or mis-sized their SRAM section.
+	strb_ r0,sramsize
+
 	adr r1,rammasktbl
 	ldr r0,[r1,r0,lsl#2]
 	str_ r0,rammask
@@ -387,7 +392,9 @@ rammasktbl:
 	.word 0x1FFF
 	.word 0x7FFF
 	.word 0x7FFF @little sound DJ 128k
-	.word 0x01FF
+	.word 0x7FFF @header 5 = 64KB (MBC30); clamped to 32KB so the
+	             @write-through region can't swallow the save heap
+	.word 0x01FF @index 6: MBC2 (not a header value; set by cart type 5/6)
 
 	#if LITTLESOUNDDJ
 @LITTLE SOUND DJ STUFF!

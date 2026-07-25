@@ -105,18 +105,25 @@ mem_RC0_2:	@ram read ($D000-$DFFF)
 sram_W2:	@write to real sram ($A000-$BFFF)  AND emulated sram
 @----------------------------------------------------------------------------
 	@ Map GBC SRAM to GBA cart SRAM with bank support.
-	@ GBA SRAM addr = 0x0E000000 + (cart_size - game_sram_size) + (addy & 0x1FFF) + bank*0x2000
+	@ GBA SRAM addr = 0x0E000000 + (cart_size - game_sram_size) + (offset & rammask) + bank*0x2000
 	@ cart_size - game_sram_size = cart_size - (rammask+1) = ~rammask + cart_size
 	@ Computed from rammask at runtime so it works for all game SRAM sizes.
+	@ The offset MUST be clamped to rammask: on carts with less than 8KB
+	@ of RAM (MBC2 512B, 2KB carts) the A000-BFFF window echoes, and an
+	@ unclamped write to e.g. A200+ would land past the write-through
+	@ region -- mirroring into the low GBA-SRAM area that holds the
+	@ config/savestate heap and silently corrupting saves.
 	ldr_ r1,rammask
+	mov r2,addy,lsl#19
+	mov r2,r2,lsr#19		@r2 = addy & 0x1FFF
+	and r2,r2,r1			@r2 &= rammask (fold echoes in-bounds)
 	mvn r1,r1			@r1 = ~rammask = -(rammask+1)
  .if SRAM_32
 	add r1,r1,#0x8000		@r1 = 0x8000 - game_sram_size
  .else
 	add r1,r1,#0x10000		@r1 = 0x10000 - game_sram_size
  .endif
-	mov r2,addy,lsl#19
-	add r1,r1,r2,lsr#19		@r1 += addy & 0x1FFF
+	add r1,r1,r2			@r1 += clamped offset
 	ldr_ r2,srambank
 	add r1,r1,r2,lsl#13		@r1 += bank * 0x2000
 	orr r1,r1,#0x0e000000		@r1 = GBA cart SRAM address
