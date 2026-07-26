@@ -129,6 +129,14 @@ jobs:
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
 
+    # Boots two different battery carts against one shared .sav.  Before the
+    # ownership check was wired up, the second game was handed the first
+    # game's save and destroyed it (#48).
+    - name: Run cross-game SRAM ownership test
+      run: python3 test_roms/test_sram_ownership.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
   test-full:
     needs: build
     runs-on: ubuntu-latest
