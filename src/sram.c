@@ -33,6 +33,13 @@ int get_saved_sram(void)
 
 EWRAM_DATA u32 save_start = SAVE_START;
 
+//The size of the SRAM chip we are actually running on, as detected by
+//probe_sram_size().  GBA_SRAM_SIZE is a compile-time assumption (64KB in the
+//shipped build); a 32KB chip mirrors the upper half onto the lower half, so
+//write-through addresses derived from GBA_SRAM_SIZE can wrap down on top of
+//the savestate heap.  Ownership bookkeeping needs to know the difference.
+EWRAM_DATA u32 gba_chip_size = GBA_SRAM_SIZE;
+
 
 
 #define STATEID 0x57a731d8
@@ -87,10 +94,12 @@ void probe_sram_size()
 			if (newval2 != val2)
 			{
 				save_start = SAVE_START_32K;
+				gba_chip_size = 0x8000;
 			}
 			else
 			{
 				save_start = SAVE_START_64K;
+				gba_chip_size = 0x10000;
 			}
 			sram[0] = orig;
 		}
@@ -101,10 +110,12 @@ void probe_sram_size()
 			if (sram2[0] == sram[0])
 			{
 				save_start = SAVE_START_32K;
+				gba_chip_size = 0x8000;
 			}
 			else
 			{
 				save_start = SAVE_START_64K;
+				gba_chip_size = 0x10000;
 			}
 			sram[0] ^= 0xFF;
 		}
@@ -113,6 +124,7 @@ void probe_sram_size()
 	{
 		//no match, it's 64K
 		save_start = SAVE_START_64K;
+		gba_chip_size = 0x10000;
 	}
 }
 
@@ -851,10 +863,19 @@ int get_saved_sram(void)
 		sram_copy = NULL;  // force getsram to re-read with new boundary
 	}
 
+	// Ownership bookkeeping lives in the savestate heap at [0, save_start).
+	// wt_offset is derived from the compile-time GBA_SRAM_SIZE, but on a
+	// smaller chip the write-through writes mirror down -- for a 32KB game on
+	// a 32KB chip the region folds onto 0x0000 and *is* the heap.  Writing a
+	// config record there would zero the game's own save data, so when the two
+	// collide we leave ownership untracked and behave exactly as before.
+	u32 phys_wt_offset = wt_offset & (gba_chip_size - 1);
+	int heap_collides = (phys_wt_offset < save_start);
+
 	// readconfig() runs before the boot loadcart(), so sram_owner already
 	// reflects what is actually sitting in cart SRAM by the time we get here.
 	u32 this_rom = checksum_this();
-	if (sram_owner != this_rom) {
+	if (!heap_collides && sram_owner != this_rom) {
 		// Owner 0 means the region was never claimed -- genuinely blank
 		// SRAM, or a save written by a build from before ownership was
 		// tracked.  Adopt it rather than clearing, so upgrading doesn't

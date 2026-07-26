@@ -26,6 +26,7 @@ typedef struct {		//(modified stateheader)
 } configdata;
 
 void bytecopy(u8 *dst,u8 *src,int count);
+void flush_end_sram(void);
 void getsram(void);
 
 u32 checksum_this(void);
@@ -45,6 +46,7 @@ void quicksave(void);
 int backup_gb_sram(int called_from);
 int get_saved_sram(void);
 void register_sram_owner(void);
+void no_sram_owner(void);
 void setup_sram_after_loadstate(void);
 void loadstatemenu(void);
 void writeconfig(void);
