@@ -872,28 +872,34 @@ int get_saved_sram(void)
 	u32 phys_wt_offset = wt_offset & (gba_chip_size - 1);
 	int heap_collides = (phys_wt_offset < save_start);
 
-	// readconfig() runs before the boot loadcart(), so sram_owner already
-	// reflects what is actually sitting in cart SRAM by the time we get here.
-	u32 this_rom = checksum_this();
-	if (!heap_collides && sram_owner != this_rom) {
-		// Owner 0 means the region was never claimed -- genuinely blank
-		// SRAM, or a save written by a build from before ownership was
-		// tracked.  Adopt it rather than clearing, so upgrading doesn't
-		// erase a real save.
-		if (sram_owner != 0) {
-			if (!archive_sram_owner(sram_owner, wt_offset, game_sram_size))
-			{
-				// Heap full.  Leave the region untouched rather than
-				// destroying a save we can't archive, and don't take
-				// ownership -- but don't hand this game the other game's
-				// bytes either.  Freeing a savestate lets the next boot
-				// complete the handoff.
-				return 0;
+	// Nothing below this point may run when the regions collide -- not even
+	// checksum_this().  loadcart() is on the boot path, and these games have to
+	// come out bit-for-bit and cycle-for-cycle identical to a build without
+	// ownership tracking.
+	if (!heap_collides) {
+		// readconfig() runs before the boot loadcart(), so sram_owner already
+		// reflects what is actually sitting in cart SRAM by the time we get here.
+		u32 this_rom = checksum_this();
+		if (sram_owner != this_rom) {
+			// Owner 0 means the region was never claimed -- genuinely
+			// blank SRAM, or a save written by a build from before
+			// ownership was tracked.  Adopt it rather than clearing, so
+			// upgrading doesn't erase a real save.
+			if (sram_owner != 0) {
+				if (!archive_sram_owner(sram_owner, wt_offset, game_sram_size))
+				{
+					// Heap full.  Leave the region untouched rather
+					// than destroying a save we can't archive, and
+					// don't take ownership -- but don't hand this game
+					// the other game's bytes either.  Freeing a
+					// savestate lets the next boot complete the handoff.
+					return 0;
+				}
+				if (!restore_sram_save(this_rom, wt_offset, game_sram_size))
+					flush_write_through(wt_offset, game_sram_size);
 			}
-			if (!restore_sram_save(this_rom, wt_offset, game_sram_size))
-				flush_write_through(wt_offset, game_sram_size);
+			register_sram_owner();
 		}
-		register_sram_owner();
 	}
 
 	// loadstate2() is about to overwrite XGB_SRAM from the savestate itself,
@@ -960,6 +966,39 @@ const configdata configtemplate={
 	"CFG"
 };
 
+//Append a freshly built config record to an empty heap.
+//
+//The general path for creating a record is updatestates(), which rewrites the
+//whole heap and then zero-fills its tail -- on a 32KB chip that is ~24KB of
+//byte-wide SRAM writes.  From a menu nobody notices, but writeconfig() is also
+//called from inside loadcart() now (to record SRAM ownership), and there that
+//cost pushes the entire boot out by a frame, which is enough to shift
+//timing-sensitive behaviour.
+//
+//When the heap holds no records yet -- what every fresh cart looks like, and
+//the only case the boot-time claim hits in practice -- the record can simply be
+//written at the front, followed by the terminator.  Anything else falls back to
+//updatestates().  The tail is left alone deliberately: the record chain is
+//delimited by the zero-size terminator, so stale bytes past it are unreachable.
+//
+//Returns 1 if the record was written.
+static int append_config_fast(configdata *cfg)
+{
+	stateheader *first = (stateheader*)(sram_copy + 4);
+	if (first->size != 0)
+		return 0;		//heap already has records: use the general path
+
+	memcpy32(sram_copy + 4, cfg, sizeof(configdata));
+	u32 *terminator = (u32*)(sram_copy + 4 + sizeof(configdata));
+	terminator[0] = 0;
+	terminator[1] = 0xFFFFFFFF;
+
+	//Same accounting updatestates() would leave behind (end-of-records offset).
+	totalstatesize = 4 + sizeof(configdata);
+	bytecopy(MEM_SRAM, sram_copy, totalstatesize + 8);
+	return 1;
+}
+
 void writeconfig()
 {
 	if (sram_copy == NULL)
@@ -990,7 +1029,8 @@ void writeconfig()
 	cfg->misc = j;
 	cfg->sram_checksum=sram_owner;
 	if(i<0) {	//create new config
-		updatestates(0,0,CONFIGSAVE);
+		if(!append_config_fast(cfg))
+			updatestates(0,0,CONFIGSAVE);
 	} else {		//config already exists, update sram directly (faster)
 		bytecopy((u8*)cfg-sram_copy+MEM_SRAM,(u8*)cfg,sizeof(configdata));
 	}
