@@ -1,4 +1,12 @@
 {
+    "sram_owner_test_a": {
+        "description": "cross-game SRAM ownership probe A - verified via .sav inspection in test_sram_ownership.py, not a screenshot",
+        "skip_visual": true
+    },
+    "sram_owner_test_b": {
+        "description": "cross-game SRAM ownership probe B - verified via .sav inspection in test_sram_ownership.py, not a screenshot",
+        "skip_visual": true
+    },
     "nexttimeout_control": {
         "description": "nexttimeout_alt nesting control ROM - verified via SRAM reads in test_nexttimeout_nesting.py, not a screenshot",
         "skip_visual": true

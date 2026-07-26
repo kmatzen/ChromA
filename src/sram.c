@@ -33,6 +33,13 @@ int get_saved_sram(void)
 
 EWRAM_DATA u32 save_start = SAVE_START;
 
+//The size of the SRAM chip we are actually running on, as detected by
+//probe_sram_size().  GBA_SRAM_SIZE is a compile-time assumption (64KB in the
+//shipped build); a 32KB chip mirrors the upper half onto the lower half, so
+//write-through addresses derived from GBA_SRAM_SIZE can wrap down on top of
+//the savestate heap.  Ownership bookkeeping needs to know the difference.
+EWRAM_DATA u32 gba_chip_size = GBA_SRAM_SIZE;
+
 
 
 #define STATEID 0x57a731d8
@@ -61,18 +68,6 @@ EWRAM_BSS stateheader *current_save_file = NULL;
 
 EWRAM_BSS bool doNotLoadSram;
 
-void flush_end_sram()
-{
-	u8* sram=MEM_SRAM;
-	int i;
-	int save_end = save_start + 0x2000;
-	for (i=save_start;i<save_end;i++)
-	{
-		sram[i]=0;
-	}
-}
-
-
 void probe_sram_size()
 {
 	vu8* sram=MEM_SRAM;
@@ -88,18 +83,25 @@ void probe_sram_size()
 	{
 		if (val1 == STATEID || val1 == STATEID2)
 		{
-			sram[0] = (val1^(STATEID^STATEID2)) & 0xFF;
+			//Flip a bit of the magic and see whether the mirror follows it.
+			//Restore the byte we actually read rather than a hardcoded
+			//STATEID: when the stored magic was STATEID2 the old code put
+			//back 0xd8, rewriting the header on every single probe.
+			u8 orig = sram[0];
+			sram[0] = orig ^ ((STATEID^STATEID2) & 0xFF);
 			newval2 = sram2[0]+(sram2[1]<<8)+(sram2[2]<<16)+(sram2[3]<<24);
 			//value has changed => 32k save is mirrored
 			if (newval2 != val2)
 			{
 				save_start = SAVE_START_32K;
+				gba_chip_size = 0x8000;
 			}
 			else
 			{
 				save_start = SAVE_START_64K;
+				gba_chip_size = 0x10000;
 			}
-			sram[0] = STATEID & 0xFF;
+			sram[0] = orig;
 		}
 		else
 		{
@@ -108,10 +110,12 @@ void probe_sram_size()
 			if (sram2[0] == sram[0])
 			{
 				save_start = SAVE_START_32K;
+				gba_chip_size = 0x8000;
 			}
 			else
 			{
 				save_start = SAVE_START_64K;
+				gba_chip_size = 0x10000;
 			}
 			sram[0] ^= 0xFF;
 		}
@@ -120,6 +124,7 @@ void probe_sram_size()
 	{
 		//no match, it's 64K
 		save_start = SAVE_START_64K;
+		gba_chip_size = 0x10000;
 	}
 }
 
@@ -729,6 +734,117 @@ int backup_gb_sram(int called_from)
 	return 1;
 }
 
+//---------------------------------------------------------------------------
+// SRAM ownership
+//
+// There is only one write-through region in GBA cart SRAM, so only one GB
+// game's battery save can occupy it at a time.  `sram_owner` -- persisted in
+// the config record -- names the ROM checksum that currently owns it.
+//
+// Before this was wired up, get_saved_sram() handed the region to whatever
+// game happened to boot: play game A, then boot game B on the same cart, and
+// B was given A's save bytes and destroyed them with its first SRAM write.
+//
+// Now a boot whose checksum doesn't match the owner archives the outgoing
+// save as an SRAMSAVE record in the savestate heap, then either hands this
+// game its own previously archived save or a cleared region -- never the
+// previous owner's data.
+//---------------------------------------------------------------------------
+
+// Scratch space for building an archive record.  This is the same EWRAM the
+// savestate path uses for compression (savestate2() bases uncompressed_save
+// at ewram_start + 0x10000), which is safe because the ownership handoff only
+// ever runs from inside loadcart(), never concurrently with a savestate.
+#define SRAM_ARCHIVE_SCRATCH 0x10000
+
+// Zero the write-through region so an incoming game sees a blank battery.
+// This has to span the whole region: the old flush_end_sram() cleared a fixed
+// 8KB starting at save_start, which misses three quarters of a 32KB save.
+static void flush_write_through(u32 wt_offset, u32 game_sram_size)
+{
+	memset8(MEM_SRAM + wt_offset, 0, game_sram_size);
+}
+
+// Archive the write-through region as an SRAMSAVE record keyed by `owner`.
+// Returns 1 on success, 0 if the heap has no room for it.
+static int archive_sram_owner(u32 owner, u32 wt_offset, u32 game_sram_size)
+{
+	getsram();
+
+	// Stage the region into XGB_SRAM and compress from there.  GBA cart SRAM
+	// sits on an 8-bit bus, so this file only ever reads it through
+	// bytecopy(); handing MEM_SRAM straight to rle_compress() would let the
+	// compiler widen the reads.  XGB_SRAM is rewritten by the caller either
+	// way, and leaving the region staged there is exactly the pre-handoff
+	// behaviour we want if this archive turns out not to fit.
+	bytecopy(XGB_SRAM, MEM_SRAM + wt_offset, game_sram_size);
+
+	u8 *scratch = sram_copy + SRAM_ARCHIVE_SCRATCH;
+	stateheader *sh = (stateheader*)scratch;
+	u8 *out = scratch + sizeof(stateheader) + 8;
+
+	int compressed = rle_compress(XGB_SRAM, game_sram_size, out);
+	if (compressed <= 0)
+		return 0;
+	u32 part_size = ((compressed - 1) | 3) + 1;	//word-align like savestate2
+	u32 record_size = sizeof(stateheader) + 8 + part_size;
+
+	// stateheader.size is a u16, and RLE can expand incompressible data to
+	// twice its input.  A record that overflows the field -- or that could
+	// never fit in the heap anyway -- has to be refused here: updatestates()
+	// does its bounds maths on the truncated size and would happily splice a
+	// malformed record into the chain.
+	if (record_size > 0xFFFF || record_size > save_start)
+		return 0;
+
+	((u32*)out)[-1] = part_size;
+	((u32*)out)[-2] = game_sram_size;
+
+	sh->size = record_size;
+	sh->type = SRAMSAVE;
+	sh->uncompressed_size = game_sram_size;
+	sh->framecount = frametotal;
+	sh->checksum = owner;
+	// The owning ROM isn't loaded, so its header title isn't reachable --
+	// label the record with the checksum it's keyed by.
+	strcpy(sh->title, "SRAM ");
+	number_cat(sh->title, owner);
+
+	current_save_file = sh;
+	int index = findstate(owner, SRAMSAVE, NULL);
+	if (index < 0)
+		index = 65536;		//no archive for this owner yet: append
+	int ok = updatestates(index, 0, SRAMSAVE);
+	current_save_file = NULL;
+	return ok;
+}
+
+// Restore a previously archived save for `owner` into the write-through
+// region and reclaim its heap space.  Returns 1 if one was found.
+static int restore_sram_save(u32 owner, u32 wt_offset, u32 game_sram_size)
+{
+	stateheader *sh;
+	int index = findstate(owner, SRAMSAVE, &sh);
+	if (index < 0)
+		return 0;
+
+	u32 *src32 = (u32*)(sh + 1);
+	u32 uncompressed_size = src32[0];
+	u32 compressed_size = src32[1];
+
+	// Only accept a record that describes this game's region exactly; a
+	// truncated or foreign one must not be splattered into SRAM.
+	if (uncompressed_size != game_sram_size ||
+	    sh->size != compressed_size + 8 + sizeof(stateheader))
+		return 0;
+
+	rle_decompress((u8*)(src32 + 2), compressed_size, XGB_SRAM, game_sram_size);
+	bytecopy(MEM_SRAM + wt_offset, XGB_SRAM, game_sram_size);
+
+	updatestates(index, 1, SRAMSAVE);	//checked out; drop the archive
+	return 1;
+}
+
 int get_saved_sram(void)
 {
 	if(!using_flashcart())
@@ -747,6 +863,53 @@ int get_saved_sram(void)
 		sram_copy = NULL;  // force getsram to re-read with new boundary
 	}
 
+	// Ownership bookkeeping lives in the savestate heap at [0, save_start).
+	// wt_offset is derived from the compile-time GBA_SRAM_SIZE, but on a
+	// smaller chip the write-through writes mirror down -- for a 32KB game on
+	// a 32KB chip the region folds onto 0x0000 and *is* the heap.  Writing a
+	// config record there would zero the game's own save data, so when the two
+	// collide we leave ownership untracked and behave exactly as before.
+	u32 phys_wt_offset = wt_offset & (gba_chip_size - 1);
+	int heap_collides = (phys_wt_offset < save_start);
+
+	// Nothing below this point may run when the regions collide -- not even
+	// checksum_this().  loadcart() is on the boot path, and these games have to
+	// come out bit-for-bit and cycle-for-cycle identical to a build without
+	// ownership tracking.
+	if (!heap_collides) {
+		// readconfig() runs before the boot loadcart(), so sram_owner already
+		// reflects what is actually sitting in cart SRAM by the time we get here.
+		u32 this_rom = checksum_this();
+		if (sram_owner != this_rom) {
+			// Owner 0 means the region was never claimed -- genuinely
+			// blank SRAM, or a save written by a build from before
+			// ownership was tracked.  Adopt it rather than clearing, so
+			// upgrading doesn't erase a real save.
+			if (sram_owner != 0) {
+				if (!archive_sram_owner(sram_owner, wt_offset, game_sram_size))
+				{
+					// Heap full.  Leave the region untouched rather
+					// than destroying a save we can't archive, and
+					// don't take ownership -- but don't hand this game
+					// the other game's bytes either.  Freeing a
+					// savestate lets the next boot complete the handoff.
+					return 0;
+				}
+				if (!restore_sram_save(this_rom, wt_offset, game_sram_size))
+					flush_write_through(wt_offset, game_sram_size);
+			}
+			register_sram_owner();
+		}
+	}
+
+	// loadstate2() is about to overwrite XGB_SRAM from the savestate itself,
+	// so adopting the region here would be pointless -- and would let the
+	// region's bytes survive when the state carries no SRAM part.  The
+	// ownership handoff above still has to happen: setup_sram_after_loadstate()
+	// writes the loaded game's SRAM back into the region.
+	if (doNotLoadSram)
+		return 0;
+
 	// Restore emulated SRAM from the write-through region in GBA cart SRAM.
 	bytecopy(XGB_SRAM, MEM_SRAM + wt_offset, game_sram_size);
 	return 1;
@@ -756,13 +919,6 @@ void register_sram_owner()
 {
 	sram_owner=checksum_this();
 	writeconfig();
-}
-
-void no_sram_owner()
-{
-	sram_owner=0;
-	writeconfig();
-	flush_end_sram();
 }
 
 void setup_sram_after_loadstate() {
@@ -810,6 +966,39 @@ const configdata configtemplate={
 	"CFG"
 };
 
+//Append a freshly built config record to an empty heap.
+//
+//The general path for creating a record is updatestates(), which rewrites the
+//whole heap and then zero-fills its tail -- on a 32KB chip that is ~24KB of
+//byte-wide SRAM writes.  From a menu nobody notices, but writeconfig() is also
+//called from inside loadcart() now (to record SRAM ownership), and there that
+//cost pushes the entire boot out by a frame, which is enough to shift
+//timing-sensitive behaviour.
+//
+//When the heap holds no records yet -- what every fresh cart looks like, and
+//the only case the boot-time claim hits in practice -- the record can simply be
+//written at the front, followed by the terminator.  Anything else falls back to
+//updatestates().  The tail is left alone deliberately: the record chain is
+//delimited by the zero-size terminator, so stale bytes past it are unreachable.
+//
+//Returns 1 if the record was written.
+static int append_config_fast(configdata *cfg)
+{
+	stateheader *first = (stateheader*)(sram_copy + 4);
+	if (first->size != 0)
+		return 0;		//heap already has records: use the general path
+
+	memcpy32(sram_copy + 4, cfg, sizeof(configdata));
+	u32 *terminator = (u32*)(sram_copy + 4 + sizeof(configdata));
+	terminator[0] = 0;
+	terminator[1] = 0xFFFFFFFF;
+
+	//Same accounting updatestates() would leave behind (end-of-records offset).
+	totalstatesize = 4 + sizeof(configdata);
+	bytecopy(MEM_SRAM, sram_copy, totalstatesize + 8);
+	return 1;
+}
+
 void writeconfig()
 {
 	if (sram_copy == NULL)
@@ -840,7 +1029,8 @@ void writeconfig()
 	cfg->misc = j;
 	cfg->sram_checksum=sram_owner;
 	if(i<0) {	//create new config
-		updatestates(0,0,CONFIGSAVE);
+		if(!append_config_fast(cfg))
+			updatestates(0,0,CONFIGSAVE);
 	} else {		//config already exists, update sram directly (faster)
 		bytecopy((u8*)cfg-sram_copy+MEM_SRAM,(u8*)cfg,sizeof(configdata));
 	}
