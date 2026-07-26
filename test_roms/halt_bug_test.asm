@@ -12,8 +12,9 @@
 ;
 ; Results in SRAM:
 ;   A000: A register value after HALT bug sequence
-;         Expected with bug (DMG): 0x3E
-;         Expected without bug (CGB): 0x12
+;         Expected on hardware: 0x3E (the bug exists on BOTH DMG and CGB;
+;         only the interrupt-dispatch-during-halt variant differs)
+;         An emulator without the bug reports 0x12
 ;   A001: 0x01 if HALT bug present, 0x00 if not
 ;   A010: 0xFF sentinel
 
@@ -43,9 +44,9 @@ Main:
 
     ; Set up: enable VBlank interrupt in IE, request it in IF
     ld a, $01               ; VBlank
-    ldh [$FF], a            ; IE = VBlank enabled
+    ldh [$FFFF], a            ; IE = VBlank enabled
     ld a, $01
-    ldh [$0F], a            ; IF = VBlank pending
+    ldh [$FF0F], a            ; IF = VBlank pending
 
     ; Now execute HALT with IME=0 and pending interrupt.
     ; The CPU should skip the HALT but (on DMG) fail to
@@ -55,7 +56,17 @@ Main:
     ; Bytes: 76 3E 12
     ; With bug:    reads 3E as opcode (LD A,n), reads 3E as operand → A=0x3E
     ; Without bug: reads 3E as opcode (LD A,n), reads 12 as operand → A=0x12
-    halt
+    ;
+    ; NOTE: must be `db $76`, not `halt` -- rgbasm pads `halt` with an
+    ; automatic NOP, which turns the sequence into 76 00 3E 12 and makes
+    ; the test vacuous (A=0x12 on every emulator, bug or no bug).
+    ;
+    ; When the bug fires, the $12 byte then executes as an instruction:
+    ; LD (DE),A.  Point DE at scratch WRAM first -- at boot DE points
+    ; into the $0000 mapper region, and the stray write ($3E) would
+    ; DISABLE cartridge SRAM, silently dropping every result store.
+    ld de, $C100
+    db $76
     ld a, $12               ; Opcode 3E, operand 12
 
     ; Store result
