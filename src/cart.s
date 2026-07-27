@@ -337,8 +337,12 @@ dont_use_true_sram:
 	ldr r1,=XGB_RAM-0xC000
 	str_ r1,memmap_tbl+48
 	str_ r1,memmap_tbl+52
-	ldr r1,=XGB_HRAM-0xFF80
+	ldr r1,=XGB_RAM-0xE000	@E000-EFFF echoes WRAM bank 0 at C000
 	str_ r1,memmap_tbl+56
+	@F000 has to serve HRAM: the direct memmap paths (push16/pop16/encodePC)
+	@index by the top address nibble alone, and SP=FFFE is universal, so this
+	@entry cannot also echo F000-FDFF onto D000-DDFF.  See issue #46.
+	ldr r1,=XGB_HRAM-0xFF80
 	str_ r1,memmap_tbl+60
 
 	mov gb_pc,#0		@(eliminates any encodePC errors during mapper*init)
