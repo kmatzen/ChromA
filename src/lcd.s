@@ -5201,7 +5201,13 @@ OAM_R:
 	cmp addy,#0xFE00
 	bmi echo_R
 	ldr_ r1,gb_oam_buffer_writing
-	ldrb r0,[r1,r2]
+	@FEA0-FEFF is not OAM.  OAM_W below already refuses to write past
+	@0xA0, but the read had no bound and walked off the end of the
+	@160-byte buffer into whatever EWRAM follows it.  Hardware returns
+	@0x00 here on DMG.
+	cmp r2,#0xA0
+	ldrltb r0,[r1,r2]
+	movge r0,#0
 	mov pc,lr
 OAM_W:
 	cmp addy,#0xFE00

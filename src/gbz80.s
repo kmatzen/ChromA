@@ -99,8 +99,14 @@ _xx:@	???					;invalid opcode
 		adr r0,_xx
 		mov r1,#0
 		bl debug_
-		fetch 4
 	.endif
+	@Hardware locks the CPU up here.  Consume the byte as a 4-cycle NOP
+	@instead: a game that hits one is already lost, but freezing the
+	@emulator is worse than limping.  Spelled out rather than relying on
+	@falling through into _40/_00, so that inserting anything between
+	@here and there cannot silently change what invalid opcodes do --
+	@which is exactly how 0xED came to run into jr_fixup (#56).
+	fetch 4
 @----------------------------------------------------------------------------
 _40:@	LD B,B
 _49:@	LD C,C
@@ -2872,7 +2878,7 @@ op_table:
 	.word _B0,_B1,_B2,_B3,_B4,_B5,_B6,_B7,_B8,_B9,_BA,_BB,_BC,_BD,_BE,_BF
 	.word _C0,_C1,_C2,_C3,_C4,_C5,_C6,_C7,_C8,_C9,_CA,_CB,_CC,_CD,_CE,_CF
 	.word _D0,_D1,_D2,_xx,_D4,_D5,_D6,_D7,_D8,_D9,_DA,_xx,_DC,_xx,_DE,_DF
-	.word _E0,_E1,_E2,_xx,_xx,_E5,_E6,_E7,_E8,_E9,_EA,_xx,_xx,_ED,_EE,_EF
+	.word _E0,_E1,_E2,_xx,_xx,_E5,_E6,_E7,_E8,_E9,_EA,_xx,_xx,_xx,_EE,_EF
 	.word _F0,_F1,_F2,_F3,_xx,_F5,_F6,_F7,_F8,_F9,_FA,_FB,_xx,_xx,_FE,_FF
   @writemem_tbl
 g_writemem_tbl:
