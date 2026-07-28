@@ -186,6 +186,13 @@ jobs:
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
 
+    # Selecting an RTC register installed empty_W so writes were dropped; the
+    # day counter was BCD-decoded though it is binary; DH read a flat 0 (#49).
+    - name: Run MBC3 RTC test
+      run: python3 test_roms/test_mbc3_rtc.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
   test-full:
     needs: build
     runs-on: ubuntu-latest

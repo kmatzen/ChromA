@@ -196,7 +196,10 @@ mbc3bank:
 	strb_ r0,mapperdata+4
 	tst r0,#8
 	beq RamSelect
-	ldr r1,=empty_W
+	@The RTC registers are writable -- clock-set flows in games write them.
+	@This used to install empty_W, so every write was dropped and the value
+	@snapped straight back.
+	ldr r1,=mbc3rtc_W
 	str_ r1,writemem_tbl+40
 	str_ r1,writemem_tbl+44
 	ldr r1,=empty_R
@@ -229,10 +232,47 @@ clk_hrs:
 	b calctime
 @------------------------------
 clk_dayL:
+	@The day counter is a plain 9-bit binary count, not BCD -- gettime_sw
+	@stores it as `days & 0xFF`.  Running it through calctime turned day 20
+	@into 14, so day-based events drifted once the count passed 15.
 	ldrb_ r0,mapperdata+26
-	b calctime
+	mov pc,lr
 clk_dayH:
-	mov r0,#0
+	@bit 0 = day counter bit 8, bit 6 = halt, bit 7 = 512-day carry.  This
+	@used to return a flat 0, so the day count wrapped at 256 and the carry
+	@was never visible; gettime_sw was already maintaining bit 8 here with
+	@nothing reading it.
+	ldrb_ r0,mapperdata+27
+	and r0,r0,#0xC1
+	mov pc,lr
+@------------------------------
+mbc3rtc_W:	@write to a selected RTC register
+@------------------------------
+	ldrb_ r1,mapperdata+4
+	and r1,r1,#0x0F
+	cmp r1,#0x0B
+	streqb_ r0,mapperdata+26	@day low: binary, stored as-is
+	moveq pc,lr
+	cmp r1,#0x0C
+	streqb_ r0,mapperdata+27	@day high/halt/carry
+	moveq pc,lr
+	@Seconds, minutes and hours are held BCD because the readers above
+	@decode them with calctime, so convert on the way in.
+	and r0,r0,#0x3F
+	mov r2,#0
+0:	cmp r0,#10
+	subcs r0,r0,#10
+	addcs r2,r2,#0x10
+	bcs 0b
+	orr r0,r0,r2
+	cmp r1,#0x08
+	streqb_ r0,mapperdata+30
+	cmp r1,#0x09
+	streqb_ r0,mapperdata+29
+	cmp r1,#0x0A
+	streqb_ r0,mapperdata+28
+	mov pc,lr
+@------------------------------
 calctime:
 	and r1,r0,#0xf
 	mov r0,r0,lsr#4
