@@ -137,6 +137,13 @@ jobs:
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
 
+    # PUSH/POP/CALL and instruction fetch in echo RAM went through memmap_tbl,
+    # which resolved 0xE000 0x80 bytes too high in WRAM (#46).
+    - name: Run echo RAM test
+      run: python3 test_roms/test_echo_ram.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
   test-full:
     needs: build
     runs-on: ubuntu-latest

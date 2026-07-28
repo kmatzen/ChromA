@@ -1,4 +1,8 @@
 {
+    "echo_ram_test": {
+        "description": "echo RAM through PUSH/POP/instruction fetch - verified via .sav inspection in test_echo_ram.py, not a screenshot",
+        "skip_visual": true
+    },
     "sram_owner_test_a": {
         "description": "cross-game SRAM ownership probe A - verified via .sav inspection in test_sram_ownership.py, not a screenshot",
         "skip_visual": true
