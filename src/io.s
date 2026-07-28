@@ -238,6 +238,34 @@ refreshNESjoypads:	@call every frame
 	orr r0,r1,r0		@r0=joypad state
 	
 	str_ r0,joy0state
+
+	@joy0serial -- the byte joy0_R hands back -- used to be recomputed only
+	@when the game WROTE FF00, so a game that set the select bits once and
+	@then just polled saw frozen input.  Rebuilding it here, once a frame,
+	@fixes that without adding anything to the FF00 read path.  It is also
+	@where the joypad interrupt comes from: nothing in the tree ever set
+	@IF bit 4, so a game that HALTs with IE=0x10 waiting on input hung (#43).
+	ldrb_ r1,sgbmode
+	cmp r1,#0
+	bxne lr			@SGB drives FF00 as a serial protocol of its own
+
+	ldrb_ r1,joy0serial	@bits 4-5 = the select lines the game last wrote
+	orr r2,r1,#0xCF		@all buttons released, unused bits high
+	mov addy,#0
+	tst r2,#0x10		@Direction line selected? (driven low)
+	orreq addy,addy,r0,lsr#4
+	tst r2,#0x20		@Buttons line selected?
+	orreq addy,addy,r0
+	and addy,addy,#0x0F
+	eor r2,r2,addy		@FF00 reports buttons active low
+	strb_ r2,joy0serial
+
+	bic r1,r1,r2		@lines that were high and are now low
+	tst r1,#0x0F
+	bxeq lr
+	ldrb_ r0,gb_if
+	orr r0,r0,#0x10		@0x10 = joypad
+	strb_ r0,gb_if
 	bx lr
 
 joycfg: .word 0x40ff01ff @byte0=auto mask, byte1=(saves R)bit2=SwapAB, byte2=R auto mask
@@ -725,7 +753,17 @@ joy0_W:		@FF00
 	eor r2,r2,r0
 	ldrb_ r1,joy0serial
 	strb_ r2,joy0serial
-	
+
+	@Selecting a line that a held button is pulling low is a high->low edge
+	@too, so the interrupt has to be checked here as well as once a frame
+	@in refreshNESjoypads -- that is the edge a game polling in its handler
+	@actually sees (#43).
+	bic r1,r1,r2		@lines that were high and are now low
+	tst r1,#0x0F
+	bxeq lr
+	ldrb_ r0,gb_if
+	orr r0,r0,#0x10		@0x10 = joypad
+	strb_ r0,gb_if
 	bx lr
 @----------------------------------------------------------------------------
 joy0_R_SGB: @FF00
