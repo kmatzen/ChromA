@@ -280,7 +280,13 @@ jobs:
         path: /tmp/test-diffs/report.html
 
   release:
-    needs: test
+    # test-full is the suite that actually runs the real games (visual, menu
+    # and SRAM).  It used to be missing here, so a red test-full still
+    # published a "latest" release -- exactly the regression class that
+    # test-full was added for (#29 / #30).  Both jobs below only ever run on
+    # a push to main, where test-full is never skipped, so a plain needs is
+    # enough to gate them.
+    needs: [test, test-full]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
@@ -310,7 +316,10 @@ jobs:
 
   deploy-demo:
     needs: [test, test-full]
-    if: always() && needs.test.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # always() re-enables the job after its needs resolve, so every gate has
+    # to be spelled out here.  test-full's result was not among them, which
+    # let a red visual suite deploy to Pages anyway.
+    if: always() && needs.test.result == 'success' && needs['test-full'].result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       pages: write
