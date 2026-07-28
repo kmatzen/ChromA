@@ -179,6 +179,13 @@ jobs:
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
 
+    # MBC1 applies BANK2<<5 in both modes, and mode 1 also remaps 0000-3FFF;
+    # the high bits were zeroed in mode 1 and the low half never moved (#50).
+    - name: Run MBC1 mode-1 banking test
+      run: python3 test_roms/test_mbc1_mode1.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
   test-full:
     needs: build
     runs-on: ubuntu-latest
