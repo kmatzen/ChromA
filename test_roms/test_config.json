@@ -7,6 +7,10 @@
         "description": "joypad interrupt and FF00 refresh probe - verified via .sav inspection in test_joypad_irq.py, not a screenshot",
         "skip_visual": true
     },
+    "timer_overflow_test": {
+        "description": "TIMA reload-period and DIV-write glitch probe - verified via .sav inspection in test_timer_overflow.py, not a screenshot",
+        "skip_visual": true
+    },
     "sram_owner_test_a": {
         "description": "cross-game SRAM ownership probe A - verified via .sav inspection in test_sram_ownership.py, not a screenshot",
         "skip_visual": true
