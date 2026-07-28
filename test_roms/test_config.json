@@ -23,6 +23,10 @@
         "description": "MBC2 A8 register decode and 512-nibble RAM model - verified via .sav inspection in test_mbc2_banking.py, not a screenshot",
         "skip_visual": true
     },
+    "mbc1_mode1_test": {
+        "description": "MBC1 mode-1 BANK2 and 0000-3FFF remap - verified via .sav inspection in test_mbc1_mode1.py, not a screenshot",
+        "skip_visual": true
+    },
     "sram_owner_test_a": {
         "description": "cross-game SRAM ownership probe A - verified via .sav inspection in test_sram_ownership.py, not a screenshot",
         "skip_visual": true

@@ -110,18 +110,28 @@ MBC1map1:
 MBC1mode:
 @----------------------------------------------------------------------------
 	strb_ r0,mapperdata+3
-	tst r0,#1
-	ldrb_ r0,mapperdata+5
+	tst r0,#1			@eq = mode 0, ne = mode 1
+	ldrb_ r0,mapperdata+5		@r0 = BANK2
 	mov r1,#0
-	streqb_ r0,mapperdata+1		@16Mbit Rom
-	strneb_ r1,mapperdata+1		@4Mbit Rom
-	streqb_ r1,mapperdata+4		@8kByte Ram
-	strneb_ r0,mapperdata+4		@32kbyte Ram
+	@BANK2 drives the 4000-7FFF bank in BOTH modes.  This used to store 0
+	@in mode 1, which stripped bits 5-6 off every bank select on a cart
+	@bigger than 512KB and fetched from the wrong half.
+	strb_ r0,mapperdata+1
+	streqb_ r1,mapperdata+4		@mode 0: RAM bank is always 0
+	strneb_ r0,mapperdata+4		@mode 1: BANK2 selects the RAM bank
+
+	@In mode 1 the low half follows BANK2 too, at bank BANK2<<5; in mode 0
+	@it is pinned to bank 0.  The mapper never called map0123_ at all, so
+	@0000-3FFF stayed on bank 0 forever.  Work out the bank before the
+	@first bl, which clobbers the mode flags.
+	moveq r0,#0
+	movne r0,r0,lsl#5
+	str lr,[sp,#-4]!
+	bl map0123_
 
 	ldrb_ r0,mapperdata
 	ldrb_ r1,mapperdata+1
 	orr r0,r0,r1,lsl#5
-	str lr,[sp,#-4]!
     tst r0,#0x1f  @ r0 = rom bank.  If lower 5 bits = 0s
     addeq r0,r0,#1  @ Add 1
 	bl map4567_
