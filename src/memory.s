@@ -17,6 +17,8 @@
 	global_func mem_RC0_2
 	global_func sram_W
 	global_func sram_W2
+	global_func mbc2_R
+	global_func mbc2_W
 	global_func wram_W
 	global_func wram_W_2
 	global_func echo_W
@@ -134,6 +136,33 @@ sram_W:	@sram write ($A000-$BFFF)
 	ldr_ r1,memmap_tbl+40
 	strb r0,[r1,addy]
 	mov pc,lr
+@----------------------------------------------------------------------------
+mbc2_R:	@MBC2 sram read ($A000-$BFFF)
+@----------------------------------------------------------------------------
+	@MBC2 carries 512 half-bytes, not 8KB: the window echoes every 512
+	@bytes, and only the low nibble is wired up -- the upper nibble reads
+	@as 1.  Installed in place of mem_RA0 by MBC2RamEnable.
+	@addy has to survive this: the readmem macro promises RMW instructions
+	@it is preserved, so the folded address goes in a scratch register.
+	ldr_ r1,memmap_tbl+40
+	mov r2,addy,lsl#23
+	mov r2,r2,lsr#23		@r2 = addy & 0x1FF
+	orr r2,r2,#0xA000
+	ldrb r0,[r1,r2]
+	orr r0,r0,#0xF0			@upper nibble is not connected
+	mov pc,lr
+@----------------------------------------------------------------------------
+mbc2_W:	@MBC2 sram write ($A000-$BFFF)
+@----------------------------------------------------------------------------
+	@Fold the echo, then hand off to whichever writer this cart was given
+	@(sram_W, or sram_W2 for battery carts, which also writes through to
+	@GBA SRAM).  The writemem macro documents addy as clobbered on the way
+	@out, so folding it in place is safe here -- unlike in mbc2_R.
+	mov addy,addy,lsl#23
+	mov addy,addy,lsr#23
+	orr addy,addy,#0xA000
+	ldr_ r1,sramwptr
+	bx r1
 @----------------------------------------------------------------------------
 wram_W:	@wram write ($C000-$CFFF)
 @----------------------------------------------------------------------------
