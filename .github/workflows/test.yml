@@ -165,6 +165,13 @@ jobs:
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
 
+    # Sound registers returned the GBA PSG value unchanged, so write-only and
+    # unused bits read back 0 instead of 1 (#55).
+    - name: Run sound register read-back test
+      run: python3 test_roms/test_sound_readback.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
   test-full:
     needs: build
     runs-on: ubuntu-latest
