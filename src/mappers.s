@@ -39,6 +39,27 @@ RamEnable:
 	ldrb_ r0,mapperdata+4		@rambank
 	b mapAB_
 
+@----------------------------------------------------------------------------
+MBC2RamEnable:
+@----------------------------------------------------------------------------
+	@As RamEnable, but installs the MBC2-specific accessors: its RAM is 512
+	@half-bytes, so A000-BFFF echoes every 512 bytes and reads return the
+	@upper nibble as 1.  Lives here, next to RamEnable, because the adrl
+	@below has to reach the handlers from the same section.
+	strb_ r0,mapperdata+2
+	and r0,r0,#0x0F
+	cmp r0,#0x0A
+	adrnel r1,empty_W
+	adreql r1,mbc2_W
+	str_ r1,writemem_tbl+40
+	str_ r1,writemem_tbl+44
+	adrnel r1,empty_R
+	adreql r1,mbc2_R
+	str_ r1,readmem_tbl_-40
+	str_ r1,readmem_tbl_-44
+	ldrb_ r0,mapperdata+4		@rambank
+	b mapAB_
+
 	.pushsection .text
 @----------------------------------------------------------------------------
 mbc0init:
@@ -110,7 +131,9 @@ MBC1mode:
 @----------------------------------------------------------------------------
 mbc2init:
 @----------------------------------------------------------------------------
-	.word MBC2RamEnable,MBC2map,void,void
+	@Both halves of 0000-3FFF go to the same handler: on MBC2 it is address
+	@bit 8 alone that picks the register, not which 8KB block was written.
+	.word MBC2reg,MBC2reg,void,void
 
 	ldr r0,=empty_W					@ Disable RAM = $00
 	str_ r0,writemem_tbl+40
@@ -119,19 +142,20 @@ mbc2init:
 	mov pc,lr
 	.popsection
 @----------------------------------------------------------------------------
+MBC2reg:	@MBC2 register write, anywhere in 0000-3FFF
+@----------------------------------------------------------------------------
+	@A8 set = ROM bank select, A8 clear = RAM enable -- across the whole
+	@range.  These used to be wired one per 8KB block, so a bank select at
+	@0100 and a RAM enable at 2000 were both silently dropped.
+	tst addy,#0x0100
+	beq MBC2RamEnable
+@----------------------------------------------------------------------------
 MBC2map:
 @----------------------------------------------------------------------------
-	tst addy,#0x0100
-	moveq pc,lr
 	ands r0,r0,#0xf
 	moveq r0,#1
 	b map4567_
 	.pushsection .text
-@----------------------------------------------------------------------------
-MBC2RamEnable:
-	tst addy,#0x0100
-	beq_long RamEnable
-	mov pc,lr
 
 @----------------------------------------------------------------------------
 mbc3init:

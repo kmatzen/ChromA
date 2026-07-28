@@ -19,6 +19,10 @@
         "description": "NRxx read-back mask probe - verified via .sav inspection in test_sound_readback.py, not a screenshot",
         "skip_visual": true
     },
+    "mbc2_banking_test": {
+        "description": "MBC2 A8 register decode and 512-nibble RAM model - verified via .sav inspection in test_mbc2_banking.py, not a screenshot",
+        "skip_visual": true
+    },
     "sram_owner_test_a": {
         "description": "cross-game SRAM ownership probe A - verified via .sav inspection in test_sram_ownership.py, not a screenshot",
         "skip_visual": true
