@@ -400,7 +400,11 @@ stateheader* drawstates(int menutype,int *menuitems,int *menuoffset, int needed_
 	int freespace;
 	char *s=str;
 	//char s[30];
-	stateheader *selectedstate;
+	//Was returned uninitialized when sel transiently equalled the shrunken
+	//statecount after a SELECT-delete (the -Wmaybe-uninitialized warning
+	//here), and the load menu fed it straight to loadstate2().  A null
+	//return now means "nothing selected", which the callers check.
+	stateheader *selectedstate=0;
 	int time;
 	int selectedstatesize;
 	stateheader *sh=(stateheader*)(sram_copy + 4);
@@ -443,7 +447,11 @@ stateheader* drawstates(int menutype,int *menuitems,int *menuoffset, int needed_
 
 	freespace=save_start-total;
 
-	if(sel!=statecount) {//not <NEW>
+	//Guard on what the loop actually resolved, not on sel!=statecount: after
+	//a SELECT-delete shrinks the list, sel can sit past the last entry, and
+	//then nothing above assigned time/selectedstatesize/selectedstate while
+	//sel!=statecount was still true -- so this drew uninitialised stack.
+	if(selectedstate) {//not <NEW>
 		getstatetimeandsize(s,time,selectedstatesize,freespace);
 		drawtext(32+18,s,0);
 	}
@@ -947,7 +955,8 @@ void loadstatemenu() {
 	do {
 		key=getmenuinput(menuitems);
 		if(key&(A_BTN)) {
-			loadstate2(romnum,sh);
+			if(sh)					//no selection resolved: don't load garbage
+				loadstate2(romnum,sh);
 		} else if(key&SELECT) {
 			updatestates(selected,1,STATESAVE);
 			if(selected==menuitems-1) selected--;	//deleted last entry? move up one
@@ -1048,13 +1057,28 @@ void readconfig() {
 	i=findstate(0,CONFIGSAVE,(stateheader**)&cfg);
 	if(i>=0) {
 //		bcolor=cfg->bordercolor;
-		palettebank=cfg->palettebank;
+		//Everything below comes off the cart's SRAM, and the STATEID magic
+		//is shared with other Goomba-family forks that lay this record out
+		//differently -- so treat it as untrusted rather than as something
+		//we wrote.  palettebank is a signed char in the record but a u32
+		//here, so a negative byte would sign-extend into a huge index and
+		//paltxt[palettebank] would read far off the end of a 94-entry table.
+		{
+			int pal = cfg->palettebank;
+			if(pal < 0 || (u32)pal >= paltxt_count)
+				pal = 0;
+			palettebank = pal;
+		}
 		i = cfg->misc;
 		stime = i & 0x3;						//restore current autosleep time
 //		gbadetect = (i & 0x08)>>3;				//restore current gbadetect setting
 		request_gb_type = (i & 0x0C)>>2;		//restore current request_gb_type setting
 		autostate = (i & 0x10)>>4;				//restore current autostate setting
 		gammavalue = (i & 0xE0)>>5;				//restore current gamma setting
+		//Three bits round-trip 0-7, but the setting only ever cycles 0-4
+		//(see ui.c), so 5-7 are values no consumer expects.
+		if(gammavalue > 4)
+			gammavalue = 0;
 		sram_owner=cfg->sram_checksum;
 	}
 }
