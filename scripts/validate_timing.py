@@ -9,6 +9,10 @@ import re
 import sys
 import os
 
+# Lower bound on how many of the EXPECTED opcodes must actually be found in the
+# source and validated.  See the check in main() for why "> 0" is not enough.
+MIN_CHECKED = 133
+
 # Pan Docs reference timing (clock cycles per instruction)
 # Conditional branches list (not_taken, taken) — we check not_taken base cost
 EXPECTED = {
@@ -153,6 +157,19 @@ def main():
 
     if checked == 0:
         print("  ERROR: parsed zero opcode fetch costs -- source files missing or format changed?")
+        sys.exit(1)
+
+    # A floor of "more than zero" is nearly as vacuous as no floor at all: a
+    # regex or label drift that dropped coverage from 133 opcodes to 5 would
+    # still print "All checked timings correct" and exit 0.  Ratchet against
+    # the count this actually achieves, so losing coverage is a build failure
+    # rather than a silently smaller report.  Raise MIN_CHECKED when real
+    # coverage improves; never lower it to make a build pass.
+    if checked < MIN_CHECKED:
+        print(f"  ERROR: only {checked} opcodes checked, expected at least "
+              f"{MIN_CHECKED}.")
+        print("  Timing coverage regressed -- a parse/label change most likely "
+              "stopped matching.")
         sys.exit(1)
 
     if errors:

@@ -12,6 +12,17 @@
  *        --context N       Show N instructions of context around divergence (default: 5)
  *        --verbose         Print every compared instruction
  *        --ref-only        Only generate and print the reference trace
+ *
+ * Divergences are not failures on their own: the comparison resynchronises the
+ * reference core onto chroma's state and keeps going, because the two cores
+ * legitimately disagree about I/O timing.  What makes a run a failure is doing
+ * that too often, which these budgets bound (see the defaults in main()):
+ *        --resync-window N        window for the burst check (default: 100)
+ *        --max-window-resyncs N   burst limit within that window (default: 50)
+ *        --max-resync-rate P      overall resync percentage (default: 5.0)
+ *        --max-state-resyncs N    register-only divergences (default: 8)
+ *        --max-stack-resyncs N    call-stack divergences (default: 16)
+ * Exit status is 0 only if every budget held.
  */
 
 #include <mgba/flags.h>
@@ -131,7 +142,14 @@ int main(int argc, char** argv) {
         fprintf(stderr, "  --max-insns N     Max instructions to compare (default %d)\n", TRACE_MAX_ENTRIES);
         fprintf(stderr, "  --input F:keys    Button press at frame F\n");
         fprintf(stderr, "  --context N       Context lines around divergence (default 5)\n");
-        fprintf(stderr, "  --resync-window N Max search distance for re-sync (default 2000)\n");
+        fprintf(stderr, "  --resync-window N Sliding window (instructions) for the resync\n");
+        fprintf(stderr, "                    density check (default 100)\n");
+        fprintf(stderr, "  --max-window-resyncs N  Fail if a window holds more than N\n");
+        fprintf(stderr, "                    resyncs (default 50)\n");
+        fprintf(stderr, "  --max-resync-rate P   Fail above P%% resyncs overall (default 5.0)\n");
+        fprintf(stderr, "  --max-state-resyncs N Fail above N register-only divergences\n");
+        fprintf(stderr, "                    (default 8) -- the tight correctness check\n");
+        fprintf(stderr, "  --max-stack-resyncs N Fail after N SP divergences (default 16)\n");
         fprintf(stderr, "  --verbose         Print every instruction\n");
         fprintf(stderr, "  --ref-only        Only run the reference trace\n");
         return 1;
@@ -142,7 +160,31 @@ int main(int argc, char** argv) {
     int total_frames = 60;
     int max_insns = TRACE_MAX_ENTRIES;
     int context = 5;
-    int resync_window = 2000;
+    /* Every divergence case below force-syncs the reference core to chroma's
+     * state and carries on, so without a budget the comparison can never
+     * report a failure no matter how far apart the two cores drift.  These
+     * are the caps that turn "kept going" back into "failed".
+     *
+     * The defaults come from measuring clean builds against POKEMON
+     * RED/BLUE/YELLOW/GOLD, ZELDA, POKEMON PINBALL and the probe ROMs.
+     * They differ a lot in how much they legitimately resync, so the caps
+     * are not all equally tight:
+     *
+     *   code-path resyncs are the noisy ones (up to 114 per 5000, 2.3%).
+     *     Commercial ROMs sit in a VBlank poll loop whose LY reads get
+     *     patched, and a patched read routinely sends the two cores down
+     *     different branches.  Only the loose rate/burst backstops apply.
+     *
+     *   register-only resyncs mean PC and SP agree but a value does not --
+     *     chroma computed something different, which is not explained by
+     *     the I/O patch list.  Clean builds produce 0 or 1 of these on
+     *     every ROM measured, so this cap is the tight one and is what
+     *     actually catches correctness regressions. */
+    int resync_window = 100;
+    int max_window_resyncs = 50;
+    double max_resync_rate = 5.0;
+    int max_state_resyncs = 8;
+    int max_stack_resyncs = 16;
     bool verbose = false;
     bool ref_only = false;
 
@@ -159,6 +201,15 @@ int main(int argc, char** argv) {
             context = atoi(argv[++i]);
         } else if (!strcmp(argv[i], "--resync-window") && i + 1 < argc) {
             resync_window = atoi(argv[++i]);
+            if (resync_window < 1) resync_window = 1;
+        } else if (!strcmp(argv[i], "--max-window-resyncs") && i + 1 < argc) {
+            max_window_resyncs = atoi(argv[++i]);
+        } else if (!strcmp(argv[i], "--max-resync-rate") && i + 1 < argc) {
+            max_resync_rate = atof(argv[++i]);
+        } else if (!strcmp(argv[i], "--max-state-resyncs") && i + 1 < argc) {
+            max_state_resyncs = atoi(argv[++i]);
+        } else if (!strcmp(argv[i], "--max-stack-resyncs") && i + 1 < argc) {
+            max_stack_resyncs = atoi(argv[++i]);
         } else if (!strcmp(argv[i], "--verbose")) {
             verbose = true;
         } else if (!strcmp(argv[i], "--ref-only")) {
@@ -412,6 +463,36 @@ int main(int argc, char** argv) {
     int hard_diverge_ji = -1;
     uint16_t last_pc = 0;  /* PC of previous instruction (for I/O read detection) */
 
+    /* Resyncs split by how badly the cores disagreed, so the report says which
+     * kind of drift is being tolerated rather than lumping them together. */
+    int state_resyncs = 0;   /* PC and SP agree, other registers do not */
+    int path_resyncs = 0;    /* PC diverged (different code path), SP agrees */
+    int stack_resyncs = 0;   /* SP diverged -- diverged call stack */
+
+    /* Compare indices of every resync so far, ascending.  window_lo is the
+     * oldest one still inside the trailing `resync_window` instructions, so
+     * resync_n - window_lo is the current density. */
+    int* resync_idx = malloc(sizeof(int) * (size_t)(jgbc_count + 1));
+    if (!resync_idx) {
+        fprintf(stderr, "ERROR: out of memory for resync tracking\n");
+        return 1;
+    }
+    int resync_n = 0, window_lo = 0;
+    int worst_density = 0, worst_density_ji = -1;
+
+    /* Bookkeeping shared by every resync case below. */
+    #define NOTE_RESYNC(bucket) do {                                          \
+        (bucket)++;                                                           \
+        timing_gaps++;                                                        \
+        resync_idx[resync_n++] = ji;                                          \
+        while (window_lo < resync_n &&                                        \
+               resync_idx[window_lo] <= ji - resync_window) window_lo++;      \
+        if (resync_n - window_lo > worst_density) {                           \
+            worst_density = resync_n - window_lo;                             \
+            worst_density_ji = ji;                                            \
+        }                                                                     \
+    } while (0)
+
     while (ji < jgbc_count) {
         /* Capture reference state before execution */
         struct trace_entry ref = {
@@ -464,7 +545,7 @@ int main(int argc, char** argv) {
             cpu->bc = jgbc->bc;
             cpu->de = jgbc->de;
             cpu->hl = jgbc->hl;
-            timing_gaps++;
+            NOTE_RESYNC(state_resyncs);
             match_count++;
             last_pc = cpu->pc;
             gb_core->step(gb_core);
@@ -488,7 +569,7 @@ int main(int argc, char** argv) {
             cpu->de = jgbc->de;
             cpu->hl = jgbc->hl;
             /* Re-encode PC for mGBA (set the memory mapper to the right bank) */
-            timing_gaps++;
+            NOTE_RESYNC(path_resyncs);
             match_count++;
             last_pc = cpu->pc;
             gb_core->step(gb_core);
@@ -500,14 +581,20 @@ int main(int argc, char** argv) {
          * point in each core (chroma's scanline-based timing vs mGBA's
          * cycle-accurate timing). An interrupt pushes PC, changes SP, and
          * jumps to a handler — causing both PC and SP to diverge.
-         * Detect this by checking if SP decreased (interrupt push) and
-         * resync the reference core to match. */
-        if (jgbc->sp < ref.sp) {
-            /* SP decreased — likely interrupt fired in chroma.
-             * Resync the reference to follow chroma's execution. */
+         *
+         * A diverged call stack is the case most likely to be a real CPU bug
+         * rather than timing jitter, so it gets its own small budget: past
+         * that the cores are not meaningfully being compared any more and
+         * this falls through to the hard-divergence report below.  The budget
+         * is not zero because a handful do occur legitimately (POKEMON
+         * PINBALL hits 2 in its first 5000 instructions). */
+        if (stack_resyncs < max_stack_resyncs) {
             if (verbose) {
-                printf("  IRQ JGC[%5d] REF PC=%04X SP=%04X -> JGC PC=%04X SP=%04X (interrupt)\n",
-                       ji, ref.pc, ref.sp, jgbc->pc, jgbc->sp);
+                /* SP decreasing means chroma took an interrupt the reference
+                 * has not; increasing means the reverse. */
+                printf("  IRQ JGC[%5d] REF PC=%04X SP=%04X -> JGC PC=%04X SP=%04X (interrupt in %s)\n",
+                       ji, ref.pc, ref.sp, jgbc->pc, jgbc->sp,
+                       jgbc->sp < ref.sp ? "chroma" : "ref");
             }
             cpu->pc = jgbc->pc;
             cpu->sp = jgbc->sp;
@@ -516,7 +603,7 @@ int main(int argc, char** argv) {
             cpu->bc = jgbc->bc;
             cpu->de = jgbc->de;
             cpu->hl = jgbc->hl;
-            timing_gaps++;
+            NOTE_RESYNC(stack_resyncs);
             match_count++;
             last_pc = cpu->pc;
             gb_core->step(gb_core);
@@ -524,29 +611,7 @@ int main(int argc, char** argv) {
             continue;
         }
 
-        if (jgbc->sp > ref.sp) {
-            /* SP lower in ref — ref took an interrupt that chroma hasn't.
-             * Force-sync the ref to match chroma's state. */
-            if (verbose) {
-                printf("  IRQ JGC[%5d] REF SP=%04X -> JGC SP=%04X (interrupt in ref)\n",
-                       ji, ref.sp, jgbc->sp);
-            }
-            cpu->pc = jgbc->pc;
-            cpu->sp = jgbc->sp;
-            cpu->a = jgbc->a;
-            cpu->f.packed = jgbc->f;
-            cpu->bc = jgbc->bc;
-            cpu->de = jgbc->de;
-            cpu->hl = jgbc->hl;
-            timing_gaps++;
-            match_count++;
-            last_pc = cpu->pc;
-            gb_core->step(gb_core);
-            ji++;
-            continue;
-        }
-
-        /* Truly unrecoverable divergence */
+        /* Unrecoverable divergence: the stack-resync budget is spent. */
         has_hard_diverge = true;
         hard_diverge_ji = ji;
         printf("\n*** HARD DIVERGENCE at JGC[%d] ***\n", ji);
@@ -558,16 +623,58 @@ int main(int argc, char** argv) {
     }
 
     /* ===== Report results ===== */
+    double resync_rate = match_count > 0 ? (100.0 * timing_gaps) / match_count : 0.0;
+
+    /* Every resync above is a divergence that was papered over by dragging the
+     * reference core onto chroma's state, so a run is only meaningful while
+     * they stay rare.  Check the budgets that make that explicit. */
+    bool rate_blown = resync_rate > max_resync_rate;
+    bool burst_blown = worst_density > max_window_resyncs;
+    bool state_blown = state_resyncs > max_state_resyncs;
+    bool failed = has_hard_diverge || rate_blown || burst_blown || state_blown;
+
     printf("\n");
     printf("=== Results ===\n");
     printf("  Matched: %d instructions\n", match_count);
     printf("  I/O timing patches: %d\n", io_patches);
-    printf("  State resyncs: %d\n", timing_gaps);
+    printf("  State resyncs: %d (%.2f%% of compared instructions)\n",
+           timing_gaps, resync_rate);
+    printf("    register-only: %d, code-path: %d, call-stack: %d\n",
+           state_resyncs, path_resyncs, stack_resyncs);
+    if (worst_density_ji >= 0) {
+        printf("  Densest resync burst: %d in %d instructions (near JGC[%d])\n",
+               worst_density, resync_window, worst_density_ji);
+    }
     printf("  JGC consumed: %d / %d\n", ji, jgbc_count);
 
     if (has_hard_diverge) {
         printf("\n*** HARD DIVERGENCE (possible CPU bug) at JGC[%d] ***\n", hard_diverge_ji);
-        printf("  SP mismatch indicates diverged call stack — likely a real bug.\n");
+        printf("  Call stack diverged %d times (limit %d) — the traces are no\n",
+               stack_resyncs, max_stack_resyncs);
+        printf("  longer executing the same program. Likely a real bug.\n");
+    }
+    if (state_blown) {
+        printf("\n*** FAIL: %d register-only divergences (limit %d) ***\n",
+               state_resyncs, max_state_resyncs);
+        printf("  PC and SP agreed but a register value did not, which the I/O\n");
+        printf("  timing patch list does not explain — chroma computed a\n");
+        printf("  different value. This is the signature of a real bug.\n");
+    }
+    if (rate_blown) {
+        printf("\n*** FAIL: resync rate %.2f%% exceeds the %.2f%% limit ***\n",
+               resync_rate, max_resync_rate);
+        printf("  The reference core was force-synced to chroma this often, so\n");
+        printf("  most of this run was not actually being compared.\n");
+    }
+    if (burst_blown) {
+        printf("\n*** FAIL: %d resyncs within %d instructions near JGC[%d] (limit %d) ***\n",
+               worst_density, resync_window, worst_density_ji, max_window_resyncs);
+        printf("  A burst this dense means the traces came apart rather than\n");
+        printf("  drifting — isolated timing jitter does not cluster.\n");
+    }
+
+    if (failed) {
+        printf("\nFAIL: comparison did not stay within its divergence budget.\n");
     } else if (match_count > 0 && timing_gaps == 0 && io_patches == 0) {
         printf("\nPASS: All %d instructions match exactly.\n", match_count);
     } else {
@@ -586,6 +693,8 @@ int main(int argc, char** argv) {
     free(gba_fb);
     free(jgbc_trace);
     free(rom_data);
+    free(resync_idx);
 
-    return has_hard_diverge ? 1 : 0;
+    return failed ? 1 : 0;
 }
+#undef NOTE_RESYNC
