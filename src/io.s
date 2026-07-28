@@ -1470,6 +1470,7 @@ FF54_W:	@HDMA4  Dest Low
 
 FF4D_R:	@KEY1 - bit 7, Read current speed of CPU - CGB Mode Only
 	ldrb_ r0,doublespeed
+	orr r0,r0,#0x7E		@only bits 7 and 0 exist; 1-6 read 1 on hardware
 	bx lr
 FF4D_W:	@KEY1 - prepare double speed
 	ldrb_ r1,doublespeed

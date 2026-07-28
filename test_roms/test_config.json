@@ -11,6 +11,10 @@
         "description": "TIMA reload-period and DIV-write glitch probe - verified via .sav inspection in test_timer_overflow.py, not a screenshot",
         "skip_visual": true
     },
+    "invalid_opcode_test": {
+        "description": "invalid opcode / FEA0-FEFF / KEY1 probe - verified via .sav inspection in test_invalid_opcode.py, not a screenshot",
+        "skip_visual": true
+    },
     "sram_owner_test_a": {
         "description": "cross-game SRAM ownership probe A - verified via .sav inspection in test_sram_ownership.py, not a screenshot",
         "skip_visual": true
