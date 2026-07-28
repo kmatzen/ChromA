@@ -76,10 +76,40 @@ The TRACE=1 build instruments the fetch macro to record GB CPU state
 buffer. The `trace_compare` tool compares this against mGBA's native
 GB core stepped instruction-by-instruction.
 
-Results across 20 ROMs: all pass. ~73% of instructions match exactly.
-The remaining ~27% are LY (FF44) reads that return different values due
-to different frame-start positions (ChromA starts at LY=0, mGBA
-at LY≈145). The tool handles these via I/O patching and state resyncs.
+~73% of instructions match exactly. The remaining ~27% are LY (FF44)
+reads that return different values due to different frame-start
+positions (ChromA starts at LY=0, mGBA at LY≈145). The tool handles
+these via I/O patching and state resyncs.
+
+An earlier version of this section read "Results across 20 ROMs: all
+pass." That claim was not evidence of anything: every divergence case
+in the comparison loop force-synced the reference core to ChromA's
+state and continued, so the tool returned 0 unconditionally and would
+have reported "all pass" against an arbitrarily broken emulator. It now
+budgets those resyncs and fails when they are exceeded (see #58).
+
+Resyncs are reported in three buckets, which behave very differently:
+
+- **code-path** (PC diverged, SP agreed) is the noisy bucket. Commercial
+  ROMs boot into a VBlank poll loop, and a patched LY read routinely
+  sends the two cores down different branches — POKEMON RED resyncs this
+  way 2.3% of the time on a good build.
+- **register-only** (PC and SP agreed, a value did not) is the
+  meaningful one: it means ChromA computed something different, and the
+  I/O patch list does not explain it. Good builds produce 0–1 of these
+  on every ROM measured.
+- **call-stack** (SP diverged) means the traces are no longer running
+  the same program. A few occur legitimately from interrupt-timing
+  differences (POKEMON PINBALL hits 2).
+
+Not every ROM is comparable. `ei_delay_test` and
+`ei_dispatch_window_test` spend most of their run resynced (the latter
+92% of instructions), and `invalid_opcode_test` diverges by design,
+since undefined-opcode behaviour is not something mGBA and ChromA agree
+on. These exceed the default budgets on a *good* build — which is the
+tool correctly reporting that it could not verify much, rather than the
+old silent PASS. Use `--max-resync-rate` / `--max-window-resyncs` /
+`--max-state-resyncs` to set a threshold appropriate to the ROM.
 
 All STAT mode bits, DIV, and other I/O registers match cycle-accurately
 between ChromA and mGBA — zero patches needed for those registers.
