@@ -15,6 +15,10 @@
         "description": "invalid opcode / FEA0-FEFF / KEY1 probe - verified via .sav inspection in test_invalid_opcode.py, not a screenshot",
         "skip_visual": true
     },
+    "sound_readback_test": {
+        "description": "NRxx read-back mask probe - verified via .sav inspection in test_sound_readback.py, not a screenshot",
+        "skip_visual": true
+    },
     "sram_owner_test_a": {
         "description": "cross-game SRAM ownership probe A - verified via .sav inspection in test_sram_ownership.py, not a screenshot",
         "skip_visual": true

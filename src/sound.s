@@ -240,12 +240,14 @@ _FF10R:@		NR10 - Channel 1 Sweep register
 @----------------------------------------------------------------------------
 	mov r1,#REG_BASE
 	ldrb r0,[r1,#REG_SG1CNT_L]
+	orr r0,r0,#0x80		@NR10 bit 7 is unused
 	mov pc,lr
 @----------------------------------------------------------------------------
 _FF11R:@		NR11 - Channel 1 Sound length/Wave pattern duty
 @----------------------------------------------------------------------------
 	mov r1,#REG_BASE
 	ldrb r0,[r1,#REG_SG1CNT_H]
+	orr r0,r0,#0x3F		@NR11 length (bits 5-0) is write-only; the duty reads back
 	mov pc,lr
 @----------------------------------------------------------------------------
 _FF12R:@		NR12 - Channel 1 Volume Envelope
@@ -256,14 +258,14 @@ _FF12R:@		NR12 - Channel 1 Volume Envelope
 @----------------------------------------------------------------------------
 _FF13R:@		NR13 - Channel 1 Frequency lo
 @----------------------------------------------------------------------------
-	mov r1,#REG_BASE
-	ldrb r0,[r1,#REG_SG1CNT_X]
+	mov r0,#0xff		@NR13 is write-only; it reads back $FF
 	mov pc,lr
 @----------------------------------------------------------------------------
 _FF14R:@		NR14 - Channel 1 Frequency hi
 @----------------------------------------------------------------------------
 	mov r1,#REG_BASE
 	ldrb r0,[r1,#REG_SG1CNT_X+1]
+	orr r0,r0,#0xBF		@NR14 only bit 6 (length enable) reads back
 	mov pc,lr
 
 @----------------------------------------------------------------------------
@@ -271,6 +273,7 @@ _FF16R:@		NR21 - Channel 2 Sound Length/Wave Pattern Duty
 @----------------------------------------------------------------------------
 	mov r1,#REG_BASE
 	ldrb r0,[r1,#REG_SG2CNT_L]
+	orr r0,r0,#0x3F		@NR21 length (bits 5-0) is write-only; the duty reads back
 	mov pc,lr
 @----------------------------------------------------------------------------
 _FF17R:@		NR22 - Channel 2 Volume Envelope
@@ -281,14 +284,14 @@ _FF17R:@		NR22 - Channel 2 Volume Envelope
 @----------------------------------------------------------------------------
 _FF18R:@		NR23 - Channel 2 Frequency lo
 @----------------------------------------------------------------------------
-	mov r1,#REG_BASE
-	ldrb r0,[r1,#REG_SG2CNT_H]
+	mov r0,#0xff		@NR23 is write-only; it reads back $FF
 	mov pc,lr
 @----------------------------------------------------------------------------
 _FF19R:@		NR24 - Channel 2 Frequency hi
 @----------------------------------------------------------------------------
 	mov r1,#REG_BASE
 	ldrb r0,[r1,#REG_SG2CNT_H+1]
+	orr r0,r0,#0xBF		@NR24 only bit 6 (length enable) reads back
 	mov pc,lr
 
 @----------------------------------------------------------------------------
@@ -297,12 +300,12 @@ _FF1AR:@		NR30 - Channel 3 Sound on/off
 	mov r1,#REG_BASE
 	ldrb r0,[r1,#REG_SG3CNT_L]
 	and r0,r0,#0x80
+	orr r0,r0,#0x7F		@NR30 only bit 7 (DAC) reads back
 	mov pc,lr
 @----------------------------------------------------------------------------
 _FF1BR:@		NR31 - Channel 3 Sound Length
 @----------------------------------------------------------------------------
-	mov r1,#REG_BASE
-	ldrb r0,[r1,#REG_SG3CNT_H]
+	mov r0,#0xff		@NR31 is write-only; it reads back $FF
 	mov pc,lr
 @----------------------------------------------------------------------------
 _FF1CR:@		NR32 - Channel 3 Select output level
@@ -310,18 +313,19 @@ _FF1CR:@		NR32 - Channel 3 Select output level
 	mov r1,#REG_BASE
 	ldrb r0,[r1,#REG_SG3CNT_H+1]
 	and r0,r0,#0x60
+	orr r0,r0,#0x9F		@NR32 only bits 6-5 (output level) read back
 	mov pc,lr
 @----------------------------------------------------------------------------
 _FF1DR:@		NR33 - Channel 3 Frequency lo
 @----------------------------------------------------------------------------
-	mov r1,#REG_BASE
-	ldrb r0,[r1,#REG_SG3CNT_X]
+	mov r0,#0xff		@NR33 is write-only; it reads back $FF
 	mov pc,lr
 @----------------------------------------------------------------------------
 _FF1ER:@		NR34 - Channel 3 Frequency hi
 @----------------------------------------------------------------------------
 	mov r1,#REG_BASE
 	ldrb r0,[r1,#REG_SG3CNT_X+1]
+	orr r0,r0,#0xBF		@NR34 only bit 6 (length enable) reads back
 	mov pc,lr
 
 @----------------------------------------------------------------------------
@@ -335,8 +339,7 @@ _FF30R:@		Channel 3 wave data
 @----------------------------------------------------------------------------
 _FF20R:@		NR41 - Channel 4 Sound Length
 @----------------------------------------------------------------------------
-	mov r1,#REG_BASE
-	ldrb r0,[r1,#REG_SG4CNT_L]
+	mov r0,#0xff		@NR41 is write-only; it reads back $FF
 	mov pc,lr
 @----------------------------------------------------------------------------
 _FF21R:@		NR42 - Channel 4 Volume Envelope
@@ -355,6 +358,7 @@ _FF23R:@		NR44 - Channel 4 Counter/consecutive; Inital
 @----------------------------------------------------------------------------
 	mov r1,#REG_BASE
 	ldrb r0,[r1,#REG_SG4CNT_H+1]
+	orr r0,r0,#0xBF		@NR44 only bit 6 (length enable) reads back
 	mov pc,lr
 
 @----------------------------------------------------------------------------
@@ -379,6 +383,7 @@ _FF26R:@		NR52 - Sound on/off
 	tst r2,#0x80
 	biceq r0,#0x04				@clear "channel 3 is playing" bit
 	
+	orr r0,r0,#0x70		@NR52 bits 6-4 are unused
 	mov pc,lr
 
 @----------------------------------------------------------------------------
