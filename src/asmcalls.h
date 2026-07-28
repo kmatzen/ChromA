@@ -147,6 +147,7 @@ void move_ui_asm(void);
 extern u32 FPSValue;		//from lcd.s
 extern u8 fpsenabled;		//from lcd.s
 extern u32 palettebank;		//from lcd.s palette bank
+extern const u32 paltxt_count;	//from ui.c: entries in paltxt[], bounds palettebank
 extern u8 gammavalue;	//from lcd.s
 
 extern u8 g_lcdhack;

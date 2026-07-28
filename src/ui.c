@@ -354,6 +354,10 @@ char *const paltxt[]=
 "Wario Land II",
 "Pac-in-Time"
 };
+//Derived from the table rather than hand-copied, so it cannot drift when
+//entries are added.  readconfig() clamps the palette index restored from
+//SRAM against this -- see the note there.
+const u32 paltxt_count = sizeof(paltxt)/sizeof(paltxt[0]);
 char *const gbtxt[]={"GB","Prefer SGB over GBC","Prefer GBC over SGB","GBC+SGB"};
 char *const clocktxt[]={"Full","Half speed"};
 char *const lcdhacktxt[]={"OFF","Low","Medium","High"};
