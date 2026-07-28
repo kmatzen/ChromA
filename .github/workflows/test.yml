@@ -151,6 +151,13 @@ jobs:
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
 
+    # TIMA could read below TMA, and the DIV-write falling-edge path tested
+    # dividereg bits that are always zero, so it never fired (#44).
+    - name: Run timer overflow test
+      run: python3 test_roms/test_timer_overflow.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
   test-full:
     needs: build
     runs-on: ubuntu-latest

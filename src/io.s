@@ -1235,30 +1235,49 @@ _FF04W:@		DIV - Divider Register
 	@ Writing any value resets the 16-bit internal counter to 0.
 	@ If the timer is enabled and the selected bit of the old counter
 	@ was 1, this falling edge increments TIMA (real GB behavior).
-	ldrb_ r1,timerctrl
-	tst r1,#0x4
-	beq 1f				@timer disabled, just clear
-	@ Check if the selected counter bit was set before reset
+	@
+	@ dividereg only advances once per scanline, in steps of
+	@ timercyclesperscanline<<12 = 456<<16, so its bottom 19 bits are
+	@ ALWAYS zero.  Both the bit that clocks TIMA and the point this write
+	@ resets to live below that granularity, so fold in the cycles elapsed
+	@ so far this scanline first -- the same thing _FF04R does to read DIV.
+	ldr_ r1,cyclesperscanline
+	bic r2,cycles,#CYC_MASK
+	sub r1,r1,r2			@r1 = elapsed cycles this scanline
 	ldr_ r0,dividereg
-	ands r1,r1,#3			@frequency select
-	moveq r1,#4
-	mov r2,#18
-	sub r1,r2,r1,lsl#1		@shift amount for selected bit
-	movs r0,r0,lsr r1		@test if selected bit was set
+	add r0,r0,r1,lsl#12		@r0 = the counter as of this write
+
+	ldrb_ r2,timerctrl
+	tst r2,#0x4
+	beq 1f				@timer disabled, just clear
+	@ Check if the selected counter bit was set before reset.  At this
+	@ scaling one T-cycle is 1<<16, so the internal counter's bit b is
+	@ dividereg bit b+16: 25/19/21/23 for TAC 00/01/10/11.  Testing
+	@ 9/15/13/11 (a shift of 18-2*sel) only ever read zeros, which is why
+	@ this whole path was dead.
+	ands r2,r2,#3			@frequency select
+	moveq r2,#4
+	add r2,r2,r2
+	add r2,r2,#18			@shift 18+2*sel -> tests bit 17+2*sel
+	movs r2,r0,lsr r2		@test if selected bit was set
 	bcc 1f				@bit was 0, no falling edge
 	@ Falling edge → increment TIMA
-	ldr_ r0,timercounter
-	adds r0,r0,#0x01000000		@increment high byte (TIMA)
-	strcc r0,[globalptr,#timercounter]	@store if no overflow
+	ldr_ r2,timercounter
+	adds r2,r2,#0x01000000		@increment high byte (TIMA)
+	strcc r2,[globalptr,#timercounter]	@store if no overflow
 	bcc 1f
 	@ TIMA overflow → set timer IRQ, reload TMA
-	ldrb_ r0,gb_if
-	orr r0,r0,#0x04
-	strb_ r0,gb_if
-	ldrb_ r0,timermodulo
-	mov r0,r0,lsl#24
-	str_ r0,timercounter
-1:	mov r0,#0
+	ldrb_ r2,gb_if
+	orr r2,r2,#0x04
+	strb_ r2,gb_if
+	ldrb_ r2,timermodulo
+	mov r2,r2,lsl#24
+	str_ r2,timercounter
+1:	@ The counter restarts HERE, not at the start of the scanline.
+	@ checkTimerIRQ adds the whole scanline back at the end, so store the
+	@ negative of what has already elapsed and it lands on zero.
+	rsb r0,r1,#0
+	mov r0,r0,lsl#12
 	str_ r0,dividereg
 	mov pc,lr
 @----------------------------------------------------------------------------
@@ -1282,12 +1301,20 @@ _FF07W:@		TAC - Timer Control
 	beq 1f					@no, just store
 	tst r0,#0x4				@is it still enabled?
 	bne 1f					@yes, no edge
-	@ Timer being disabled.  Check selected bit of dividereg.
+	@ Timer being disabled.  Check the selected bit of the counter.
+	@ dividereg only advances once per scanline and the bit that clocks
+	@ TIMA sits below that granularity, so fold in the elapsed cycles
+	@ first; and the bit is b+16 at this scaling, not b (see _FF04W).
+	ldr_ r1,cyclesperscanline
+	bic r2,cycles,#CYC_MASK
+	sub r1,r1,r2
+	ldr_ r2,dividereg
+	add r2,r2,r1,lsl#12			@r2 = counter as of this write
+	ldrb_ r1,timerctrl			@(unchanged: still the old TAC)
 	ands r1,r1,#3
 	moveq r1,#4
-	mov r2,#18
-	sub r1,r2,r1,lsl#1
-	ldr_ r2,dividereg
+	add r1,r1,r1
+	add r1,r1,#18				@shift 18+2*sel -> bit 17+2*sel
 	movs r2,r2,lsr r1			@C = selected bit
 	bcc 1f					@bit was 0, no edge
 	@ Falling edge → increment TIMA
@@ -1363,8 +1390,22 @@ _FF05R:@		TIMA - Timer counter (sub-scanline accurate)
 	mov r2,#18
 	sub r1,r2,r1,lsl#1		@shift amount (same as timeout.s)
 	ldr_ r2,timercounter
-	add r0,r2,r0,lsl r1		@timercounter + elapsed<<shift
-	mov r0,r0,lsr#24		@extract TIMA byte (bits 31-24)
+	adds r0,r2,r0,lsl r1		@timercounter + elapsed<<shift
+	bcc 2f
+	@ The projection crossed an overflow, so TIMA has reloaded from TMA
+	@ since the last scanline boundary.  Fold the excess back through the
+	@ reload period exactly as checkTimerIRQ does -- taking bits 31-24 of
+	@ the raw sum instead wraps modulo 256 and reports values below TMA,
+	@ which TIMA can never hold once it has reloaded.
+	ldrb_ r1,timermodulo
+	rsb r2,r1,#256
+	movs r2,r2,lsl#24		@(256-TMA)<<24; 0 means a full 2^32 period
+	beq 3f
+0:	cmp r0,r2
+	subcs r0,r0,r2
+	bcs 0b
+3:	add r0,r0,r1,lsl#24
+2:	mov r0,r0,lsr#24		@extract TIMA byte (bits 31-24)
 	mov pc,lr
 _FF05R_disabled:
 	ldrb_ r0,timercounter+3
