@@ -619,6 +619,20 @@ int main(int argc, char** argv) {
                ref.pc, ref.a, flag_str(ref.f), ref.bc, ref.de, ref.hl, ref.sp);
         printf("  JGC: PC=%04X A=%02X F=%s BC=%04X DE=%04X HL=%04X SP=%04X\n",
                jgbc->pc, jgbc->a, flag_str(jgbc->f), jgbc->bc, jgbc->de, jgbc->hl, jgbc->sp);
+
+        /* --context was parsed and then ignored, so the context dump the
+         * usage text promises never happened.  Only chroma's side can be
+         * shown: the reference core is stepped live and has no recorded
+         * history, and stepping it further past a divergence would be
+         * misleading rather than informative. */
+        if (context > 0) {
+            int lo = ji - context; if (lo < 0) lo = 0;
+            int hi = ji + context; if (hi > jgbc_count - 1) hi = jgbc_count - 1;
+            printf("\n  chroma trace around the divergence:\n");
+            for (int k = lo; k <= hi; k++) {
+                print_entry(k, &jgbc_trace[k], k == ji ? "->JGC" : "  JGC");
+            }
+        }
         break;
     }
 
