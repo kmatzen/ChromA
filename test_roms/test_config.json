@@ -19,6 +19,14 @@
         "description": "NRxx read-back mask probe - verified via .sav inspection in test_sound_readback.py, not a screenshot",
         "skip_visual": true
     },
+    "sound_state_test": {
+        "description": "post-boot register state and wave RAM bank probe - verified via .sav inspection in test_sound_state.py, not a screenshot",
+        "skip_visual": true
+    },
+    "sound_power_test": {
+        "description": "APU power-off shadow probe - verified via .sav inspection in test_sound_power.py across a quicksave/quickload, not a screenshot",
+        "skip_visual": true
+    },
     "mbc2_banking_test": {
         "description": "MBC2 A8 register decode and 512-nibble RAM model - verified via .sav inspection in test_mbc2_banking.py, not a screenshot",
         "skip_visual": true

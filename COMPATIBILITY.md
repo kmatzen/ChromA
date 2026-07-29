@@ -101,11 +101,20 @@ What this GB/GBC emulator implements, what it's missing, and why.
 ### What works
 - All 4 channels: pulse 1 (sweep), pulse 2, wave, noise
 - Master volume, channel output selection, master enable
-- Wave RAM with bank switching
+- Register read-back masks: write-only and unused bits read as 1
+- Wave RAM with bank switching, including writes made while channel 3 plays
+- Post-boot register state, so a cart booted without a boot ROM finds the
+  values the DMG boot ROM would have left behind
 
 ### Architecture
 Direct pass-through to GBA APU hardware. GB sound register writes are
 mapped 1:1 to equivalent GBA registers. The GBA hardware generates audio.
+
+The GB's single 16-byte wave buffer is mapped onto the GBA's two banks:
+`SOUND3CNT_L` bit 6 selects the bank that plays and `04000090-9F` exposes the
+other one, and chroma flips that bit together with NR30 bit 7. Writes go to
+both banks, so data streamed while channel 3 is playing reaches the live one
+and the off-then-on double buffer still works.
 
 ### Gaps
 
@@ -113,6 +122,29 @@ mapped 1:1 to equivalent GBA registers. The GBA hardware generates audio.
 > Would consume too many ARM cycles. The pass-through gives acceptable
 > audio for free. Some GB sound quirks (envelope trigger bugs, frame
 > sequencer edge cases) are not reproduced.
+
+**Frame-sequencer edge quirks follow GBA silicon** — NOT FEASIBLE
+> The extra length clock when length is enabled in the first half of a
+> frame-sequencer period, the "zombie" envelope produced by writing NRx2
+> while a channel runs, and the sweep-negate latch that disables channel 1
+> if negate mode is cleared after a calculation, are all decided inside the
+> GBA APU. The register mapping cannot intercept them, so behaviour is
+> near-CGB rather than DMG-exact. Blargg's `dmg_sound` timing subtests
+> cover these; the `registers` subtest does not depend on them.
+
+**NR52 bit 0 reads 0 at boot rather than 1** — COSMETIC
+> The Pan Docs post-boot value is `0xF1`, whose low bit reports channel 1
+> still running from the boot ROM's start-up chime. chroma has no boot ROM
+> and never triggers a channel, and NR52's low nibble is hardware status the
+> GBA computes from its own channel state — it cannot be written. The
+> register reads `0xF0`. Nothing observed depends on it.
+
+**Length writes while the APU is powered off are dropped** — CGB behaviour
+> With NR52 bit 7 clear, the GBA ignores writes to `04000060-04000080`
+> entirely. That matches CGB, where the APU ignores all register writes
+> while powered down. A DMG additionally accepts writes to the four length
+> registers (NR11/NR21/NR31/NR41) in that state; chroma does not reproduce
+> that, on either GB type.
 
 ---
 
