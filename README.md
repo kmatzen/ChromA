@@ -5,7 +5,7 @@
 
 A Game Boy / Game Boy Color emulator for Game Boy Advance. Forked from Jagoomba Color by Jaga, which was based on Goomba Color by Dwedit, which was based on Goomba by FluBBa.
 
-### [▶ Try it in your browser](https://kmatzen.github.io/chroma/) — drop a .gb/.gbc ROM to play
+### [▶ Try it in your browser](https://kmatzen.com/ChromA/) — drop a .gb/.gbc ROM to play
 
 ## License
 
@@ -48,7 +48,7 @@ make -f test_roms/Makefile.test
 test_roms/trace_compare rom.gb combined.gba --frames 600 --max-insns 5000
 ```
 
-CI runs on every PR (custom ROM tests) and on every push to main (full suite with game ROMs). Visual regression reports are published to the [test report page](https://kmatzen.github.io/chroma/test-report.html).
+CI runs on every PR (custom ROM tests) and on every push to main (full suite with game ROMs). Visual regression reports are published to the [test report page](https://kmatzen.com/ChromA/test-report.html).
 
 ## Test baselines
 
