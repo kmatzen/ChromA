@@ -12,10 +12,13 @@ Usage:
     python3 test_roms/test_sram_writethrough.py
 """
 
+import argparse
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+from elf_symbols import SymbolError, load_symbols
 
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent
@@ -23,10 +26,23 @@ RUNNER = SCRIPT_DIR / "mgba_runner"
 COMPILER = SCRIPT_DIR / "goomba_compile.py"
 EMULATOR = PROJECT_DIR / "chroma.gba"
 
-# Addresses from chroma.elf
-XGB_SRAM_ADDR = 0x02038000
+# XGB_SRAM is resolved from build/chroma.elf.map, not hardcoded.  The literal
+# that used to sit here had no fallback path and no way to notice it had gone
+# stale: after any layout change these tests would dump 32KB of unrelated
+# EWRAM and compare *that* against cart SRAM.
+try:
+    XGB_SRAM_ADDR = load_symbols(['XGB_SRAM'])['XGB_SRAM']
+except SymbolError as exc:
+    print(f"ERROR: {exc}")
+    sys.exit(1)
+
 GBA_SRAM_BASE = 0x0E000000
 GBA_CART_SIZE = 0x10000  # 64K flash cart
+
+# Test outcomes.  SKIP used to be spelled "return True", which reported a test
+# that verified nothing as a pass; it is now a distinct state that main()
+# treats as a failure unless explicitly allowed.
+PASS, FAIL, SKIP = "PASS", "FAIL", "SKIP"
 
 
 def compile_rom(rom_path, output_path):
@@ -91,12 +107,12 @@ def test_writethrough(tmpdir):
 
     crystal = SCRIPT_DIR / CRYSTAL_ROM_NAME
     if not crystal.exists():
-        print(f"  SKIP: ROM not found")
-        return None
+        print(f"  SKIP: ROM not found ({CRYSTAL_ROM_NAME})")
+        return SKIP
 
     gba_path = tmpdir / "crystal_wt.gba"
     if not compile_rom(crystal, gba_path):
-        return False
+        return FAIL
 
     inputs = crystal_advance_inputs() + [
         "7000:Start", "7200:Down", "7400:Down",  # navigate to SAVE
@@ -115,7 +131,7 @@ def test_writethrough(tmpdir):
         },
     )
     if dumps is None:
-        return False
+        return FAIL
 
     xgb, gba = dumps["xgb"], dumps["gba"]
     xgb_nz = sum(1 for b in xgb if b != 0)
@@ -124,8 +140,14 @@ def test_writethrough(tmpdir):
     print(f"  GBA SRAM: {gba_nz} non-zero bytes")
 
     if xgb_nz == 0:
-        print(f"  SKIP: Game did not write to SRAM")
-        return True
+        # This is the whole premise of the test, not a reason to skip it.
+        # The intro is driven by a fixed-frame A-spam script, so any timing
+        # drift stops the run reaching the in-game save -- and reporting that
+        # as a pass is exactly how a real write-through regression would be
+        # converted into a green build.
+        print(f"  FAIL: game never wrote to SRAM -- the scripted intro did "
+              f"not reach an in-game save")
+        return FAIL
 
     total_mm = 0
     for bank in range(CRYSTAL_NUM_BANKS):
@@ -138,10 +160,10 @@ def test_writethrough(tmpdir):
 
     match_pct = (1 - total_mm / CRYSTAL_SRAM_SIZE) * 100
     # Allow small mismatch from stack pushes that bypass sram_W2.
-    passed = match_pct >= 95.0
+    result = PASS if match_pct >= 95.0 else FAIL
     print(f"  Match: {match_pct:.1f}% ({total_mm} mismatches)")
-    print(f"  Result: {'PASS' if passed else 'FAIL'}")
-    return passed
+    print(f"  Result: {result}")
+    return result
 
 
 def test_save_reload(tmpdir):
@@ -157,12 +179,12 @@ def test_save_reload(tmpdir):
 
     crystal = SCRIPT_DIR / CRYSTAL_ROM_NAME
     if not crystal.exists():
-        print(f"  SKIP: ROM not found")
-        return None
+        print(f"  SKIP: ROM not found ({CRYSTAL_ROM_NAME})")
+        return SKIP
 
     gba_path = tmpdir / "crystal.gba"
     if not compile_rom(crystal, gba_path):
-        return False
+        return FAIL
 
     savefile = tmpdir / "crystal.sav"
 
@@ -182,19 +204,22 @@ def test_save_reload(tmpdir):
         savefile=savefile,
     )
     if dumps1 is None:
-        return False
+        return FAIL
 
     first_xgb = dumps1["xgb"]
     first_nz = sum(1 for b in first_xgb if b != 0)
     print(f"  Run 1 XGB_SRAM: {first_nz} non-zero bytes")
 
     if first_nz == 0:
-        print(f"  SKIP: Game did not write to SRAM")
-        return True
+        # See test_writethrough: not reaching the save is a harness failure,
+        # not a pass.
+        print(f"  FAIL: game never wrote to SRAM -- the scripted intro did "
+              f"not reach an in-game save")
+        return FAIL
 
     if not savefile.exists():
         print(f"  FAIL: .sav file not created")
-        return False
+        return FAIL
     print(f"  Save file: {savefile.stat().st_size} bytes")
 
     # --- Run 2: reload and verify ---
@@ -209,7 +234,7 @@ def test_save_reload(tmpdir):
         savefile=savefile,
     )
     if dumps2 is None:
-        return False
+        return FAIL
 
     reload_xgb = dumps2["xgb"]
     reload_nz = sum(1 for b in reload_xgb if b != 0)
@@ -230,17 +255,35 @@ def test_save_reload(tmpdir):
             print(f"  Bank {bank}: {mm} mismatches (of {orig_nz} non-zero)")
 
     if total_compared == 0:
-        print(f"  SKIP: No data to compare")
-        return True
+        # first_nz > 0 was checked above, so every non-zero byte would have to
+        # have vanished between the two loops for this to happen. Treating it
+        # as a pass hid whatever caused it.
+        print(f"  FAIL: no populated banks to compare, though run 1 wrote "
+              f"{first_nz} non-zero bytes")
+        return FAIL
 
     match_pct = (1 - total_mm / total_compared) * 100
-    passed = match_pct >= 90.0
+    result = PASS if match_pct >= 90.0 else FAIL
     print(f"  Match: {match_pct:.1f}% ({total_mm} mismatches in {total_compared} bytes)")
-    print(f"  Result: {'PASS' if passed else 'FAIL'}")
-    return passed
+    print(f"  Result: {result}")
+    return result
+
+
+TESTS = [
+    ("Write-through", test_writethrough),
+    ("Save reload", test_save_reload),
+]
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--allow-missing-roms", action="store_true",
+        help="Report SKIP instead of failing when a game ROM is absent "
+             "(for local runs without the private ROM bundle; CI always has "
+             "them, so a missing ROM there means the download step broke)")
+    args = parser.parse_args()
+
     if not RUNNER.exists():
         print(f"ERROR: mgba_runner not found at {RUNNER}")
         sys.exit(1)
@@ -249,24 +292,39 @@ def main():
         sys.exit(1)
 
     results = []
-
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
-
-        r = test_writethrough(tmpdir)
-        if r is not None:
-            results.append(("Write-through", r))
-
-        r = test_save_reload(tmpdir)
-        if r is not None:
-            results.append(("Save reload", r))
+        for name, fn in TESTS:
+            # Skipped tests used to be dropped from `results` entirely, so a
+            # run where both ROMs were missing printed "0 passed, 0 failed"
+            # and exited 0. Record every test, always.
+            try:
+                results.append((name, fn(tmpdir)))
+            except (OSError, ValueError) as exc:
+                print(f"  ERROR: {type(exc).__name__}: {exc}")
+                results.append((name, FAIL))
 
     print(f"\n{'='*60}")
-    passed = sum(1 for _, r in results if r)
-    failed = sum(1 for _, r in results if not r)
+    passed = sum(1 for _, r in results if r == PASS)
+    failed = sum(1 for _, r in results if r == FAIL)
+    skipped = sum(1 for _, r in results if r == SKIP)
     for name, r in results:
-        print(f"  {'PASS' if r else 'FAIL'}: {name}")
-    print(f"\nSRAM tests: {passed} passed, {failed} failed")
+        print(f"  {r}: {name}")
+    print(f"\nSRAM tests: {passed} passed, {failed} failed, {skipped} skipped")
+
+    if not results:
+        print("ERROR: no tests ran")
+        sys.exit(1)
+    if skipped and not args.allow_missing_roms:
+        print("ERROR: tests were skipped for missing ROMs. A skip verifies "
+              "nothing, so it is not a pass -- pass --allow-missing-roms if "
+              "that is expected locally.")
+        sys.exit(1)
+    if skipped == len(results):
+        # Even when skips are allowed, a run that verified nothing at all is
+        # not a successful run.
+        print("ERROR: every test was skipped; nothing was verified")
+        sys.exit(1)
     sys.exit(1 if failed else 0)
 
 

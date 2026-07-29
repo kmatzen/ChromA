@@ -110,6 +110,13 @@ jobs:
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
 
+    # Guards the menu/SRAM harness itself (issue #59). Those suites only run
+    # in test-full, where they need the private ROMs -- which is how their
+    # assertions were able to decay into always-true shapes unnoticed. These
+    # checks are host-native, so they run here on every push and PR.
+    - name: Validate menu/SRAM harness assertions
+      run: python3 test_roms/test_menu_selfcheck.py
+
     - name: Run custom ROM visual tests
       run: |
         python3 test_roms/run_tests.py \
@@ -317,10 +324,13 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.TEST_ROMS_PAT }}
 
+    # run_all_tests.py already runs the 26-ROM visual suite. This step used to
+    # run run_tests.py first (just to collect diff images) and then hand over
+    # to run_all_tests.py, which ran it a second time -- doubling the slowest
+    # part of CI and giving every flaky baseline two chances to fail the job.
+    # --diff-dir is forwarded through the suite runner instead.
     - name: Run full test suite
-      run: |
-        python3 test_roms/run_tests.py --diff-dir /tmp/test-diffs || true
-        python3 test_roms/run_all_tests.py
+      run: python3 test_roms/run_all_tests.py --diff-dir /tmp/test-diffs
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
 
