@@ -136,6 +136,10 @@ LoadIo:
 	ldrb r0,[r3,#0x07]
 	strb_ r0,timerctrl
 	ldrb r0,[r3,#0x0F]
+	@Savestates are untrusted input: one written before FF0F masked its
+	@writes (or a hand-edited/corrupt file) carries bits 5-7 here, and
+	@restoring them raw puts phantom bits back into IF.
+	and r0,r0,#0x1F
 	strb_ r0,gb_if
 	
 	@write IO registers 10-3F directly

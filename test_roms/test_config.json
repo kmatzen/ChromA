@@ -7,6 +7,10 @@
         "description": "joypad interrupt and FF00 refresh probe - verified via .sav inspection in test_joypad_irq.py, not a screenshot",
         "skip_visual": true
     },
+    "if_register_test": {
+        "description": "IF read-back mask and phantom-IE-bit dispatch probe - verified via .sav inspection in test_if_register.py, not a screenshot (it never draws anything)",
+        "skip_visual": true
+    },
     "timer_overflow_test": {
         "description": "TIMA reload-period and DIV-write glitch probe - verified via .sav inspection in test_timer_overflow.py, not a screenshot",
         "skip_visual": true
