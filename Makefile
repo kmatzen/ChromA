@@ -144,8 +144,34 @@ export LIBPATHS	:=	$(foreach dir,$(LIBDIRS),-L$(dir)/lib)
 .PHONY: $(BUILD) clean
 
 #---------------------------------------------------------------------------------
+# all.s is a single translation unit that #includes ~15 further .s files
+# (gbz80.s, lcd.s, timeout.s, ...).  devkitARM's base_rules does emit -MMD
+# dependencies listing them, but only from the second build onwards, and GNU
+# make 3.81 -- still the make macOS ships -- compares mtimes at whole-second
+# granularity, so a source rewritten inside the same second as the previous
+# build is never seen as newer.  `git checkout` and `git stash` land in that
+# window routinely, and the result is a chroma.gba that silently still holds
+# the old code, so a fix looks like it had no effect (#60).
+#
+# Hash the assembly sources and drop the stale artifacts when the content
+# actually changed, so the decision does not depend on timestamps at all.  The
+# link products go too: reassembling all.o is not enough on its own, because
+# the object and the chroma.elf linked from the previous build also land in the
+# same one-second bucket, and then the link is skipped instead.
+#
+# This runs in the top-level make, before the recursive one starts, so removing
+# the files cannot race the sub-make's view of them.
+#---------------------------------------------------------------------------------
+ASMSOURCES	:=	$(sort $(foreach dir,$(SOURCES),$(wildcard $(dir)/*.s) $(wildcard $(dir)/*.h)))
+SRCHASH		:=	$(BUILD)/all.srchash
+
 $(BUILD):
 	@[ -d $@ ] || mkdir -p $@
+	@hash=`cat $(ASMSOURCES) | cksum`; \
+	 if [ "$$hash" != "`cat $(SRCHASH) 2>/dev/null`" ]; then \
+		echo "$$hash" > $(SRCHASH); \
+		rm -f $(BUILD)/all.o $(TARGET).elf $(TARGET).gba; \
+	 fi
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/$(MAKEFILE)
 
 all	: $(BUILD)
@@ -190,6 +216,7 @@ $(OUTPUT).elf	:	$(OFILES)	gba_crt0_my.o
 %.gba: %.elf
 	@bash ../scripts/validate_elf.sh $<
 	@python3 ../scripts/validate_timing.py
+	@python3 ../scripts/validate_font.py
 	@$(OBJCOPY) -O binary $< $@
 	@echo CUSTOM built ... $(notdir $@)
 	@echo gbafix $@ -t CHROMA -c CHRM
