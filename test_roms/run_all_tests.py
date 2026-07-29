@@ -44,6 +44,16 @@ def main():
     )
     results.append(("RLE codec unit tests", ok))
 
+    # 0b. mgba_runner argument validation (issue #58) -- no ROM or toolchain
+    # needed, and it guards the harness's own ability to report a problem, so
+    # run it before anything that depends on the runner behaving.
+    ok, out = run_suite(
+        "Runner Argument Validation",
+        [sys.executable, str(SCRIPT_DIR / "test_runner_args.py")],
+        timeout=120
+    )
+    results.append(("Runner argument validation", ok))
+
     # 1. Visual regression tests (26 ROMs)
     ok, out = run_suite(
         "Visual Regression Tests (26 ROMs)",

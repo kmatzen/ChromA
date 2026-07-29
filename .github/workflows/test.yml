@@ -103,6 +103,13 @@ jobs:
           -o test_roms/mgba_runner test_roms/mgba_runner.c \
           -L/tmp/mgba-build/build -lmgba -Wl,-rpath,/tmp/mgba-build/build
 
+    # Guards mgba_runner's own argument validation (issue #58): a runner that
+    # ignores malformed screenshot/input specs makes every test below vacuous.
+    - name: Validate test runner argument handling
+      run: python3 test_roms/test_runner_args.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
     - name: Run custom ROM visual tests
       run: |
         python3 test_roms/run_tests.py \
