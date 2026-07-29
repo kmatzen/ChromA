@@ -3,7 +3,12 @@
 
 static __inline void breakpoint()
 {
+	//mgba's breakpoint idiom, and ARM-only: clang still validates the operands
+	//of an unused static inline, so leaving it unguarded stopped any host unit
+	//test from including a header that reaches asmcalls.h.
+#if defined(__arm__) || defined(__thumb__)
 	__asm volatile ("mov r11,r11");
+#endif
 }
 
 

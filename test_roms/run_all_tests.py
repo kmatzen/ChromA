@@ -78,6 +78,13 @@ def main():
     # 0. RLE codec unit tests (host-native, no ROM/toolchain needed)
     suite("RLE Codec Unit Tests", "test_rle_unit.py", TIMEOUT_UNIT)
 
+    # 0a. Menu text and dirty-tile bitmap unit tests (issue #57 items 5 and 7).
+    # Both bugs are invisible to the screenshot suites -- one corrupts an
+    # off-screen shadow buffer, the other writes out of bounds with a zero mask
+    # -- so they are checked directly against the C on the host.
+    suite("Menu Text Row Unit Tests", "test_drawtextl_unit.py", TIMEOUT_UNIT)
+    suite("Dirty Tile Bitmap Unit Tests", "test_dirtybits_unit.py", TIMEOUT_UNIT)
+
     # 0b. mgba_runner argument validation (issue #58) -- no ROM or toolchain
     # needed, and it guards the harness's own ability to report a problem, so
     # run it before anything that depends on the runner behaving.

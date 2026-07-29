@@ -13,17 +13,29 @@
 
 typedef unsigned char u8;
 typedef unsigned short u16;
-typedef unsigned long u32;
 
 typedef int bool;
 
 typedef signed char s8;
 typedef signed short s16;
-typedef signed long s32;
 
 typedef volatile unsigned char vu8;
 typedef volatile unsigned short vu16;
+
+/* `long` is 32 bits on the GBA (arm-none-eabi) but 64 on a 64-bit host, so
+   spelling u32 as `unsigned long` made it the wrong width in the host-side unit
+   tests -- fatal for anything that indexes a word array of bit flags, e.g.
+   SetBits() in dma.c.  On the GBA both spellings are the same 32-bit type, so
+   the emulator build is unchanged; off-target we ask for a real 32-bit type. */
+#if defined(__arm__) || defined(__thumb__)
+typedef unsigned long u32;
+typedef signed long s32;
 typedef volatile unsigned long vu32;
+#else
+typedef unsigned int u32;
+typedef signed int s32;
+typedef volatile unsigned int vu32;
+#endif
 
 typedef void (*fptr)(void);
 

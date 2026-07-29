@@ -1,6 +1,10 @@
 #include "includes.h"
 
+//Guarded like EWRAM_BSS in gba.h so the host unit tests can define it away --
+//the .vram1 section and long_call only mean anything to the GBA toolchain.
+#ifndef VRAM_CODE
 #define VRAM_CODE	__attribute__((section(".vram1"), long_call))
+#endif
 
 extern u16 _dma_src;
 extern u16 _dma_dest;
@@ -63,12 +67,24 @@ static __inline VRAM_CODE void SetBits(u32 *base, int firstBit, int lastBit)
 	int lastWord = lastBit / 32;
 	int lastBitNumber = lastBit & 0x1F;
 	int lastMask = ~((u32)(-1) << lastBitNumber);
-	
+
+	//The range is half-open: bits firstBit..lastBit-1.  When lastBit is a
+	//multiple of 32 the final word holds none of them and lastMask is 0, but
+	//the code below still did a read-modify-write of base[lastWord] -- one word
+	//past the 24-byte dirty-tile region for a full-VRAM range, landing on
+	//ewram_canary_2.  The mask made it a no-op, so nothing broke; it is still
+	//an out-of-bounds write, and it stops being harmless the moment anything
+	//moves next to that array.
+	if (firstBit >= lastBit)
+	{
+		return;
+	}
+
 	if (firstWord == lastWord)
 	{
 		base[firstWord] |= (firstMask & lastMask);
 	}
-	else 
+	else
 	{
 		int i;
 		base[firstWord] |= firstMask;
@@ -76,7 +92,10 @@ static __inline VRAM_CODE void SetBits(u32 *base, int firstBit, int lastBit)
 		{
 			base[i] |= 0xFFFFFFFF;
 		}
-		base[i] |= lastMask;
+		if (lastBitNumber)
+		{
+			base[lastWord] |= lastMask;
+		}
 	}
 }
 
