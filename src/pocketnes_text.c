@@ -340,13 +340,20 @@ void drawtextl(int row,const char *str,int hilite, int len)
 		dest++;
 		{
 			int i=0;
-			while (str[i]>=' ' && i<29)
+			//Two ways this branch used to disagree with the VRAM one above:
+			//`len` was ignored, so a caller asking for a short field got the
+			//whole string; and the pad loop never advanced `dest`, so it
+			//rewrote one byte 29-i times and left the tail of the row holding
+			//whatever the previous, longer line had put there.  TEXTMEM is the
+			//off-screen half of the UI -- swap_column() copies it into VRAM as
+			//the menu scrolls across, so that stale tail scrolled into view.
+			while (str[i]>=' ' && i<29 && i<len)
 			{
 				*dest++=str[i++]+hilite;
 			}
 			for (;i<29;i++)
 			{
-				*dest=' ';
+				*dest++=' ';
 			}
 		}
 	}
