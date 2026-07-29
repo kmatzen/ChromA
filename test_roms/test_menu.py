@@ -14,6 +14,8 @@ import tempfile
 from pathlib import Path
 from PIL import Image
 
+from elf_symbols import SymbolError, load_symbols
+
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent
 RUNNER = SCRIPT_DIR / "mgba_runner"
@@ -27,36 +29,41 @@ KIRBY_DL2_ROM = SCRIPT_DIR / "Kirby's Dream Land 2 (USA, Europe) (SGB Enhanced).
 # Use 120-frame gaps between inputs to ensure each registers exactly once.
 MENU_GAP = 120
 
-# Emulator memory addresses - read from build/chroma.elf.map if available,
-# otherwise fall back to defaults matching the latest CI release build.
-def _load_addresses():
-    """Parse symbol addresses from the ELF map file."""
-    defaults = {
-        'joycfg': 0x030038CC, 'fpsenabled': 0x03003808,
-        'novblankwait': 0x03005133, 'sleeptime': 0x03005254,
-        'autostate': 0x02000057, 'doubletimer': 0x03005130,
-        'g_lcdhack': 0x030051DE, 'palettebank': 0x030051CC,
-        'gammavalue': 0x03005189, 'sgb_palette_number': 0x03005188,
-        'request_gba_mode': 0x03005131, 'request_gb_type': 0x03005132,
-        'auto_border': 0x03005241,
-    }
-    map_file = PROJECT_DIR / "build" / "chroma.elf.map"
-    if map_file.exists():
-        text = map_file.read_text()
-        for name in defaults:
-            for line in text.splitlines():
-                parts = line.split()
-                if len(parts) == 2 and parts[1] == name:
-                    defaults[name] = int(parts[0], 16)
-                    break
-    # request_gba_mode is the byte AFTER doubletimer in the assembly layout
-    # (doubletimer: .byte 2; request_gba_mode: .byte 0) but the map file
-    # shows both at the same address. Fix by using doubletimer + 1.
-    if defaults['request_gba_mode'] == defaults['doubletimer']:
-        defaults['request_gba_mode'] = defaults['doubletimer'] + 1
-    return defaults
+# Emulator memory addresses, resolved from build/chroma.elf.map.  There are
+# deliberately no hardcoded fallbacks: an address that silently goes stale
+# makes every behavioural assertion below a statement about unrelated memory.
+# See elf_symbols.py.
+_SYMBOLS = [
+    'joycfg', 'fpsenabled', 'novblankwait', 'sleeptime', 'autostate',
+    'doubletimer', 'g_lcdhack', 'palettebank', 'gammavalue',
+    'sgb_palette_number', 'request_gba_mode', 'request_gb_type', 'auto_border',
+]
 
-_ADDRS = _load_addresses()
+
+def _load_addresses():
+    """Resolve every symbol these tests poke, or fail loudly."""
+    addrs = load_symbols(_SYMBOLS)
+    # doubletimer and request_gba_mode are adjacent .byte labels in the
+    # assembly (doubletimer: .byte 2; request_gba_mode: .byte 0).  ld reports
+    # both at the same address, so the second has to be derived.  Assert the
+    # collision is exactly the one we know about: if ld ever starts reporting
+    # distinct addresses, take them at face value instead of adding 1 to a
+    # value that is already correct.
+    if addrs['request_gba_mode'] == addrs['doubletimer']:
+        addrs['request_gba_mode'] = addrs['doubletimer'] + 1
+    return addrs
+
+
+# Resolution is deferred rather than fatal at import, so the helpers in this
+# module stay importable (test_menu_selfcheck.py exercises them without a
+# build). main() turns an unresolved map into a hard exit before any test runs.
+_ADDR_ERROR = None
+try:
+    _ADDRS = _load_addresses()
+except SymbolError as exc:
+    _ADDR_ERROR = exc
+    _ADDRS = dict.fromkeys(_SYMBOLS)
+
 ADDR_JOYCFG = _ADDRS['joycfg']
 ADDR_FPSENABLED = _ADDRS['fpsenabled']
 ADDR_NOVBLANKWAIT = _ADDRS['novblankwait']
@@ -72,7 +79,20 @@ ADDR_REQUEST_GB_TYPE = _ADDRS['request_gb_type']
 ADDR_AUTO_BORDER = _ADDRS['auto_border']
 
 
+class RunnerError(RuntimeError):
+    """mgba_runner exited non-zero, so its outputs do not exist."""
+
+
 def run(gba, frames, inputs, screenshots=None, savefile=None, memdumps=None):
+    """Run the emulator once. Raises RunnerError if the run did not complete.
+
+    Every caller used to discard this result. When a run failed, its
+    screenshots and memory dumps were simply never written, and the first
+    Image.open/read_u8 that touched one raised a bare FileNotFoundError --
+    which, with no isolation in main(), aborted the entire suite at that
+    point and left every later test unreported. Raising a typed error lets
+    main() attribute the failure to one test and keep going.
+    """
     cmd = [str(RUNNER), str(gba), str(frames), "/dev/null"]
     for inp in inputs:
         cmd.extend(["--input", inp])
@@ -82,12 +102,47 @@ def run(gba, frames, inputs, screenshots=None, savefile=None, memdumps=None):
         cmd.extend(["--savefile", str(savefile)])
     for md in (memdumps or []):
         cmd.extend(["--memdump", md])
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=300).returncode == 0
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    if proc.returncode != 0:
+        raise RunnerError(
+            f"mgba_runner exited {proc.returncode} for {frames} frames: "
+            f"{proc.stderr.strip()[:400]}"
+        )
+    return True
 
 
-def pixel_diff_pct(a, b):
+# The menu draws the real-time clock on text row 0 (drawclock() in src/ui.c
+# calls drawtext(0, ...)), and src/main.c probes the GBA RTC at boot.  When
+# mGBA's GPIO autodetect enables the RTC, every menu screenshot embeds the
+# host wall clock, so a comparison against a stored baseline -- or against a
+# screenshot taken a second earlier in the same suite -- fails purely because
+# the seconds digit advanced.  Text rows are 8px tall, so masking the first
+# row removes the clock without touching any menu content.
+CLOCK_ROW_PX = 8
+
+
+def menu_diff_pct(a, b):
+    """Compare two menu screenshots, masking the clock row."""
+    return pixel_diff_pct(a, b, skip_top_px=CLOCK_ROW_PX)
+
+
+def pixel_diff_pct(a, b, skip_top_px=0):
+    """Percent of pixels that differ.
+
+    Gameplay screenshots compare the full frame; use menu_diff_pct() when
+    either side is a menu screenshot, so the wall clock on row 0 does not
+    contribute to the difference.
+    """
     ia = Image.open(a).convert("RGB")
     ib = Image.open(b).convert("RGB")
+    if ia.size != ib.size:
+        raise ValueError(f"size mismatch: {ia.size} vs {ib.size}")
+    w, h = ia.size
+    if skip_top_px:
+        box = (0, min(skip_top_px, h), w, h)
+        ia, ib = ia.crop(box), ib.crop(box)
+        if ia.size[1] == 0:
+            raise ValueError("skip_top_px removed the whole image")
     d = sum(1 for pa, pb in zip(ia.getdata(), ib.getdata()) if pa != pb)
     return d / (ia.size[0] * ia.size[1]) * 100
 
@@ -161,12 +216,19 @@ def navigate_to_submenu_item(t, submenu_downs, item_downs):
     return inputs, t
 
 
-def toggle_and_close_menu(t):
+def toggle_and_close_menu(t, toggle=True):
     """Press A to toggle a setting, then B twice to close submenu and menu.
+
+    With toggle=False the A press is omitted and everything else -- the frame
+    schedule, the navigation, the total run length -- is unchanged. That is
+    the control run for the behavioural tests below: the only difference
+    between it and the real run is whether the setting actually got flipped,
+    so any pixel difference between the two is attributable to the setting
+    rather than to the game having animated in the meantime.
 
     Returns (inputs, t).
     """
-    inputs = [f"{t}:A"]
+    inputs = [f"{t}:A"] if toggle else []
     t += MENU_GAP
     inputs += [f"{t}:B"]  # back to main menu
     t += MENU_GAP
@@ -221,7 +283,7 @@ def test_menu_open_close(tmpdir):
     b, m, a = str(tmpdir / "b.bmp"), str(tmpdir / "m.bmp"), str(tmpdir / "a.bmp")
     run(gba, 3600, ["600:Start", "900:Start", "2000:L+R", "2400:B"],
         screenshots=[f"1800:{b}", f"2200:{m}", f"3000:{a}"])
-    menu_ok = pixel_diff_pct(b, m) > 5
+    menu_ok = menu_diff_pct(b, m) > 5
     resume_ok = pixel_diff_pct(b, a) < 30
     print(f"  Menu visible={menu_ok} Resume={resume_ok} {'PASS' if menu_ok and resume_ok else 'FAIL'}")
     return menu_ok and resume_ok
@@ -312,7 +374,7 @@ def test_display_submenu(tmpdir):
                      f"{t + 300}:{back}"])
 
     # Submenu should look different from main menu
-    d = pixel_diff_pct(menu, submenu)
+    d = menu_diff_pct(menu, submenu)
     passed = d > 3
     print(f"  Submenu diff: {d:.1f}% {'PASS' if passed else 'FAIL'}")
     return passed
@@ -340,7 +402,7 @@ def test_other_settings_submenu(tmpdir):
         screenshots=[f"2200:{menu}",
                      f"{2000 + 200 + 3 * MENU_GAP + 100}:{submenu}"])
 
-    d = pixel_diff_pct(menu, submenu)
+    d = menu_diff_pct(menu, submenu)
     passed = d > 3
     print(f"  Submenu diff: {d:.1f}% {'PASS' if passed else 'FAIL'}")
     return passed
@@ -398,7 +460,7 @@ def test_speed_hacks_submenu(tmpdir):
         screenshots=[f"2200:{menu}",
                      f"{2000 + 200 + 4 * MENU_GAP + 100}:{submenu}"])
 
-    d = pixel_diff_pct(menu, submenu)
+    d = menu_diff_pct(menu, submenu)
     passed = d > 3
     print(f"  Submenu diff: {d:.1f}% {'PASS' if passed else 'FAIL'}")
     return passed
@@ -425,8 +487,10 @@ def test_autofire_toggle(tmpdir):
     run(gba, after_frame + 500, inputs,
         screenshots=[f"{before_frame}:{before}", f"{after_frame}:{after}"])
 
-    # The menu text should change (autofire OFF → Hold)
-    d = pixel_diff_pct(before, after)
+    # The menu text should change (autofire OFF → Hold).  Mask the clock row:
+    # at this threshold (~19 pixels) a single advancing seconds digit is
+    # enough to satisfy the assertion on its own.
+    d = menu_diff_pct(before, after)
     passed = d > 0.05  # sharp pixel font: OFF→Hold is ~27 pixels (0.07%)
     print(f"  Menu diff after toggle: {d:.1f}% {'PASS' if passed else 'FAIL'}")
     return passed
@@ -462,7 +526,7 @@ def test_manage_sram(tmpdir):
         savefile=sav)
 
     # Submenu should differ from main menu (even if empty, header text changes)
-    d = pixel_diff_pct(menu, submenu)
+    d = menu_diff_pct(menu, submenu)
     passed = d > 2
     print(f"  Submenu diff: {d:.1f}% {'PASS' if passed else 'FAIL'}")
     return passed
@@ -475,45 +539,69 @@ def test_a_autofire_behavior(tmpdir):
     if not compile_sml2(gba):
         return False
     dump_path = str(tmpdir / "joycfg_af.bin")
+    control_dump = str(tmpdir / "joycfg_af_control.bin")
     no_press_ss = str(tmpdir / "no_press.bmp")
     autofire_ss = str(tmpdir / "autofire.bmp")
     menu_before_ss = str(tmpdir / "af_menu_before.bmp")
     menu_after_ss = str(tmpdir / "af_menu_after.bmp")
 
-    # Run 1: Boot game, no A press in gameplay. Screenshot as baseline.
-    run(gba, 3000, ["600:Start", "900:Start"],
-        screenshots=[f"2500:{no_press_ss}"])
+    # The old control was a plain boot with no menu and no A press at all,
+    # screenshotted at frame 2500 while the experimental run screenshotted
+    # ~1500 frames later.  `diff > 2` between two such frames is guaranteed by
+    # animation, so the visual half asserted nothing.  Both runs now navigate
+    # identically and both press A in gameplay at the same frame; only the
+    # toggle differs, so the difference isolates autofire's effect on that
+    # held A press.
+    def autofire_run(toggle, gameplay_ss, dump, menu_shots=None):
+        t = 2000
+        inputs = ["600:Start", "900:Start", f"{t}:L+R"]
+        t += 300
+        inputs += menu_down(1, t)  # A autofire (item 1)
+        t += MENU_GAP
+        menu_before_frame = t
+        t += 200
+        if toggle:
+            inputs += [f"{t}:A"]  # toggle A autofire ON
+        t += MENU_GAP
+        menu_after_frame = t
+        t += 200
+        inputs += [f"{t}:B"]  # close menu
+        t += 300
+        # Press A in gameplay - with autofire this pulses causing jumps
+        inputs += [f"{t}:A"]
+        t += 300
+        shots = [f"{t}:{gameplay_ss}"]
+        if menu_shots:
+            shots = [f"{menu_before_frame}:{menu_shots[0]}",
+                     f"{menu_after_frame}:{menu_shots[1]}"] + shots
+        run(gba, t + 500, inputs, screenshots=shots,
+            memdumps=[memdump_arg(ADDR_JOYCFG, 4, dump)])
 
-    # Run 2: Enable autofire A via menu, then press A in gameplay.
-    t = 2000
-    inputs = ["600:Start", "900:Start"]
-    inputs += [f"{t}:L+R"]
-    t += 300
-    inputs += menu_down(1, t)  # A autofire (item 1)
-    t += MENU_GAP
-    menu_before_frame = t
-    t += 200
-    inputs += [f"{t}:A"]  # toggle A autofire ON
-    t += MENU_GAP
-    menu_after_frame = t
-    t += 200
-    inputs += [f"{t}:B"]  # close menu
-    t += 300
-    # Press A in gameplay - with autofire this pulses causing jumps
-    inputs += [f"{t}:A"]
-    t += 300
-    run(gba, t + 500, inputs,
-        screenshots=[f"{menu_before_frame}:{menu_before_ss}",
-                     f"{menu_after_frame}:{menu_after_ss}",
-                     f"{t}:{autofire_ss}"],
-        memdumps=[memdump_arg(ADDR_JOYCFG, 4, dump_path)])
+    autofire_run(toggle=False, gameplay_ss=no_press_ss, dump=control_dump)
+    autofire_run(toggle=True, gameplay_ss=autofire_ss, dump=dump_path,
+                 menu_shots=(menu_before_ss, menu_after_ss))
 
     joycfg = read_u32_le(dump_path)
+    control_joycfg = read_u32_le(control_dump)
     a_bit_cleared = (joycfg & 0x01) == 0
+    control_a_bit_set = (control_joycfg & 0x01) == 1
+    # The menu screenshots were captured but never compared. The label does
+    # change on toggle, so assert it (clock row masked -- see menu_diff_pct).
+    menu_changed = menu_diff_pct(menu_before_ss, menu_after_ss) > 0.05
+    # No gameplay-visual assertion, deliberately.  Against a matched control
+    # this measured exactly 0.0%, and the scenario cannot do better:
+    # mgba_runner auto-releases a key after 15 frames, so "holding" A spans 15
+    # frames, and by the screenshot 300 frames later Mario has landed in the
+    # same place whether the press was one jump or several autofired ones.
+    # Demonstrating autofire needs a key held across a longer window than the
+    # runner currently supports; the old `diff > 2` passed only on unrelated
+    # animation between two differently-timed runs.
     diff = pixel_diff_pct(no_press_ss, autofire_ss)
-    visual_ok = diff > 2
-    passed = a_bit_cleared and visual_ok
-    print(f"  joycfg=0x{joycfg:08X}, A bit cleared={a_bit_cleared}, gameplay diff={diff:.1f}%")
+    passed = a_bit_cleared and control_a_bit_set and menu_changed
+    print(f"  joycfg=0x{joycfg:08X} (A bit cleared={a_bit_cleared}), "
+          f"control=0x{control_joycfg:08X} (A bit set={control_a_bit_set})")
+    print(f"  menu label changed={menu_changed}")
+    print(f"  [diagnostic, not asserted] autofire-vs-control diff={diff:.1f}%")
     print(f"  {'PASS' if passed else 'FAIL'}")
     return passed
 
@@ -525,34 +613,43 @@ def test_vsync_behavior(tmpdir):
     if not compile_sml2(gba):
         return False
     dump_path = str(tmpdir / "novblankwait.bin")
-    before_ss = str(tmpdir / "before.bmp")
-    after_ss = str(tmpdir / "after.bmp")
+    control_dump = str(tmpdir / "novblankwait_control.bin")
+    vsync_on_ss = str(tmpdir / "vsync_on.bmp")
+    vsync_off_ss = str(tmpdir / "vsync_off.bmp")
 
-    # Boot game, screenshot at gameplay
-    t = 2000
-    inputs = ["600:Start", "900:Start"]
-    before_frame = t
-    # Open menu, Other Settings (Down×3), VSync (item 0), toggle OFF
-    nav, t = navigate_to_submenu_item(t, 3, 0)
-    inputs += nav
-    tog, t = toggle_and_close_menu(t)
-    inputs += tog
-    # Let game run with VSync OFF for a bit, then screenshot
-    t += 2000
-    after_frame = t
+    # This used to compare a screenshot taken before the menu was opened
+    # against one taken ~2500 frames later in the same run.  Those differ by
+    # far more than 5% from ordinary gameplay animation alone, so `diff > 5`
+    # held regardless of what VSync did.  Compare instead against a control
+    # run with the identical schedule and no toggle, screenshotted at the
+    # same frame.
+    def vsync_run(toggle, screenshot, dump):
+        t = 2000
+        inputs = ["600:Start", "900:Start"]
+        # Open menu, Other Settings (Down×3), VSync (item 0), toggle OFF
+        nav, t = navigate_to_submenu_item(t, 3, 0)
+        inputs += nav
+        tog, t = toggle_and_close_menu(t, toggle=toggle)
+        inputs += tog
+        # Let the game run past the menu close, then screenshot
+        t += 2000
+        run(gba, t + 500, inputs,
+            screenshots=[f"{t}:{screenshot}"],
+            memdumps=[memdump_arg(ADDR_NOVBLANKWAIT, 1, dump)])
 
-    run(gba, t + 500, inputs,
-        screenshots=[f"{before_frame}:{before_ss}", f"{after_frame}:{after_ss}"],
-        memdumps=[memdump_arg(ADDR_NOVBLANKWAIT, 1, dump_path)])
+    vsync_run(toggle=False, screenshot=vsync_on_ss, dump=control_dump)
+    vsync_run(toggle=True, screenshot=vsync_off_ss, dump=dump_path)
 
     val = read_u8(dump_path)
-    state_ok = val == 1  # novblankwait=1 means VSync OFF
-    # With VSync OFF, the game runs uncapped so more GB frames pass per GBA frame.
-    # The gameplay screenshot should differ from the pre-toggle screenshot.
-    diff = pixel_diff_pct(before_ss, after_ss)
+    control_val = read_u8(control_dump)
+    state_ok = val == 1 and control_val == 0  # novblankwait=1 means VSync OFF
+    # With VSync OFF the game runs uncapped, so by the shared screenshot frame
+    # it has advanced further than the control.
+    diff = pixel_diff_pct(vsync_on_ss, vsync_off_ss)
     visual_ok = diff > 5
     passed = state_ok and visual_ok
-    print(f"  novblankwait={val} (expect 1), visual diff={diff:.1f}% {'PASS' if passed else 'FAIL'}")
+    print(f"  novblankwait={val} (expect 1), control={control_val} (expect 0)")
+    print(f"  on-vs-off diff={diff:.1f}% {'PASS' if passed else 'FAIL'}")
     return passed
 
 
@@ -696,7 +793,17 @@ def test_autoload_state_behavior(tmpdir):
     gameplay_ss = str(tmpdir / "gameplay.bmp")
     autoloaded_ss = str(tmpdir / "autoloaded.bmp")
 
-    # Run 1: Boot to gameplay, quicksave, enable autoload, close menu
+    # This test used to prove almost nothing.  Closing the menu with B does
+    # not call writeconfig(), so `autostate` never reached the .sav -- and run
+    # 2 replayed the same "600:Start, 900:Start" that walks SML2 from its
+    # title screen into gameplay by hand.  So run 2 reached gameplay whether
+    # autoload worked or not, and the only live assertion was the in-memory
+    # flag from run 1.
+    #
+    # Now: run 1 exits through Restart (src/ui.c restart() calls writeconfig(),
+    # so the setting is actually persisted), and run 2 supplies no inputs at
+    # all -- if autoload does not fire, run 2 sits on the title screen and the
+    # comparison fails.
     t = 2000
     inputs1 = ["600:Start", "900:Start"]
     inputs1 += [f"{t}:R+Select"]  # quicksave at gameplay
@@ -706,26 +813,37 @@ def test_autoload_state_behavior(tmpdir):
     inputs1 += nav
     tog, t = toggle_and_close_menu(t)
     inputs1 += tog
+    # Reopen the menu (the cursor resets to item 0 on every open -- ui.c sets
+    # selected=0) and pick Restart, item 9, to force a writeconfig().
+    inputs1 += [f"{t}:L+R"]
+    t += 200
+    inputs1 += menu_down(9, t)
+    t += 9 * MENU_GAP
+    inputs1 += [f"{t}:A"]  # Restart -> writeconfig() -> jump_to_rommenu()
+    t += 1200
 
     run(gba, t + 500, inputs1,
         screenshots=[f"300:{title_ss}", f"1800:{gameplay_ss}"],
-        savefile=sav,
-        memdumps=[memdump_arg(ADDR_AUTOSTATE, 1, str(tmpdir / "autostate.bin"))])
-
-    autostate_val = read_u8(str(tmpdir / "autostate.bin"))
-
-    # Run 2: Boot with same savefile. Autoload should restore to gameplay.
-    run(gba, 3000, ["600:Start", "900:Start"],
-        screenshots=[f"2500:{autoloaded_ss}"],
         savefile=sav)
 
+    # Run 2: same savefile, no inputs whatsoever. Autoload has to do the work.
+    autostate_dump = str(tmpdir / "autostate.bin")
+    run(gba, 3000, [],
+        screenshots=[f"2500:{autoloaded_ss}"],
+        savefile=sav,
+        memdumps=[memdump_arg(ADDR_AUTOSTATE, 1, autostate_dump)])
+
+    # Reading the flag on the *fresh* boot is what proves writeconfig()
+    # persisted it; reading it in run 1 only proved the menu set a variable.
+    autostate_val = read_u8(autostate_dump)
     # Autoloaded should look like gameplay, not like title
     d_title = pixel_diff_pct(title_ss, autoloaded_ss)
     d_gameplay = pixel_diff_pct(gameplay_ss, autoloaded_ss)
     restored = d_gameplay < d_title
     flag_ok = autostate_val == 1
     passed = flag_ok and restored
-    print(f"  autostate={autostate_val}, title diff={d_title:.1f}%, gameplay diff={d_gameplay:.1f}%")
+    print(f"  autostate after reboot={autostate_val} (expect 1), "
+          f"title diff={d_title:.1f}%, gameplay diff={d_gameplay:.1f}%")
     print(f"  Restored to gameplay={restored} {'PASS' if passed else 'FAIL'}")
     return passed
 
@@ -829,8 +947,11 @@ def test_gamma_behavior(tmpdir):
     bright_high = avg_brightness(high_ss)
     brighter = bright_high > bright_low
     gamma_ok = gamma_val == 4
-    # Also verify the menu text changed between gamma I and V
-    menu_diff = pixel_diff_pct(menu_before_ss, menu_after_ss)
+    # Also verify the menu text changed between gamma I and V.  Mask the
+    # clock row: these two menu screenshots are ~600 frames (10s) apart, so
+    # the seconds digit alone comfortably clears a 0.1% (38 pixel) threshold
+    # and the assertion would hold with the gamma label frozen.
+    menu_diff = menu_diff_pct(menu_before_ss, menu_after_ss)
     menu_ok = menu_diff > 0.1
     passed = brighter and gamma_ok and menu_ok
     print(f"  gamma={gamma_val}, brightness: low={bright_low:.1f} high={bright_high:.1f} brighter={brighter}")
@@ -906,34 +1027,50 @@ def test_double_speed_behavior(tmpdir):
     if not compile_sml2(gba):
         return False
     dump_path = str(tmpdir / "doubletimer.bin")
+    control_dump = str(tmpdir / "doubletimer_control.bin")
     normal_ss = str(tmpdir / "normal_speed.bmp")
     half_ss = str(tmpdir / "half_speed.bmp")
 
-    # Run 1: Boot game, default speed (doubletimer=2="Full"), screenshot
-    run(gba, 3000, ["600:Start", "900:Start"],
-        screenshots=[f"2500:{normal_ss}"])
+    # The control run used to be a plain boot with no menu interaction at all,
+    # screenshotted at a different frame from the experimental run.  Comparing
+    # those two with `diff > 2` asserted nothing: two SML2 gameplay frames from
+    # differently-timed runs always differ by far more than 2%, so the test
+    # passed whether or not Double Speed did anything.  Both runs now share one
+    # input schedule and one screenshot frame, and differ only in the A press
+    # that flips the setting.
+    def speed_run(toggle, screenshot, dump):
+        t = 2000
+        inputs = ["600:Start", "900:Start"]
+        nav, t = navigate_to_submenu_item(t, 4, 0)  # Speed Hacks, Double Speed
+        inputs += nav
+        tog, t = toggle_and_close_menu(t, toggle=toggle)
+        inputs += tog
+        end = t + 2000
+        run(gba, end, inputs,
+            screenshots=[f"{end - 500}:{screenshot}"],
+            memdumps=[memdump_arg(ADDR_DOUBLETIMER, 1, dump)])
 
-    # Run 2: Toggle to Half speed (doubletimer=1), screenshot at same frame
-    t = 2000
-    inputs = ["600:Start", "900:Start"]
-    nav, t = navigate_to_submenu_item(t, 4, 0)  # Speed Hacks, Double Speed
-    inputs += nav
-    tog, t = toggle_and_close_menu(t)
-    inputs += tog
-    # Run for same amount of gameplay frames as Run 1 after menu close
-    run_end = t + 2000
-    run(gba, run_end, inputs,
-        screenshots=[f"{run_end - 500}:{half_ss}"],
-        memdumps=[memdump_arg(ADDR_DOUBLETIMER, 1, dump_path)])
+    speed_run(toggle=False, screenshot=normal_ss, dump=control_dump)
+    speed_run(toggle=True, screenshot=half_ss, dump=dump_path)
 
     val = read_u8(dump_path)
-    # doubletimer toggles between 1 and 2. Default=2, after toggle=1
-    state_ok = val == 1
-    # At half speed, game progresses slower → screenshots should differ
+    control_val = read_u8(control_dump)
+    # doubletimer toggles between 1 and 2. Default=2 (gbz80.s: .byte 2),
+    # after toggle=1.
+    state_ok = val == 1 and control_val == 2
+    # No visual assertion, deliberately.  Against a properly matched control
+    # this measured exactly 0.0%, and that is correct rather than a bug:
+    # doubletimer is the CGB double-speed clock divisor (read from gbz80.s and
+    # timeout.s), and SML2 is a DMG game that never enters double-speed mode,
+    # so the setting cannot change what it renders.  The old `diff > 2` only
+    # held because it compared two unrelated frames from differently-timed
+    # runs.  The diff is printed as a diagnostic for anyone revisiting the
+    # scenario with a CGB ROM that does switch speeds.
     diff = pixel_diff_pct(normal_ss, half_ss)
-    visual_diff = diff > 2
-    passed = state_ok and visual_diff
-    print(f"  doubletimer={val} (expect 1), visual diff={diff:.1f}% {'PASS' if passed else 'FAIL'}")
+    passed = state_ok
+    print(f"  doubletimer={val} (expect 1), control={control_val} (expect 2)")
+    print(f"  [diagnostic, not asserted] half-vs-full diff={diff:.1f}%")
+    print(f"  {'PASS' if passed else 'FAIL'}")
     return passed
 
 
@@ -966,27 +1103,49 @@ def test_lcd_scanline_hack_behavior(tmpdir):
     expected = [1, 2, 3, 0]
     cycle_ok = values == expected
 
-    # Visual verification: LCD hack at High (3) changes rendering vs OFF
-    # Run 1: Default (hack OFF), gameplay screenshot
-    run(gba, 3000, ["600:Start", "900:Start"],
-        screenshots=[f"2500:{hack_off_ss}"])
+    # Visual verification: LCD hack at High (3) changes rendering vs OFF.
+    # The OFF run used to be a plain boot screenshotted at frame 2500 while
+    # the High run screenshotted ~1800 frames later after a menu detour, so
+    # `diff > 3` was satisfied by animation alone.  Both runs now share the
+    # navigation, the frame schedule and the screenshot frame; only the
+    # number of A presses on the LCD-hack item differs (0 vs 3).
+    def lcdhack_run(presses, screenshot, dump):
+        t = 2000
+        inputs = ["600:Start", "900:Start"]
+        nav, t = navigate_to_submenu_item(t, 4, 1)
+        inputs += nav
+        for _ in range(presses):  # OFF→Low→Med→High
+            inputs += [f"{t}:A"]
+            t += MENU_GAP
+        # Keep the frame schedule identical regardless of press count, so the
+        # two runs reach the shared screenshot frame with the same amount of
+        # elapsed gameplay.
+        t += (3 - presses) * MENU_GAP
+        inputs += [f"{t}:B", f"{t + MENU_GAP}:B"]
+        t += 2 * MENU_GAP + 1000
+        run(gba, t + 500, inputs, screenshots=[f"{t}:{screenshot}"],
+            memdumps=[memdump_arg(ADDR_G_LCDHACK, 1, dump)])
+        return t
 
-    # Run 2: Set hack to High (3 presses), gameplay screenshot
-    t = 2000
-    inputs = ["600:Start", "900:Start"]
-    nav, t = navigate_to_submenu_item(t, 4, 1)
-    inputs += nav
-    for _ in range(3):  # OFF→Low→Med→High
-        inputs += [f"{t}:A"]
-        t += MENU_GAP
-    inputs += [f"{t}:B", f"{t + MENU_GAP}:B"]
-    t += 2 * MENU_GAP + 1000
-    run(gba, t + 500, inputs,
-        screenshots=[f"{t}:{hack_high_ss}"])
+    off_dump = str(tmpdir / "lcdhack_off.bin")
+    high_dump = str(tmpdir / "lcdhack_high.bin")
+    lcdhack_run(0, hack_off_ss, off_dump)
+    lcdhack_run(3, hack_high_ss, high_dump)
 
+    off_val, high_val = read_u8(off_dump), read_u8(high_dump)
+    state_ok = off_val == 0 and high_val == 3
+    # No visual assertion, deliberately.  Against a matched control this
+    # measured exactly 0.0%, which is what this setting should do:
+    # update_lcdhack() (src/lcd.s:5308) swaps the FF41/STAT read handler and
+    # patches in a cycle subtraction, so it only changes behaviour for games
+    # that poll STAT in wait loops -- it is a speed hack, not a renderer
+    # change, and SML2's idle scene gives it nothing to affect.  A stronger
+    # check would assert the FF41_R_function pointer was repatched, but that
+    # word has no linker symbol to dump (lcd.s writes it via an adrl_ offset).
     diff = pixel_diff_pct(hack_off_ss, hack_high_ss)
-    visual_ok = diff > 3
-    passed = cycle_ok and visual_ok
+    passed = cycle_ok and state_ok
+    print(f"  g_lcdhack OFF={off_val} (expect 0), High={high_val} (expect 3)")
+    print(f"  [diagnostic, not asserted] hack OFF vs High diff={diff:.1f}%")
     print(f"  Values: {values} (expected {expected})")
     print(f"  Hack OFF vs High diff={diff:.1f}% {'PASS' if passed else 'FAIL'}")
     return passed
@@ -1158,58 +1317,84 @@ def test_license_screen(tmpdir):
     run(gba, t + 500, inputs,
         screenshots=[f"2200:{menu}", f"{t}:{license_scr}"])
 
-    d = pixel_diff_pct(menu, license_scr)
+    d = menu_diff_pct(menu, license_scr)
     passed = d > 5
     print(f"  License diff: {d:.1f}% {'PASS' if passed else 'FAIL'}")
     return passed
 
 
-def test_sram_persistence(tmpdir):
-    """SRAM write-through persists across sessions."""
-    print("Test: SRAM persistence")
-    result = subprocess.run(
-        [sys.executable, str(SCRIPT_DIR / "test_sram_writethrough.py")],
-        capture_output=True, text=True, timeout=600)
-    for line in result.stdout.strip().split("\n")[-3:]:
-        print(f"  {line}")
-    return result.returncode == 0
+# test_sram_persistence used to live here and shell out to
+# test_sram_writethrough.py. run_all_tests.py then ran that same script again
+# as its own step, so the slowest suite in the tree executed twice per CI run
+# for no added coverage. It belongs to the suite runner, which owns it now.
+
+
+# (label, function) in execution order.  Kept as data so main() can run each
+# one under its own error handler.
+TESTS = [
+    ("Quicksave/load round-trip", test_quicksave_roundtrip),
+    ("Quicksave persistence", test_quicksave_persistence),
+    ("Menu open/close", test_menu_open_close),
+    ("Menu save/load state", test_menu_save_load_state),
+    ("Display submenu", test_display_submenu),
+    ("Other Settings submenu", test_other_settings_submenu),
+    ("Speed Hacks submenu", test_speed_hacks_submenu),
+    ("Autofire B toggle", test_autofire_toggle),
+    ("Manage SRAM", test_manage_sram),
+    ("Restart", test_restart),
+    ("License screen", test_license_screen),
+    # Behavioral tests: verify actual setting effects
+    ("A autofire behavior", test_a_autofire_behavior),
+    ("VSync behavior", test_vsync_behavior),
+    ("FPS-Meter behavior", test_fps_meter_behavior),
+    ("Autosleep behavior", test_autosleep_behavior),
+    ("Swap A-B behavior", test_swap_ab_behavior),
+    ("Autoload state behavior", test_autoload_state_behavior),
+    ("Palette behavior", test_palette_behavior),
+    # Gamma removed from emulator — no test needed
+    ("SGB Palette Number behavior", test_sgb_palette_number_behavior),
+    ("Double Speed behavior", test_double_speed_behavior),
+    ("LCD scanline hack behavior", test_lcd_scanline_hack_behavior),
+    ("Identify as GBA behavior", test_identify_as_gba_behavior),
+    ("Game Boy type behavior", test_gameboy_type_behavior),
+    ("Auto SGB border behavior", test_auto_sgb_border_behavior),
+]
 
 
 def main():
+    if _ADDR_ERROR is not None:
+        print(f"ERROR: {_ADDR_ERROR}")
+        sys.exit(1)
     if not all(p.exists() for p in [RUNNER, EMULATOR, SML2_ROM]):
         print("ERROR: missing prerequisites")
         sys.exit(1)
 
     results = []
+
+    def record(name, fn, arg):
+        """Run one test, converting any escape into a FAIL for that test.
+
+        Tests used to be called inline in a single expression list with no
+        error handling, and each of them gave its own temp directory to a
+        runner whose exit status nobody checked.  One failed run left its
+        screenshots unwritten, the next Image.open raised FileNotFoundError,
+        and that exception propagated out of main() -- so a single broken
+        test aborted the suite and every test after it went unreported (and
+        unblamed).  Isolate them: one test's collapse costs exactly one FAIL.
+        """
+        try:
+            return results.append((name, bool(fn(arg))))
+        except RunnerError as exc:
+            print(f"  ERROR: {exc}")
+        except (OSError, ValueError) as exc:
+            # Missing/short dump files and unreadable or mismatched images.
+            print(f"  ERROR: {type(exc).__name__}: {exc}")
+        results.append((name, False))
+
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
-        results.append(("Quicksave/load round-trip", test_quicksave_roundtrip(tmpdir)))
-        results.append(("Quicksave persistence", test_quicksave_persistence(tmpdir)))
-        results.append(("Menu open/close", test_menu_open_close(tmpdir)))
-        results.append(("Menu save/load state", test_menu_save_load_state(tmpdir)))
-        results.append(("Display submenu", test_display_submenu(tmpdir)))
-        results.append(("Other Settings submenu", test_other_settings_submenu(tmpdir)))
-        results.append(("Speed Hacks submenu", test_speed_hacks_submenu(tmpdir)))
-        results.append(("Autofire B toggle", test_autofire_toggle(tmpdir)))
-        results.append(("Manage SRAM", test_manage_sram(tmpdir)))
-        results.append(("Restart", test_restart(tmpdir)))
-        results.append(("License screen", test_license_screen(tmpdir)))
-        # Behavioral tests: verify actual setting effects
-        results.append(("A autofire behavior", test_a_autofire_behavior(tmpdir)))
-        results.append(("VSync behavior", test_vsync_behavior(tmpdir)))
-        results.append(("FPS-Meter behavior", test_fps_meter_behavior(tmpdir)))
-        results.append(("Autosleep behavior", test_autosleep_behavior(tmpdir)))
-        results.append(("Swap A-B behavior", test_swap_ab_behavior(tmpdir)))
-        results.append(("Autoload state behavior", test_autoload_state_behavior(tmpdir)))
-        results.append(("Palette behavior", test_palette_behavior(tmpdir)))
-        # Gamma removed from emulator — no test needed
-        results.append(("SGB Palette Number behavior", test_sgb_palette_number_behavior(tmpdir)))
-        results.append(("Double Speed behavior", test_double_speed_behavior(tmpdir)))
-        results.append(("LCD scanline hack behavior", test_lcd_scanline_hack_behavior(tmpdir)))
-        results.append(("Identify as GBA behavior", test_identify_as_gba_behavior(tmpdir)))
-        results.append(("Game Boy type behavior", test_gameboy_type_behavior(tmpdir)))
-        results.append(("Auto SGB border behavior", test_auto_sgb_border_behavior(tmpdir)))
-    results.append(("SRAM persistence", test_sram_persistence(None)))
+        for name, fn in TESTS:
+            record(name, fn, tmpdir)
 
     print(f"\n{'='*60}")
     passed = sum(1 for _, r in results if r)
@@ -1217,6 +1402,9 @@ def main():
     for name, r in results:
         print(f"  {'PASS' if r else 'FAIL'}: {name}")
     print(f"\nMenu tests: {passed} passed, {failed} failed")
+    if len(results) != len(TESTS):
+        print(f"ERROR: {len(TESTS)} tests expected, {len(results)} reported")
+        sys.exit(1)
     sys.exit(1 if failed else 0)
 
 
