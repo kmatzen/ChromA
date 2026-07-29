@@ -588,12 +588,20 @@ def test_a_autofire_behavior(tmpdir):
     # The menu screenshots were captured but never compared. The label does
     # change on toggle, so assert it (clock row masked -- see menu_diff_pct).
     menu_changed = menu_diff_pct(menu_before_ss, menu_after_ss) > 0.05
+    # No gameplay-visual assertion, deliberately.  Against a matched control
+    # this measured exactly 0.0%, and the scenario cannot do better:
+    # mgba_runner auto-releases a key after 15 frames, so "holding" A spans 15
+    # frames, and by the screenshot 300 frames later Mario has landed in the
+    # same place whether the press was one jump or several autofired ones.
+    # Demonstrating autofire needs a key held across a longer window than the
+    # runner currently supports; the old `diff > 2` passed only on unrelated
+    # animation between two differently-timed runs.
     diff = pixel_diff_pct(no_press_ss, autofire_ss)
-    visual_ok = diff > 2
-    passed = a_bit_cleared and control_a_bit_set and menu_changed and visual_ok
+    passed = a_bit_cleared and control_a_bit_set and menu_changed
     print(f"  joycfg=0x{joycfg:08X} (A bit cleared={a_bit_cleared}), "
           f"control=0x{control_joycfg:08X} (A bit set={control_a_bit_set})")
-    print(f"  menu label changed={menu_changed}, autofire-vs-control diff={diff:.1f}%")
+    print(f"  menu label changed={menu_changed}")
+    print(f"  [diagnostic, not asserted] autofire-vs-control diff={diff:.1f}%")
     print(f"  {'PASS' if passed else 'FAIL'}")
     return passed
 
@@ -1047,15 +1055,22 @@ def test_double_speed_behavior(tmpdir):
 
     val = read_u8(dump_path)
     control_val = read_u8(control_dump)
-    # doubletimer toggles between 1 and 2. Default=2, after toggle=1
+    # doubletimer toggles between 1 and 2. Default=2 (gbz80.s: .byte 2),
+    # after toggle=1.
     state_ok = val == 1 and control_val == 2
-    # Identical schedules: at half speed the game has advanced through fewer
-    # GB frames by the shared screenshot frame, so the two must differ.
+    # No visual assertion, deliberately.  Against a properly matched control
+    # this measured exactly 0.0%, and that is correct rather than a bug:
+    # doubletimer is the CGB double-speed clock divisor (read from gbz80.s and
+    # timeout.s), and SML2 is a DMG game that never enters double-speed mode,
+    # so the setting cannot change what it renders.  The old `diff > 2` only
+    # held because it compared two unrelated frames from differently-timed
+    # runs.  The diff is printed as a diagnostic for anyone revisiting the
+    # scenario with a CGB ROM that does switch speeds.
     diff = pixel_diff_pct(normal_ss, half_ss)
-    visual_diff = diff > 2
-    passed = state_ok and visual_diff
+    passed = state_ok
     print(f"  doubletimer={val} (expect 1), control={control_val} (expect 2)")
-    print(f"  half-vs-full diff={diff:.1f}% {'PASS' if passed else 'FAIL'}")
+    print(f"  [diagnostic, not asserted] half-vs-full diff={diff:.1f}%")
+    print(f"  {'PASS' if passed else 'FAIL'}")
     return passed
 
 
@@ -1119,10 +1134,18 @@ def test_lcd_scanline_hack_behavior(tmpdir):
 
     off_val, high_val = read_u8(off_dump), read_u8(high_dump)
     state_ok = off_val == 0 and high_val == 3
+    # No visual assertion, deliberately.  Against a matched control this
+    # measured exactly 0.0%, which is what this setting should do:
+    # update_lcdhack() (src/lcd.s:5308) swaps the FF41/STAT read handler and
+    # patches in a cycle subtraction, so it only changes behaviour for games
+    # that poll STAT in wait loops -- it is a speed hack, not a renderer
+    # change, and SML2's idle scene gives it nothing to affect.  A stronger
+    # check would assert the FF41_R_function pointer was repatched, but that
+    # word has no linker symbol to dump (lcd.s writes it via an adrl_ offset).
     diff = pixel_diff_pct(hack_off_ss, hack_high_ss)
-    visual_ok = diff > 3
-    passed = cycle_ok and state_ok and visual_ok
+    passed = cycle_ok and state_ok
     print(f"  g_lcdhack OFF={off_val} (expect 0), High={high_val} (expect 3)")
+    print(f"  [diagnostic, not asserted] hack OFF vs High diff={diff:.1f}%")
     print(f"  Values: {values} (expected {expected})")
     print(f"  Hack OFF vs High diff={diff:.1f}% {'PASS' if passed else 'FAIL'}")
     return passed

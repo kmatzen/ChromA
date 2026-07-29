@@ -90,6 +90,32 @@ def test_symbol_loader():
         check("colliding labels keep the first definition",
               parsed["doubletimer"] == parsed["request_gba_mode"] == 0x03005130)
 
+        # Linker-computed symbols carry their defining expression on the same
+        # line; __eheap_end is one, and XGB_SRAM is derived from it.
+        computed = td / "computed.map"
+        computed.write_text(
+            "                0x0000000002040000                "
+            "__eheap_end = (ORIGIN (ewram) + LENGTH (ewram))\n"
+        )
+        check("parses linker-computed symbols",
+              elf_symbols.parse_map(computed.read_text()).get("__eheap_end")
+              == 0x02040000)
+
+        equates = td / "equates.h"
+        equates.write_text(" MEM_END\t= 0x02040000\n Next = MEM_END\n")
+        check("derives XGB_SRAM from MEM_END",
+              elf_symbols.xgb_sram_addr(map_file=computed,
+                                        equates_file=equates) == 0x02038000)
+
+        # If equates.h and the linker script disagree, neither can be trusted.
+        skewed = td / "skewed.h"
+        skewed.write_text(" MEM_END\t= 0x02030000\n")
+        try:
+            elf_symbols.xgb_sram_addr(map_file=computed, equates_file=skewed)
+            check("MEM_END/linker mismatch raises", False, "no exception")
+        except elf_symbols.SymbolError as exc:
+            check("MEM_END/linker mismatch raises", "mismatch" in str(exc))
+
 
 # --------------------------------------------------------------------------
 # Clock row masking (issue #59 item 4)
@@ -193,7 +219,25 @@ def test_suite_bookkeeping():
     check("menu suite no longer nests the SRAM suite",
           not hasattr(test_menu, "test_sram_persistence"))
 
+    # The three settings whose visual halves measured exactly 0.0% against a
+    # matched control keep their state assertions and drop the pixel claim.
+    # A threshold creeping back in would be a vacuous assertion again.
+    menu_src = (SCRIPT_DIR / "test_menu.py").read_text()
+    for marker, label in [
+            ("half-vs-full", "double speed"),
+            ("hack OFF vs High", "LCD scanline hack"),
+            ("autofire-vs-control", "A autofire")]:
+        line = next((l for l in menu_src.splitlines() if marker in l), "")
+        check(f"{label} diff is reported as a diagnostic, not asserted",
+              "not asserted" in line, line.strip())
+    check("VSync keeps its visual assertion (it does discriminate)",
+          "visual_ok = diff > 5" in menu_src)
+
     src = (SCRIPT_DIR / "test_sram_writethrough.py").read_text()
+    # XGB_SRAM is an assembler equate, so ld never lists it. Asking the map for
+    # it is what broke the SRAM suite in CI; it must be derived instead.
+    check("SRAM suite derives XGB_SRAM rather than looking it up in the map",
+          "xgb_sram_addr()" in src and "load_symbols(['XGB_SRAM'])" not in src)
     check("SRAM skips are not spelled as a pass",
           "print(f\"  SKIP: Game did not write to SRAM\")\n        return True"
           not in src)

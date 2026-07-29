@@ -18,7 +18,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from elf_symbols import SymbolError, load_symbols
+from elf_symbols import SymbolError, xgb_sram_addr
 
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent
@@ -26,15 +26,19 @@ RUNNER = SCRIPT_DIR / "mgba_runner"
 COMPILER = SCRIPT_DIR / "goomba_compile.py"
 EMULATOR = PROJECT_DIR / "chroma.gba"
 
-# XGB_SRAM is resolved from build/chroma.elf.map, not hardcoded.  The literal
+# XGB_SRAM is derived from MEM_END and cross-checked against the linker's EWRAM
+# region rather than hardcoded -- see elf_symbols.xgb_sram_addr().  The literal
 # that used to sit here had no fallback path and no way to notice it had gone
 # stale: after any layout change these tests would dump 32KB of unrelated
 # EWRAM and compare *that* against cart SRAM.
+#
+# Deferred rather than fatal at import so this module stays importable without
+# a build; main() exits before running anything if it did not resolve.
+_ADDR_ERROR = None
 try:
-    XGB_SRAM_ADDR = load_symbols(['XGB_SRAM'])['XGB_SRAM']
+    XGB_SRAM_ADDR = xgb_sram_addr()
 except SymbolError as exc:
-    print(f"ERROR: {exc}")
-    sys.exit(1)
+    _ADDR_ERROR, XGB_SRAM_ADDR = exc, None
 
 GBA_SRAM_BASE = 0x0E000000
 GBA_CART_SIZE = 0x10000  # 64K flash cart
@@ -284,6 +288,9 @@ def main():
              "them, so a missing ROM there means the download step broke)")
     args = parser.parse_args()
 
+    if _ADDR_ERROR is not None:
+        print(f"ERROR: {_ADDR_ERROR}")
+        sys.exit(1)
     if not RUNNER.exists():
         print(f"ERROR: mgba_runner not found at {RUNNER}")
         sys.exit(1)
