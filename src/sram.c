@@ -1166,6 +1166,13 @@ int savestate2()
 	sh->uncompressed_size=stateSize + sramSize;	//size of compressed state
 	sh->framecount=frametotal;
 	sh->checksum=checksum_this();	//checksum
+	//The record lands in a buffer nothing zeroed, and the cart header's
+	//title field is not NUL-terminated when it uses all 15 characters, so
+	//strncpy alone left bytes 15-31 holding whatever was there before --
+	//which drawstates() then renders as the state's name.  Clear the field
+	//first.  Only 15 bytes may be copied: 0x143 onwards is the CGB flag and
+	//the licensee code, not part of the title.
+	memset(sh->title,0,sizeof(sh->title));
 	strncpy(sh->title,(char*)findrom(romnum)+0x134,15);
 	uncompressed_save = NULL;
 
@@ -1282,14 +1289,32 @@ int loadstate2(int romNumber, stateheader *sh)
 	uncompressed_save = sram_copy + 0xE000;
 	
 	
-	rle_decompress(src, compressedStateSize, uncompressed_save, uncompressedStateSize);
-	
+	//rle_decompress stops early on truncated or corrupt input and returns how
+	//much it actually produced.  That return value used to be dropped, so a
+	//short decompression left the tail of the buffer holding stale EWRAM,
+	//which LoadState then walked as if it were chunk tags: the tag bounds
+	//checks stop it overrunning, but a partial state gets applied silently.
+	//Insist on the full length instead, and bail out before LoadState sees it.
+	if (rle_decompress(src, compressedStateSize, uncompressed_save,
+			uncompressedStateSize) != (int)uncompressedStateSize)
+	{
+		uncompressed_save = NULL;
+		return 0;
+	}
+
 	if (uncompressedSramSize > 0)
 	{
-		
-		rle_decompress(src2, compressedSramSize, XGB_SRAM, uncompressedSramSize);
+		//This one writes straight into the live cart SRAM, so a short read
+		//has already damaged it by the time we find out; aborting at least
+		//stops a half-restored save being paired with a restored CPU state.
+		if (rle_decompress(src2, compressedSramSize, XGB_SRAM,
+				uncompressedSramSize) != (int)uncompressedSramSize)
+		{
+			uncompressed_save = NULL;
+			return 0;
+		}
 	}
-	
+
 	int result = LoadState(uncompressed_save, uncompressedStateSize);
 	
 	uncompressed_save = NULL;

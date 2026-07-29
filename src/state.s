@@ -206,6 +206,20 @@ LoadIo:
 	bl_long FF53_W
 	ldrb r0,[r3,#0x54]
 	bl_long FF54_W
+	@HDMA5.  Only an *active* HBlank transfer may be replayed: FF55 reads
+	@bit 7 = 0 while one is running, with the low bits holding remaining-1,
+	@so writing that value back with bit 7 set restarts an HBlank DMA of the
+	@same length.  An inactive value must not be replayed at all -- a write
+	@with bit 7 clear either cancels a running transfer or kicks off an
+	@immediate general-purpose DMA, neither of which the saved state asked
+	@for.  Without this a state saved mid-transfer resumed with the transfer
+	@silently dropped.
+	ldrb r0,[r3,#0x55]
+	tst r0,#0x80
+	bne no_hdma_replay
+	orr r0,r0,#0x80
+	bl_long FF55_W
+no_hdma_replay:
 	
 	@palette index
 	ldrb r0,[r3,#0x68]
