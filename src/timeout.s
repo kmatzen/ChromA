@@ -359,7 +359,8 @@ toLineZero_modify2:
 immediate_check_irq:
 	ldrb_ r0,gb_ie		@0xFFFF=Interrupt Enable.
 	ldrb_ r1,gb_if
-	ands r1,r1,r0
+	and r1,r1,r0
+	ands r1,r1,#0x1f	@only 5 interrupts exist; see checkIRQ
 	tstne cycles,#CYC_IE
 	bxeq lr
 	b_long immediate_check_irq_2
@@ -556,7 +557,8 @@ checkMasterIRQDelayed:
 checkIRQDelayed:
 	ldrb_ r0,gb_ie
 	ldrb_ r1,gb_if
-	ands r0,r0,r1
+	and r0,r0,r1
+	ands r0,r0,#0x1f	@only 5 interrupts exist; see checkIRQ
 	beq _GO
 	
 	ldrb r2,[gb_pc]
@@ -603,7 +605,13 @@ checkIRQ:
 @----------------------------------------------------------
 	ldrb_ r0,gb_ie
 	ldrb_ r1,gb_if
-	ands r0,r0,r1
+	and r0,r0,r1
+	@Only 5 interrupts exist.  IE is a full 8-bit R/W register on hardware,
+	@so a game may legitimately leave bits 5-7 set in it; without this mask
+	@those phantom bits match anything stale in IF, no tst below claims the
+	@IRQ, and the priority chain falls out of _irqGBZ80_ into its unknown-
+	@IRQ tail, dispatching a spurious interrupt to vector 0x40.
+	ands r0,r0,#0x1f
 	beq _GO
 @----------------------------------------------------------
 irqGBZ80:
