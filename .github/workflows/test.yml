@@ -186,6 +186,20 @@ jobs:
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
 
+    # LoadIo replayed FF51-FF54 but not FF55, so a state saved mid-HBlank-DMA
+    # resumed with the transfer silently cancelled (#51).
+    - name: Run HBlank DMA savestate replay test
+      run: python3 test_roms/test_hdma_state.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
+    # rle_decompress's return value was ignored, so a state that decompressed
+    # short was applied chunk-by-chunk until LoadState hit garbage (#51).
+    - name: Run truncated savestate test
+      run: python3 test_roms/test_savestate_corrupt.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
     # MBC2 selects its registers by address bit 8 alone, and its RAM is 512
     # half-bytes that echo through A000-BFFF (#50).
     - name: Run MBC2 banking test
