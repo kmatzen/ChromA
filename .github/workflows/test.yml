@@ -200,6 +200,19 @@ jobs:
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
 
+    # AfterLoadState always mapped SRAM, so a state saved with an MBC3 RTC
+    # register selected came back reading cart RAM instead (#49).
+    - name: Run MBC3 RTC select rehydration test
+      run: python3 test_roms/test_mbc3_rtc_state.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
+    # The software RTC divided the frame count by a flat 60; the GB runs at
+    # 4194304/70224 = 59.7275Hz, so the clock lost ~6.5 min/day (#49).
+    # Host-side unit test: no toolchain, no emulator, no ROM.
+    - name: Run software RTC unit tests
+      run: python3 test_roms/test_rtc_unit.py
+
     # MBC2 selects its registers by address bit 8 alone, and its RAM is 512
     # half-bytes that echo through A000-BFFF (#50).
     - name: Run MBC2 banking test

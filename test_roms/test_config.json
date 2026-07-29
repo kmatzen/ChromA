@@ -19,6 +19,10 @@
         "description": "NRxx read-back mask probe - verified via .sav inspection in test_sound_readback.py, not a screenshot",
         "skip_visual": true
     },
+    "mbc3_rtc_state_test": {
+        "description": "MBC3 RTC-select rehydration probe - verified via .sav inspection in test_mbc3_rtc_state.py, not a screenshot",
+        "skip_visual": true
+    },
     "hdma_state_test": {
         "description": "HBlank DMA savestate replay probe - verified via .sav inspection in test_hdma_state.py and test_savestate_corrupt.py, not a screenshot (it runs with the LCD off, so there is nothing to screenshot)",
         "skip_visual": true
