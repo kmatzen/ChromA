@@ -2,7 +2,9 @@
  *
  * Replaces the GBA cartridge hardware RTC bit-banging with a simple
  * frame-counter-based clock.  The clock starts at 10:00:00 on boot
- * and advances in real time during gameplay (~60 frames per second).
+ * and advances in real time during gameplay (59.7275 frames per second).
+ * The epoch is not persisted, so it restarts at 10:00:00 on every boot --
+ * see issue #49 item 5.
  *
  * The time is stored in BCD format in mapperdata[24..31], matching the
  * layout the MBC3 mapper reads expect.
@@ -13,7 +15,17 @@
 extern u32 frametotal;    /* from gbz80.s: total GB frames rendered */
 extern u8 mapperstate[];  /* from cart.s: 32-byte mapper data buffer */
 
-#define FRAMES_PER_SECOND 60
+/* The GB does not run at 60fps: a frame is 70224 dots of a 4194304Hz clock,
+ * i.e. 59.7275Hz.  Dividing the frame count by a flat 60 made the clock lose
+ * ~0.45%, about 6.5 minutes per emulated day.
+ *
+ * seconds = frames / (4194304 / 70224) = frames * 70224 / 4194304, and
+ * 4194304 is 2^22, so the division is a shift and the result is exact.  The
+ * product needs more than 32 bits once the frame count passes ~61k (about 17
+ * minutes), hence the 64-bit intermediate.
+ */
+#define GB_DOTS_PER_FRAME 70224u
+#define GB_DOT_CLOCK_SHIFT 22      /* 4194304 == 1 << 22 */
 #define BASE_SECONDS (10 * 3600)  /* start at 10:00:00 */
 
 static u8 to_bcd(u8 val) {
@@ -22,7 +34,9 @@ static u8 to_bcd(u8 val) {
 
 /* Software fallback, called from gettime (io.s) when no hardware RTC. */
 void gettime_sw(void) {
-    u32 total_seconds = frametotal / FRAMES_PER_SECOND + BASE_SECONDS;
+    u32 total_seconds = (u32)(((unsigned long long)frametotal *
+                               GB_DOTS_PER_FRAME) >> GB_DOT_CLOCK_SHIFT)
+                        + BASE_SECONDS;
 
     u32 days = total_seconds / 86400;
     u32 remaining = total_seconds % 86400;

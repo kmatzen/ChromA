@@ -286,8 +286,24 @@ AfterLoadState:
 	bl_long map0123_
 	ldr_ r0,bank1
 	bl_long map4567_
-	@ram enable/ram bank
+	@ram enable/ram bank.  On MBC3, mapperdata+4 may have had an RTC register
+	@selected (bit 3) rather than a RAM bank when the state was taken.
+	@RamSelect always maps SRAM, so the RTC registers read back as SRAM until
+	@the game happened to reselect them.  mbc3bank restores either mapping
+	@from that same byte -- it falls through to RamSelect itself when bit 3 is
+	@clear -- so route through it when it is the cart's own 4000-5FFF handler.
+	@(cart.s installs the mapper's four init words into writemem_tbl in pairs,
+	@so the third one, the RAM-bank selector, lands at +16.)
+	ldr_ r1,writemem_tbl+16
+	ldr r2,=mbc3bank
+	cmp r1,r2
+	bne rehydrate_ram_only
+	ldrb_ r0,mapperdata+4
+	bl_long mbc3bank
+	b ram_rehydrated
+rehydrate_ram_only:
 	bl_long RamSelect
+ram_rehydrated:
 	
 	adr_ r2,cpuregs
 	stmia r2,{gb_flg-gb_pc,gb_sp}
