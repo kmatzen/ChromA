@@ -58,15 +58,29 @@ Sound_reset:
 @----------------------------------------------------------------------------
 	mov r1,#REG_BASE
 
-	ldr r0,=0x0002F377		@stop all channels, output ratio=full range. NR50,NR51 & GBA mixer
-	str r0,[r1,#REG_SGCNT_L]
+	@Master enable has to be set first: the GBA ignores writes to the PSG
+	@registers at 4000060-4000080 while the APU is powered down, so NR50/NR51
+	@below were being dropped and came up as 0x00 instead of 0x77/0xF3.
 	mov r0,#0xF1
 	strh r0,[r1,#REG_SGCNT_X]	@sound master enable. NR52
 
+	ldr r0,=0x0002F377		@stop all channels, output ratio=full range. NR50,NR51 & GBA mixer
+	str r0,[r1,#REG_SGCNT_L]
+
 
 	mov r0,#0x0000
-	strh r0,[r1,#REG_SG1CNT_L]	@NR10
-	strh r0,[r1,#REG_SG1CNT_H]	@NR11,NR12, should read 0xF3BF
+	strh r0,[r1,#REG_SG1CNT_L]	@NR10, reads 0x80 (bit 7 unused)
+	@The DMG boot ROM leaves NR11=0x80 (duty 10) and NR12=0xF3 behind, and a
+	@cart booted without a boot ROM has to find them already set: NR11 must
+	@read 0xBF and NR12 0xF3, not 0x3F and 0x00.  The rest of the post-boot
+	@table is either zero or made up purely of write-only and unused bits,
+	@which the _FFxxR masks already supply from a zeroed GBA register.
+	mov r2,#0x80			@NR11 duty 10, length 0
+	orr r2,r2,#0xF300		@NR12 envelope 0xF3 (DAC on, not triggered)
+	strh r2,[r1,#REG_SG1CNT_H]	@NR11,NR12, reads 0xF3BF
+	@SaveIo reports sound_shadow for NR11, so seed it with the same byte or a
+	@state taken before the game ever writes NR11 loses the duty bits.
+	strb_ r2,sound_shadow+0
 	strh r0,[r1,#REG_SG1CNT_X]	@(NR13),NR14, should read 0xBF00
 
 	strh r0,[r1,#REG_SG2CNT_L]	@NR21,NR22
@@ -185,8 +199,23 @@ _FF30W:@		Channel 3 wave data
 @----------------------------------------------------------------------------
 	mov r1,#REG_BASE
 	add r2,r2,#0x60			@GB 30-3F, GBA 90-9F.
-	strb r0,[r1,r2]			@Maybe we should make sure it's the right waveram bank first.
-	mov pc,lr			@Alleyway want's it that way.
+	strb r0,[r1,r2]
+	@The GBA plays the wave bank selected by SG3CNT_L bit 6 and exposes the
+	@other one at 0090-009F, and _FF1AW flips that bit along with NR30 bit 7
+	@so data written while channel 3 is off lands in the bank that starts
+	@playing when it is switched on (Alleyway wants it that way).  The GB has
+	@only one buffer though, so a write made while the channel is *playing*
+	@has to reach the live bank as well -- games that stream wave data without
+	@toggling NR30 otherwise keep hearing the previous waveform.  Writing both
+	@banks makes it not matter which one is live, and leaves the off-then-on
+	@double-buffer above working unchanged.
+	ldrb addy,[r1,#REG_SG3CNT_L]
+	eor addy,addy,#0x40		@expose the other bank...
+	strb addy,[r1,#REG_SG3CNT_L]
+	strb r0,[r1,r2]
+	eor addy,addy,#0x40		@...and put the selection back
+	strb addy,[r1,#REG_SG3CNT_L]
+	mov pc,lr
 
 @----------------------------------------------------------------------------
 _FF20W:@		NR41 - Channel 4 Sound Length
@@ -230,6 +259,24 @@ _FF26W:@		NR52 - Sound on/off
 @----------------------------------------------------------------------------
 	mov addy,#REG_BASE
 	strb r0,[addy,#REG_SGCNT_X]
+	tst r0,#0x80
+	movne pc,lr
+	@Clearing bit 7 powers the APU down, and the GBA resets every PSG register
+	@to zero when that happens.  sound_shadow holds the write-only halves of
+	@those registers on SaveIo's behalf and nothing else ever clears it, so a
+	@state saved after a power-cycle used to restore values the APU no longer
+	@held: power off, power back on, save, load, and NR11's duty bits return
+	@from before the power-cycle.  Follow the hardware and drop them.
+	mov r0,#0
+	strb_ r0,sound_shadow+0
+	strb_ r0,sound_shadow+1
+	strb_ r0,sound_shadow+2
+	strb_ r0,sound_shadow+3
+	strb_ r0,sound_shadow+4
+	strb_ r0,sound_shadow+5
+	strb_ r0,sound_shadow+6
+	strb_ r0,sound_shadow+7
+	strb_ r0,sound_shadow+8
 	mov pc,lr
 
 @----------------------------------------------------------------------------
