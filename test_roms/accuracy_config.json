@@ -50,7 +50,8 @@
     "mooneye-test-suite/acceptance/bits/unused_hwio-GS": {
       "rom": "mooneye-test-suite/acceptance/bits/unused_hwio-GS.gb",
       "frames": 600,
-      "expected_fail": false
+      "expected_fail": true,
+      "note": "ChromA reports a $FF4D write mismatch: DMG reads of the CGB-only registers return live values, not 0xFF"
     },
     "mooneye-test-suite/acceptance/call_timing": {
       "rom": "mooneye-test-suite/acceptance/call_timing.gb",

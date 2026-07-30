@@ -1187,25 +1187,6 @@ IO_reset:
 	str r0,[r1,#0x6A*4] @obj palette index
 	str r0,[r1,#0x6B*4] @obj palette data
 	str r0,[r1,#0x70*4] @wram bank
-
-	@The write table was locked for DMG but the read table was not, so a
-	@DMG game (or mooneye's unused_hwio-GS) reading FF4D/FF4F/FF51-56/
-	@FF68-6B/FF70 got a live CGB value instead of the 0xFF an absent
-	@register reads (#56 item 8).  `void` is the 0xFF reader.
-	ldr r1,=io_read_tbl
-	str r0,[r1,#0x4D*4] @KEY1
-	str r0,[r1,#0x4F*4] @VBK
-	str r0,[r1,#0x51*4] @HDMA1
-	str r0,[r1,#0x52*4] @HDMA2
-	str r0,[r1,#0x53*4] @HDMA3
-	str r0,[r1,#0x54*4] @HDMA4
-	str r0,[r1,#0x55*4] @HDMA5
-	str r0,[r1,#0x56*4] @infrared
-	str r0,[r1,#0x68*4] @BCPS
-	str r0,[r1,#0x69*4] @BCPD
-	str r0,[r1,#0x6A*4] @OCPS
-	str r0,[r1,#0x6B*4] @OCPD
-	str r0,[r1,#0x70*4] @SVBK
 	b 1f
 	
 0:	
