@@ -49,7 +49,15 @@ int main()
 		u8* append_src=(u8*)end_addr;
 		u8* append_dest=(u8*)ewram_start;
 		u8* EWRAM_end=(u8*)0x02040000;
-		memmove(append_dest,append_src,EWRAM_end-append_src);
+		//The appended data runs from append_src to the top of EWRAM and is
+		//being slid to append_dest.  Sizing the copy from the source alone
+		//(EWRAM_end-append_src) reads the right amount but writes past the
+		//top of EWRAM whenever append_dest>append_src; sizing it from the
+		//destination alone reads past the top instead.  Take whichever bound
+		//is tighter so neither end leaves EWRAM, whichever way the linker
+		//happens to order __rom_end__ and __eheap_start (issue #57 item 7).
+		u8* copy_limit=(append_dest>append_src)?append_dest:append_src;
+		memmove(append_dest,append_src,EWRAM_end-copy_limit);
 		textstart=append_dest;
 		ewram_start=append_dest;
 	}
