@@ -455,8 +455,7 @@
                 "name": "menu_late"
             }
         ],
-        "expected_fail": true,
-        "xfail_reason": "PRE-EXISTING, see #36: per-scanline palette replay renders 62/144 scanlines black"
+        "expected_fail": false
     },
     "POKEMON RED": {
         "description": "Pokemon Red (Gen 1) - DMG, boot through title to Oak's intro",

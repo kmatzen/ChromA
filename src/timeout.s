@@ -113,6 +113,36 @@ line0x:
 	mov r0,#0xFF
 	strb r0,[r1]			@ no split recorded yet
 
+	@ Scanlines outside the range this game has ever driven still hold the
+	@ buffer's power-on contents, and DMA3 replays those as black (issue #36).
+	@ Extend the nearest real palette into them at both ends.  Lines inside
+	@ the range are deliberately left alone even when this frame skipped them:
+	@ games like Hercules build their per-line palettes up over several
+	@ frames, and overwriting that with a frame-start snapshot corrupts the
+	@ lower half of the screen.  Only worth doing when the frame actually
+	@ drove the buffer -- the display replays it above the same threshold.
+	ldr r0,=pal_frame_writes
+	ldr r1,[r0]
+	mov r2,#0
+	str r2,[r0]
+	cmp r1,#4
+	ble 1f
+	ldr r0,=pal_min_line_p1
+	ldrb r2,[r0]
+	subs r2,r2,#1			@ un-bias; negative means never written
+	bmi 2f
+	sub r1,r2,#1			@ last line below the range
+	mov r0,#0
+	bl_long pal_forward_fill
+2:	ldr r0,=pal_max_line
+	ldrb r2,[r0]
+	add r0,r2,#1			@ first line above the range
+	mov r1,#143
+	bl_long pal_forward_fill
+1:	ldr r0,=pal_fill_line
+	mov r1,#0
+	strb r1,[r0]			@ new frame: forward-fill restarts at line 0
+
 	@ Snapshot full palette (BG+OBJ, 128 bytes) as pal_before baseline
 	stmfd sp!,{r2-r9}
 	ldr r0,=gbc_palette
