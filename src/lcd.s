@@ -3825,17 +3825,22 @@ FF40W_entry:
 	eor r2,r0,r1
 	tst r2,#0x06			@did bit 1 or bit 2 change?
 	beq 1f
-	ldrb_ r3,scanline
+	@addy (r12), not r3: r3 is gb_flg.  IO write handlers are entered by a
+	@direct jump from the dispatcher with nothing saved, so any register that
+	@holds guest state is off limits as scratch here.  addy is free -- writemem
+	@documents it as clobbered across the whole write path, and IO_W reads it
+	@once on entry and never again.
+	ldrb_ addy,scanline
 	tst r2,#0x04			@did bit 2 change?
 	beq 2f
 	tst r0,#0x04			@is bit 2 now set (8x16)?
-	strneb_ r3,sprsize_8x16_start
-	streqb_ r3,sprsize_8x16_end
+	strneb_ addy,sprsize_8x16_start
+	streqb_ addy,sprsize_8x16_end
 2:	tst r2,#0x02			@did bit 1 change?
 	beq 3f
 	tst r0,#0x02			@is bit 1 now set (re-enabled)?
-	strneb_ r3,spr_disable_end
-	streqb_ r3,spr_disable_start
+	strneb_ addy,spr_disable_end
+	streqb_ addy,spr_disable_start
 3:	mov r2,#1
 	strb_ r2,sprsize_changed
 1:
@@ -3852,9 +3857,10 @@ FF40W_entry:
 	@silently lost) and its stack push orphaned.  Update the saved copy
 	@instead.  Tested against ei_finish specifically rather than the shared
 	@sentinel, so this cannot misfire when some other hijack is live.
-	ldr_ r3,nexttimeout
+	@addy (r12), not r3 -- see the note above: r3 is gb_flg.
+	ldr_ addy,nexttimeout
 	ldr r1,=ei_finish
-	cmp r3,r1
+	cmp addy,r1
 #if EARLY_LINE_0
 	ldr r2,=toLineZero
 #else
