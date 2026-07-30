@@ -108,6 +108,12 @@ def main():
     # 4. MBC2 SRAM echo/write-through regression (issue #47) — fast, custom ROM
     suite("MBC2 SRAM Write-Through Test", "test_mbc2_sram.py", TIMEOUT_SHORT_ROM)
 
+    # 4a. STAT/LY register accuracy (issue #52). Runs the probe twice per model
+    # (once in ChromA, once in mGBA's own GB core as the reference), so it needs
+    # room for four short emulator runs rather than one.
+    suite("STAT/LY Register Accuracy Test", "test_stat_ly.py",
+          TIMEOUT_SHORT_ROM * 4)
+
     # 5. SRAM write-through tests (slow — multiple full Crystal playthroughs).
     # test_menu.py used to invoke this script as well, so it ran twice.
     if not args.quick:

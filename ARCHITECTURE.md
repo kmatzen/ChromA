@@ -191,7 +191,7 @@ IO registers at 0xFF00-0xFF7F dispatch through `io_write_tbl` / `io_read_tbl`. K
 |----------|---------|-------|
 | FF00 (JOYP) | `joy0_W/R` | Reads GBA buttons, maps to GBC |
 | FF40 (LCDC) | `FF40W_entry` | Screen on/off, tile addressing mode, window/sprite enable |
-| FF41 (STAT) | `FF41_R` | LCD mode flags, cycle-position based |
+| FF41 (STAT) | `FF41_R` | LCD mode flags, cycle-position based; bit 7 wired high |
 | FF44 (LY) | `FF44_R` | Returns current scanline from emulator's counter |
 | FF46 (DMA) | `FF46_W` | OAM DMA transfer |
 | FF4D (KEY1) | `FF4D_R/W` | GBC double speed switch |
@@ -208,6 +208,19 @@ FF41 returns the LCD mode based on remaining cycles in the current scanline:
 - **Mode 1** (VBlank): scanlines 144-153
 
 Thresholds are adjusted for double-speed mode via self-modifying code (`FF41_modifydata`).
+
+The byte FF41 reads back is itself the immediate of the `mov r0,#imm` at
+`lcdstat` (and `lcdstat2` for the VBlank reader): the write handlers `strb` into
+the instruction stream, and every exit of the `LCD_HACKS` read dispatcher starts
+from that value. Bit 7, which is wired high on hardware, therefore lives in the
+stored byte rather than being ORed in at each of the dispatcher's many exits.
+
+While the LCD is off, hardware reports mode 0, but the cycle counter keeps
+counting. `FF41_repoint_mode_source` (called from `FF40_W`'s tail) patches the
+`FF41_modify1` compare to one that can never be taken, so the derived mode bits
+are not applied at all and the read falls through with just the stored byte —
+whose mode field is cleared at the same time. `updatespeed` re-applies this after
+a speed switch, since games switch speed with the LCD off.
 
 ## ROM Banking (cart.s)
 

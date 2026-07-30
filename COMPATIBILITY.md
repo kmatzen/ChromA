@@ -58,11 +58,19 @@ What this GB/GBC emulator implements, what it's missing, and why.
 - Per-scanline rendering with HBlank DMA for mid-frame register changes
 - LCDC all bits including mid-frame sprite size/enable tracking
 - STAT mode flags (cycle-based thresholds, self-modifying for double speed)
+- STAT bit 7 reads back as 1 (wired high on hardware)
+- STAT reports mode 0 while the LCD is off, rather than letting the mode bits
+  freewheel off the still-running cycle counter
 - STAT mode 0/2 interrupts (HBlank and OAM, fired per-scanline when enabled)
-- STAT mode 2 interrupt (OAM, fired at scanline boundary)
+- STAT mode 2 interrupt (OAM, fired at scanline boundary, and also at the start
+  of line 144 — entering VBlank asserts the OAM condition too)
 - STAT IRQ blocking (LYC=LY holding line high suppresses mode 0/2 re-trigger)
-- STAT VBlank interrupt (mode 1 STAT IE fires at line 144, with IRQ blocking)
+- STAT VBlank interrupt (mode 1 or mode 2 STAT IE fires at line 144, with IRQ
+  blocking)
 - VBlank STAT IRQ blocking (mode 0 IE / LYC=LY suppresses spurious fires)
+- The DMG STAT-write bug: writing FF41 pulses the condition line, raising a STAT
+  IRQ unless the current mode is 3. DMG-only, and requires the LCD to be on
+- No STAT IRQ from FF41 or LYC writes while the LCD is off
 - LYC=LY coincidence interrupt with 0→1 edge detection
 - LY (FF44) returns scanline variable directly (no artificial adjustment)
 - Window rendering (WX, WY) with per-scanline buffering
@@ -93,6 +101,28 @@ What this GB/GBC emulator implements, what it's missing, and why.
 **No per-dot rendering** — NOT FEASIBLE
 > Rendering is per-scanline. Mid-scanline raster effects are not supported.
 > Very few GB/GBC games use sub-scanline effects.
+
+**Mode-0 STAT interrupt fires at the line boundary** — OPEN (#52 item 5)
+> Hardware raises it at HBlank entry, ~204 dots earlier, with LY still showing
+> the line whose HBlank it is. The scanline machine only has stops at line
+> boundaries, and a mid-line stop cannot be added by shortening `cycles`: the
+> absolute value of `cycles` within a line is what FF41_R and the entire
+> `LCD_HACKS` speedhack dispatcher derive the mode from, so shifting it would
+> corrupt mode reporting everywhere. Fixing it properly means reworking the
+> cycles-to-mode mapping, not adding a timeout.
+
+**LY=153→0 early transition is 8 dots, not ~452** — OPEN (#52 item 6)
+> `EARLY_LINE_0` makes LY read 0 for the last 8 dots of line 153. Hardware
+> shows LY=153 for only ~4 dots at the *start* of the line and 0 for the
+> remaining ~452, so the direction is right but the window is far too short:
+> measured against mGBA, the LYC=0 interrupt on line 153 lands ~10% late
+> (68 vs 62 poll iterations in `test_stat_ly.py`). Widening the window shifts
+> when `scanline` wraps and `frame` increments for every game, so it needs the
+> full commercial-ROM differential rather than a constant change.
+
+**LCD-enable restart is approximate** — OPEN (#52 item 9)
+> Enabling the LCD resumes through the end-of-VBlank path instead of starting an
+> immediate shortened LY=0 line.
 
 ---
 
