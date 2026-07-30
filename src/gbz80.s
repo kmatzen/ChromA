@@ -263,6 +263,15 @@ _18x:@	JR *	relative jump
 @----------------------------------------------------------------------------
 	ldrsb r0,[gb_pc],#1
 	add gb_pc,gb_pc,r0
+	@_18 re-encodes the PC when a JR lands below lastbank; this variant
+	@replaces op_table[0x18] *globally* as soon as any JR speedhack
+	@installs, so without the same check a backwards JR out of the current
+	@region walked into unrelated host memory for the rest of the run
+	@(#45 item 1, the aside).  Must stay above _18x_modify: the installer
+	@writes the immediate byte of the `cmp` below by address.
+	ldr_ r1,lastbank
+	cmp gb_pc,r1
+	blo jr_fixup
 _18x_modify:
 	cmp r0,#-4
 	bleq speedhack_check
@@ -2771,6 +2780,13 @@ install_speedhack:
 	ldrb r1,[r12,#1]
 	ldrb r12,[r12,#2]
 	orr r1,r1,r12,lsl#8
+	@The second-chance path fires on ANY taken backward branch whose target
+	@begins with `ld a,(this address)` -- loops find_hack never vetted.  Its
+	@reject list exists to keep time-skips off FF41/FF44/DIV polls, so at
+	@minimum do not arm the unvetted path on an address in that range
+	@(#45 item 4).  The vetted loop still gets its own hack either way.
+	cmp r1,#0xFF00
+	bhs 1f
 	strh_ r1,speedhack_ram_address
 	ldr r1,=speedhack_modify
 	ldr r12,speedhack_modify_values+4
