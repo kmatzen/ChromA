@@ -78,6 +78,7 @@ jobs:
     - name: Validate font assets
       run: python3 scripts/validate_font.py
 
+
     - name: Download GBA binary
       uses: actions/download-artifact@v4
       with:
@@ -95,6 +96,14 @@ jobs:
         sudo apt-get install -y cmake libelf-dev libpng-dev \
           libsqlite3-dev libedit-dev python3-pip
         pip3 install --break-system-packages Pillow
+
+    # goomba_compile.py appended the guest ROM straight after chroma.gba with
+    # no alignment step, while src/main.c finds that ROM with a 32-bit load at
+    # textstart+0x104.  On ARM7 an unaligned ldr rotates instead of faulting,
+    # so a misaligned emulator image boots to "No ROM found!" and says nothing
+    # more.  There was also no 32 MB cartridge-window check (#60).
+    - name: Run goomba_compile unit tests
+      run: python3 test_roms/test_goomba_compile.py
 
     - name: Build mGBA library
       run: |
