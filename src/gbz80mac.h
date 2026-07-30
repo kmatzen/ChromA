@@ -101,63 +101,75 @@
 
 @note: stack writes to SRAM do not properly save to GBA sram as well.
 
+@Resolve one guest address to a host page base.  \addr holds the address in
+@bits 16-31 (the gb_sp/addy convention) and must not be \base; r2 must hold
+@memmap_tbl.  \base is the only scratch needed: "and" and "ldr" leave the
+@flags alone, so the echo range test set up by the first two instructions is
+@still live at the "ldrlo_".
+@
+@Every stack access resolves its own byte.  The pages either side of a 4K
+@boundary are not contiguous in host memory -- 0xCFFF/0xD000 with SVBK>=2 puts
+@them in XGB_RAM and GBC_EXRAM, 0xDFFF/0xE000 wraps to the bottom of WRAM,
+@0x7FFF/0x8000 and 0x9FFF/0xA000 cross into different buffers entirely -- so a
+@stack straddling one of those cannot share a base between its two bytes.
+@Resolving once and reusing it, as this used to, silently accessed the wrong
+@memory for the second byte.  See issue #98.
+	.macro resolve_page base,addr
+	sub \base,\addr,#0xF0000000	@F000-FDFF: WRAM echo, not entry 15 (#46)
+	cmp \base,#0x0E000000
+	and \base,\addr,#0xF0000000
+	ldr \base,[r2,\base,lsr#26]
+	ldrlo_ \base,echomap
+	.endm
+
 	.macro push16		@push r0
-	sub r1,gb_sp,#0x00020000	@the new SP -- the page is resolved from it,
-					@so the range test has to run before the
-					@"subs" whose N flag gates the stores below
 	adr_ r2,memmap_tbl
-	sub addy,r1,#0xF0000000		@F000-FDFF: WRAM echo, not entry 15 (#46)
-	and r1,r1,#0xF0000000
-	cmp addy,#0x0E000000
-	ldrlo_ r2,echomap
-	ldrhs r2,[r2,r1,lsr#26]
+	sub addy,gb_sp,#0x00020000	@the new SP: the low byte goes here
+	resolve_page r1,addy
 	subs gb_sp,gb_sp,#0x00020000	@use "negative flag" as indicator we are writing to ROM
-	strmib r0,[r2,gb_sp,lsr#16]		@reject rom write
-	adds addy,gb_sp,#0x00010000
+	strmib r0,[r1,gb_sp,lsr#16]		@reject rom write
+	add addy,gb_sp,#0x00010000	@the high byte, in its own page (#98)
+	resolve_page r1,addy
 	mov r0,r0,lsr#8
-	strmib r0,[r2,addy,lsr#16]		@reject rom write
-	tstmi r1,#0x60000000	@just to solve some games
-	bleq vram_W2			@that use push16 to write to vram
-	.endm		@r1,r2,addy=?
+	tst addy,#0x80000000		@resolve_page clobbered the ROM-write test
+	strneb r0,[r1,addy,lsr#16]		@reject rom write
+	and r1,addy,#0xE0000000		@8000-9FFF: just to solve some games
+	cmp r1,#0x80000000		@that use push16 to write to vram.  Gated
+	bleq vram_W2			@on the byte vram_W2 is handed, so a
+					@straddle out of VRAM no longer reports a
+					@write to the page it did not land in.
+	.endm		@r0,r1,r2,addy=?
 
 	.macro push16_novram		@push r0 with no VRAM check (because who would fill VRAM with PC?)
-	sub r1,gb_sp,#0x00020000	@the new SP (see push16)
 	adr_ r2,memmap_tbl		@left in r2 for encodePC_afterpush16
-	sub addy,r1,#0xF0000000		@F000-FDFF: WRAM echo, not entry 15 (#46)
-	and r1,r1,#0xF0000000
-	cmp addy,#0x0E000000
-	ldrlo_ addy,echomap
-	ldrhs addy,[r2,r1,lsr#26]
+	sub addy,gb_sp,#0x00020000	@the new SP: the low byte goes here
+	resolve_page r1,addy
 	subs gb_sp,gb_sp,#0x00020000	@use "negative flag" as indicator we are writing to ROM
-	strmib r0,[addy,gb_sp,lsr#16]		@reject rom write
-	adds r1,gb_sp,#0x00010000
+	strmib r0,[r1,gb_sp,lsr#16]		@reject rom write
+	add addy,gb_sp,#0x00010000	@the high byte, in its own page (#98)
+	resolve_page r1,addy
 	mov r0,r0,lsr#8
-	strmib r0,[addy,r1,lsr#16]		@reject rom write
-	.endm		@r1,addy=?  (r2=memmap_tbl)
+	tst addy,#0x80000000		@resolve_page clobbered the ROM-write test
+	strneb r0,[r1,addy,lsr#16]		@reject rom write
+	.endm		@r0,r1,addy=?  (r2=memmap_tbl)
 
 	.macro pop16 x		@pop BC,DE,HL,PC
-	and r1,gb_sp,#0xF0000000
 	adr_ r2,memmap_tbl
-	ldr r1,[r2,r1,lsr#26]
-	sub r2,gb_sp,#0xF0000000	@F000-FDFF: WRAM echo, not entry 15 (#46)
-	cmp r2,#0x0E000000
-	ldrlo_ r1,echomap
+	resolve_page r1,gb_sp
 	ldrb \x,[r1,gb_sp,lsr#16]
 	add gb_sp,gb_sp,#0x00010000
+	resolve_page r1,gb_sp		@the high byte, in its own page (#98)
 	ldrb r0,[r1,gb_sp,lsr#16]
 	add gb_sp,gb_sp,#0x00010000
 	orr \x,\x,r0,lsl#8
 	.endm		@r0,r1,r2=?
 
 	.macro popAF			@pop AF
-	and r1,gb_sp,#0xF0000000
 	adr_ r2,memmap_tbl
-	ldr r1,[r2,r1,lsr#26]
-	sub r2,gb_sp,#0xF0000000	@F000-FDFF: WRAM echo, not entry 15 (#46)
-	cmp r2,#0x0E000000
-	ldrlo_ r1,echomap
+	resolve_page r1,gb_sp
 	ldrb r0,[r1,gb_sp,lsr#16]
 	add gb_sp,gb_sp,#0x00010000
+	resolve_page r1,gb_sp		@A, in its own page (#98)
 	ldrb gb_a,[r1,gb_sp,lsr#16]
 	add gb_sp,gb_sp,#0x00010000
 	mov gb_a,gb_a,lsl#24
