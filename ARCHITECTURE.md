@@ -22,9 +22,12 @@ The emulator runs GBC games on GBA by:
 | ROM | 0x08000000+ | varies | Emulator code (.text) + embedded GBC ROM images |
 
 ### IWRAM Budget (critical — 32KB total)
-- **Code (.iwram)**: ~31KB — CPU core, scanline processing, IO handlers
+Exact figures are printed by `scripts/validate_elf.sh` on every build ("Memory
+Validation"), which is the authority; the numbers below drift and are indicative
+only.
+- **Code (.iwram)**: ~30KB — CPU core, scanline processing, IO handlers
 - **BSS (.bss)**: ~1.2KB — gbc_palette, CHR_DECODE table, canaries
-- **Stack**: ~430 bytes — grows down from 0x03007FFC
+- **Stack**: ~0.9KB — grows down from 0x03007FFC
 - **WARNING**: Any code added to IWRAM shifts the layout and can break timing-sensitive games
 
 ### Emulated GBC Memory
@@ -77,7 +80,7 @@ the page the opcode started in.
 ### ROM & Save
 | File | Description |
 |------|-------------|
-| `cart.s` | ROM loading, mapper init (MBC1-MBC7), bank switching |
+| `cart.s` | ROM loading, mapper init (MBC0/1/2/3/5 full; MBC7, HuC1/3, MMM01 partial), bank switching |
 | `savestate.c` | Tagged-section state serialization |
 | `sram.c` | SRAM management, save/load menu, LZO compression |
 | `cache.c` | ROM instant-page caching |
@@ -140,7 +143,7 @@ The cycle counter decrements. When it reaches 0, the current scanline ends and t
 
 ### Cycle Constants
 - `CYCLE` = 16 (internal units per GBC clock cycle)
-- `SINGLE_SPEED` = 456 × CYCLE = 7,280 (cycles per scanline at 4MHz)
+- `SINGLE_SPEED` = 456 × CYCLE = 7,296 (cycles per scanline at 4MHz)
 - `DOUBLE_SPEED` = 912 × CYCLE = 14,592 (cycles per scanline at 8MHz)
 
 ### Memory Access
@@ -159,7 +162,7 @@ line0x (VBlank start):
 
 line1_to_71:
     Process scanlines 1-75
-    At scanline 75: mid-frame palette copy (copy_gbc_palette)
+    At scanline 75: latch `lcdctrl0midframe` (src/timeout.s, line75 hook)
     → line72_to_143
 
 line72_to_143:
@@ -214,9 +217,12 @@ GBC BG map entries (tile number + attributes) are converted to GBA tilemap forma
 
 ### Per-Scanline Display (HBlank DMA)
 Three GBA DMA channels update registers every HBlank:
-- **DMA0**: BG0-BG3 control + scroll registers (24 bytes/scanline)
-- **DMA1**: DISPCNT (2 bytes/scanline)
-- **DMA2**: WIN0H (2 bytes/scanline)
+- **DMA0**: BG0-BG3 control + scroll registers (6 words of 32 bits = 24 bytes/scanline; control word `0xA6600006`)
+- **DMA1**: DISPCNT (one 16-bit halfword = 2 bytes/scanline; control word `0xA2600001`)
+- **DMA2**: WIN0H (one 16-bit halfword = 2 bytes/scanline; control word `0xA2600001`)
+
+DISPCNT and WIN0H are 16-bit registers, so a halfword per HBlank is the whole
+register — see `do_gba_hdma` in `src/lcd.s`.
 
 These enable per-scanline LCDC changes (scroll, window position, BG enable).
 
@@ -224,7 +230,7 @@ These enable per-scanline LCDC changes (scroll, window position, BG enable).
 For games that change palettes every scanline (like Hercules GBC):
 - **DMA3**: Copies 256 bytes from `pal_dma_buffer` to PALRAM per HBlank
 - Buffer filled by `ff69_w_tail` (called from FF69_W on every 32nd palette write)
-- Activated when >10 visible-scanline palette writes detected per frame
+- Activated when >4 visible-scanline palette writes detected per frame (`src/lcd.s`, `cmp r0,#4` before `pal_hdma_perscanline`)
 - See KNOWN_ISSUES.md for limitations
 
 ## IO Handling (io.s)
@@ -274,7 +280,13 @@ Mapper detection reads byte 0x147 from the ROM header. Supported mappers:
 - **MBC2**: 4-bit ROM bank + 512×4-bit internal RAM
 - **MBC3**: 7-bit ROM bank + RTC + 4 RAM banks
 - **MBC5**: 9-bit ROM bank + rumble + 16 RAM banks
-- **MBC7**: Accelerometer/tilt sensor
+- **MBC7**: ROM banking only — no accelerometer, no EEPROM save (`MBC7map`/`MBC7RAMB`, src/mappers.s)
+- **HuC1/HuC3**: basic banking (HuC3 RTC not emulated)
+- **MMM01/MBC4/MBC6**: shared stub — plain 4000-7FFF bank select, no multicart/registers
+
+This list is the canonical one; README.md and COMPATIBILITY.md defer to it, and
+`scripts/check_docs.py` fails the build if they diverge from `mappertbl` in
+`src/cart.s`.
 
 Bank switching intercepts writes to 0x0000-0x7FFF and updates `memmap_tbl` pointers.
 
