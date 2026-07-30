@@ -131,6 +131,12 @@ jobs:
     - name: Validate menu/SRAM harness assertions
       run: python3 test_roms/test_menu_selfcheck.py
 
+    # Guards the accuracy suite's config and reference screens (issue #65):
+    # a missing, mis-sized or orphaned reference would otherwise only show up
+    # as a MISSING deep in the log below. Host-native, no ROMs needed.
+    - name: Validate accuracy suite config
+      run: python3 test_roms/test_accuracy_selfcheck.py
+
     # Guards --rebaseline's own filtering (issue #99). A blanket rebaseline
     # rewrote expected_fail baselines too, which replaces the record of what
     # the output should look like while a bug is open with the current broken
@@ -150,6 +156,32 @@ jobs:
           -t timer_accuracy_test
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
+
+    # Hardware-accuracy suites (Mooneye + Blargg), issue #65 item 1. These
+    # ROMs are freely redistributable, unlike the commercial carts in
+    # test-roms-private, so the suite lives in this job and gates every PR
+    # rather than only running after merge.
+    #
+    # 35 of the 49 entries are expected failures today -- they are the open
+    # accuracy bugs (#41 HALT, #42/#43 IF/IE, #44 timer, #52 STAT/LY, #53 PPU,
+    # #56 OAM DMA). They report XFAIL and do not fail the build; when one
+    # starts passing it reports XPASS and does, so a fix has to be recorded
+    # rather than silently leaving the coverage disabled.
+    - name: Fetch accuracy test ROMs
+      run: python3 test_roms/fetch_accuracy_roms.py
+
+    - name: Run hardware-accuracy test ROM suite
+      run: python3 test_roms/run_accuracy_tests.py --diff-dir /tmp/accuracy-diffs
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
+    - name: Upload accuracy diff images
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: accuracy-diffs
+        path: /tmp/accuracy-diffs
+        if-no-files-found: ignore
 
     - name: Run RST timing test
       run: python3 test_roms/test_rst_timing.py
