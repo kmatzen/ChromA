@@ -3031,10 +3031,8 @@ CANARY2:	.skip 4
 @IO registers that are cold enough to keep out of the IWRAM globals struct.
 @Adding to that struct shifts every offset in it and the savestate layout with
 @it; these are read once in a blue moon, so an EWRAM literal load is fine.
- .global io_sb_shadow
  .global io_dma_shadow
  .global cgb_undoc_regs
-io_sb_shadow:	.byte 0		@FF01 SB: readable, holds the last byte written
 io_dma_shadow:	.byte 0		@FF46 DMA: reads back the last source page written
 cgb_undoc_regs:	.skip 4		@FF6C (OPRI), FF72, FF73, FF74 -- CGB only
 	.align 2

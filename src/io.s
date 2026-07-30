@@ -1223,13 +1223,6 @@ IO_reset:
 @----------------------------------------------------------------------------
 _FF01W:@		SB - Serial Transfer Data
 @----------------------------------------------------------------------------
-	@SB is a plain read/write register.  The write was dropped and the read
-	@returned a constant 0xFF, so a game that stages a byte and reads it
-	@back -- or any test ROM checking the unused-bit mask -- saw the wrong
-	@value (#56 item 7).  0xFF is what SB reads *after* a transfer completes
-	@with no cable attached, which the serial completion path now stores.
-	ldr r1,=io_sb_shadow
-	strb r0,[r1]
 	mov pc,lr
 @----------------------------------------------------------------------------
 _FF02W:@		SC - Serial Transfer Ctrl
@@ -1360,24 +1353,14 @@ _FF50W:@		Undocumented BIOS banking
 @----------------------------------------------------------------------------
 _FF01R:@		SB - Serial Transfer Data
 @----------------------------------------------------------------------------
-	ldr r0,=io_sb_shadow
-	ldrb r0,[r0]
+	mov r0,#0xff		@When no GB attached
 	mov pc,lr
 @----------------------------------------------------------------------------
 _FF02R:@		SC - Serial Transfer Ctrl
 @----------------------------------------------------------------------------
-	@Only bit 7 (transfer start) and bit 0 (shift clock) exist on DMG; CGB
-	@adds bit 1 (fast clock).  Everything else reads 1 on hardware, and the
-	@raw stored byte was being returned instead -- which is the first thing
-	@mooneye's unused_hwio-GS complains about (#56 item 7).
 	ldrb_ r0,stctrl
-	ldrb_ r1,gbcmode
-	cmp r1,#0
-	andeq r0,r0,#0x81
-	orreq r0,r0,#0x7E
-	andne r0,r0,#0x83
-	orrne r0,r0,#0x7C
-	mov pc,lr		@Rc Pro Am wants 0x80, Cosmo Tank wants 0x00.
+@	mov r0,#0x00		;0x80 when transfering, 0x00 when finnished.
+	mov pc,lr		@Rc Pro Am ,wants 0x80, Cosmo Tank wants 0x00.
 @----------------------------------------------------------------------------
 @ CGB registers that exist but are not in the official map (#56 item 8).
 @ FF72/FF73/FF74 are plain read/write bytes and FF6C's bit 0 is the object
@@ -1503,9 +1486,7 @@ _FF06R:@		TMA - Timer Modulo
 @----------------------------------------------------------------------------
 _FF07R:@		TAC - Timer Control
 @----------------------------------------------------------------------------
-	@Only bits 0-2 exist (clock select + enable); 3-7 read 1 (#56 item 7).
 	ldrb_ r0,timerctrl
-	orr r0,r0,#0xF8
 	mov pc,lr
 @----------------------------------------------------------------------------
 _FF0FR:
