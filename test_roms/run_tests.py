@@ -99,6 +99,39 @@ def compare_images(img_a_path, img_b_path, threshold=0):
     return diff_count == 0, diff_count, diff_img
 
 
+def skip_rebaseline_reason(test_info, include_xfail=False):
+    """Why --rebaseline must not touch this test's baselines, or None.
+
+    An expected_fail baseline is the reference for what the output is SUPPOSED
+    to look like while a bug is open.  Overwriting it with the current output
+    makes the broken rendering the new truth and silently retires the bug --
+    Cannon Fodder's baselines document #36, for instance.  A blanket
+    --rebaseline used to do exactly that, and the operator got a commit with
+    no signal about which files were safe to keep (#99).
+    """
+    if test_info.get("expected_fail") and not include_xfail:
+        return ("expected_fail: its baseline documents a known bug, and "
+                "replacing it would retire that bug silently")
+    return None
+
+
+def rebaseline_screenshot(baseline_path, new_png_path):
+    """Write new_png_path over baseline_path only if the pixels differ.
+
+    Returns True if it wrote.  Re-encoding a pixel-identical capture still
+    produces different PNG bytes, so writing unconditionally churned files for
+    tests that were passing -- 7 of the 20 files in the #97 rebaseline and 2
+    of the 29 in #100 were of that kind.
+    """
+    baseline_path = Path(baseline_path)
+    if baseline_path.exists():
+        match, _, _ = compare_images(baseline_path, new_png_path)
+        if match:
+            return False
+    Image.open(new_png_path).save(baseline_path)
+    return True
+
+
 def discover_tests():
     """Find all test ROMs and their configurations."""
     config = load_test_config()
@@ -129,7 +162,8 @@ def discover_tests():
     return tests
 
 
-def run_single_test(name, test_info, rebaseline=False, diff_dir=None, verbose=False):
+def run_single_test(name, test_info, rebaseline=False, diff_dir=None, verbose=False,
+                    include_xfail=False):
     """Run a single test and compare against baseline."""
     print(f"\n{'='*60}")
     print(f"Test: {name}")
@@ -137,6 +171,13 @@ def run_single_test(name, test_info, rebaseline=False, diff_dir=None, verbose=Fa
         print(f"  {test_info['description']}")
     print(f"  ROM: {test_info['rom'].name}")
     print(f"  Frames: {test_info['frames']}")
+
+    if rebaseline:
+        reason = skip_rebaseline_reason(test_info, include_xfail)
+        if reason:
+            print(f"  SKIPPED: {reason}")
+            print(f"  (pass --include-xfail to rebaseline it anyway)")
+            return "SKIPPED"
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
@@ -183,13 +224,23 @@ def run_single_test(name, test_info, rebaseline=False, diff_dir=None, verbose=Fa
                 missing_screenshots.append(ss_name)
 
         if rebaseline:
-            # Save as new baselines
+            if missing_screenshots:
+                # Baselining a partial capture would bake in whatever the run
+                # did manage to produce and drop the rest on the floor.
+                print(f"  ERROR: not baselining a run that never wrote "
+                      f"{', '.join(missing_screenshots)}")
+                return "ERROR"
+
             BASELINE_DIR.mkdir(exist_ok=True)
+            written = 0
             for ss_name, png in all_screenshots:
                 baseline = BASELINE_DIR / f"{name}_{ss_name}.png"
-                Image.open(png).save(baseline)
-                print(f"  Baseline saved: {baseline.name}")
-            return "BASELINED"
+                if rebaseline_screenshot(baseline, png):
+                    written += 1
+                    print(f"  Baseline saved: {baseline.name}")
+                else:
+                    print(f"  {ss_name}: unchanged, left alone")
+            return "BASELINED" if written else "UNCHANGED"
 
         # Compare against baselines
         results = []
@@ -258,6 +309,13 @@ def run_single_test(name, test_info, rebaseline=False, diff_dir=None, verbose=Fa
 def main():
     parser = argparse.ArgumentParser(description="Automated visual regression testing for ChromA")
     parser.add_argument("--rebaseline", action="store_true", help="Generate new baseline images")
+    parser.add_argument("--include-xfail", action="store_true",
+                        help="With --rebaseline, also overwrite the baselines of "
+                             "expected_fail tests. Those baselines are the record "
+                             "of what the output should look like while a bug is "
+                             "open, so this retires that record -- only pass it "
+                             "when the bug is genuinely fixed and you are "
+                             "updating test_config.json in the same change.")
     parser.add_argument("--test", "-t", action="append", help="Run specific test(s) by name")
     parser.add_argument("--diff-dir", "-d", default=None, help="Directory for diff images")
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
@@ -313,7 +371,8 @@ def main():
         result = run_single_test(name, tests[name],
                                  rebaseline=args.rebaseline,
                                  diff_dir=args.diff_dir,
-                                 verbose=args.verbose)
+                                 verbose=args.verbose,
+                                 include_xfail=args.include_xfail)
         results[name] = result
 
     # Summary
@@ -327,10 +386,13 @@ def main():
     missing = sum(1 for r in results.values() if r == "MISSING")
     errors = sum(1 for r in results.values() if r == "ERROR")
     baselined = sum(1 for r in results.values() if r == "BASELINED")
+    unchanged = sum(1 for r in results.values() if r == "UNCHANGED")
+    skipped = sum(1 for r in results.values() if r == "SKIPPED")
 
     for name, result in sorted(results.items()):
         status_char = {"PASS": ".", "FAIL": "F", "XFAIL": "x", "XPASS": "X",
-                       "MISSING": "?", "ERROR": "E", "BASELINED": "B"}.get(result, "?")
+                       "MISSING": "?", "ERROR": "E", "BASELINED": "B",
+                       "UNCHANGED": "=", "SKIPPED": "-"}.get(result, "?")
         print(f"  [{status_char}] {name}: {result}")
 
     print()
@@ -342,7 +404,30 @@ def main():
     if missing: parts.append(f"{missing} missing baselines")
     if errors: parts.append(f"{errors} errors")
     if baselined: parts.append(f"{baselined} baselined")
+    if unchanged: parts.append(f"{unchanged} already up to date")
+    if skipped: parts.append(f"{skipped} skipped")
     print(", ".join(parts))
+
+    if args.rebaseline:
+        # Say plainly what was and was not touched.  The whole point of #99 is
+        # that the operator should not have to reverse-engineer that from a
+        # commit of N binary files.
+        print()
+        if baselined:
+            print(f"Rewrote baselines for {baselined} test(s):")
+            for name, r in sorted(results.items()):
+                if r == "BASELINED":
+                    print(f"  {name}")
+        else:
+            print("No baselines needed rewriting.")
+        if skipped:
+            print(f"\nLeft {skipped} expected_fail test(s) alone -- their "
+                  f"baselines record what the output should look like while a "
+                  f"known bug is open:")
+            for name, r in sorted(results.items()):
+                if r == "SKIPPED":
+                    print(f"  {name}")
+            print("Pass --include-xfail to rebaseline those too.")
 
     # MISSING baselines used to be excluded from the exit-code check entirely,
     # so tests with no baseline (verifying nothing) always reported success.
