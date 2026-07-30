@@ -114,6 +114,12 @@ def main():
     suite("STAT/LY Register Accuracy Test", "test_stat_ly.py",
           TIMEOUT_SHORT_ROM * 4)
 
+    # 4b. LCDC writes must not clobber the guest F register (issue #95).  Runs
+    # the probe twice -- once in ChromA, once in mGBA's own GB core as the
+    # reference -- so it needs room for two short emulator runs.
+    suite("LCDC Write Flag-Preservation Test", "test_lcdc_flags.py",
+          TIMEOUT_SHORT_ROM * 2)
+
     # 5. SRAM write-through tests (slow — multiple full Crystal playthroughs).
     # test_menu.py used to invoke this script as well, so it ran twice.
     if not args.quick:

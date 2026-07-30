@@ -70,19 +70,38 @@ The emulator runs GBC games on GBA by:
 ## CPU Emulation (gbz80.s)
 
 ### Register Mapping
-GBC Z80 registers are mapped to dedicated ARM registers for speed:
+GBC Z80 registers are mapped to dedicated ARM registers for speed. The
+authoritative list is the `.req` block in `src/equates.h`:
 ```
+ARM r0-r2 = temp     (scratch)
+ARM r3  = gb_flg     (flags; see below)
 ARM r4  = gb_a       (accumulator, upper 8 bits)
-ARM r5  = gb_flg     (flags: Z, N, H, C)
-ARM r6  = gb_bc      (BC pair, upper 16 bits)
-ARM r7  = gb_de      (DE pair, upper 16 bits)
-ARM r8  = gb_hl      (HL pair, upper 16 bits)
+ARM r5  = gb_bc      (BC pair, upper 16 bits)
+ARM r6  = gb_de      (DE pair, upper 16 bits)
+ARM r7  = gb_hl      (HL pair, upper 16 bits)
+ARM r8  = cycles     (cycle counter + flag bits)
 ARM r9  = gb_pc      (program counter — pointer into mapped memory)
-ARM r10 = globalptr  (base pointer for IWRAM globals)
+ARM r10 = globalptr  (base pointer for IWRAM globals; also gb_optbl)
 ARM r11 = gb_sp      (stack pointer, upper 16 bits)
 ARM r12 = addy       (scratch register for memory operations)
-ARM r3  = cycles     (cycle counter + flag bits)
 ```
+
+**Only r0-r2 and r12 are scratch.** r3-r11 hold guest state at all times during
+interpretation. This matters most in the IO register handlers: `io_read_tbl` and
+`io_write_tbl` are entered by a direct `ldr pc,[...]` from the dispatcher with
+**no register save**, so using r3 as a temporary inside one silently destroys the
+guest's F register. Use `addy` for scratch there — `writemem` already documents
+it as clobbered across the whole write path. See issue #95, which was exactly
+this mistake in `FF40W_entry`, and `test_roms/test_lcdc_flags.py`, which guards
+against its return.
+
+`gb_flg` does not hold the guest F byte in its guest-visible layout. All four
+flags live in bits 28-31, in ARM's own NZCV positions with H in the V slot, so
+`mrs gb_flg,cpsr` and `msr cpsr_f,gb_flg` move them for free; bits 0-27 are
+unused. `encodeFLG`/`decodeFLG` in `gbz80mac.h` convert to and from the packed
+F byte the guest sees. A consequence worth knowing when debugging: overwriting
+`gb_flg` with any small value or with a pointer leaves bits 28-31 clear, so the
+guest reads F back as `$00` — all flags clear — rather than as garbage.
 
 ### Fetch/Execute Cycle
 ```

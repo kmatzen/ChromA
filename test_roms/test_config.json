@@ -47,6 +47,10 @@
         "description": "the same STAT probe with the CGB flag set, so the DMG-only STAT-write bug can be checked to be absent on CGB - verified via .sav inspection in test_stat_ly.py, not a screenshot",
         "skip_visual": true
     },
+    "lcdc_flags_test": {
+        "description": "LCDC writes must not clobber the guest F register (issue #95) - verified via .sav inspection in test_lcdc_flags.py against mGBA's own GB core, not a screenshot (it only toggles LCDC and captures F, and never draws anything)",
+        "skip_visual": true
+    },
     "mbc2_banking_test": {
         "description": "MBC2 A8 register decode and 512-nibble RAM model - verified via .sav inspection in test_mbc2_banking.py, not a screenshot",
         "skip_visual": true
