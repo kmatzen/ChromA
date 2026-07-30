@@ -8,4 +8,8 @@ build
 test_roms/mgba_runner
 test_roms/trace_compare
 test_roms/unit/test_rle
+# Downloaded by test_roms/fetch_accuracy_roms.py from a pinned release; the
+# reference screens under test_roms/baselines/accuracy/ are committed instead.
+test_roms/accuracy_roms/
+test_roms/game-boy-test-roms-*.zip
 !docs/chroma.gba

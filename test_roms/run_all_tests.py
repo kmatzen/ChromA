@@ -36,6 +36,7 @@ TIMEOUT_VISUAL = 2400     # 26 ROMs, one emulator run each
 TIMEOUT_MENU = 3600       # 24 tests, 2-3 emulator runs each
 TIMEOUT_SRAM = 1200       # 2 tests, 3 long Crystal runs
 TIMEOUT_SHORT_ROM = 300   # single custom ROM
+TIMEOUT_ACCURACY = 2400   # 49 accuracy ROMs, one emulator run each
 
 
 def run_suite(name, cmd, timeout):
@@ -100,6 +101,26 @@ def main():
     # 0c. Menu/SRAM harness self-checks (issue #59) -- host-native, and they
     # guard the assertions used by the two suites below.
     suite("Menu/SRAM Harness Self-Checks", "test_menu_selfcheck.py", TIMEOUT_UNIT)
+
+    # 0d. Accuracy suite config self-checks (issue #65) -- host-native, and
+    # they guard the reference screens the suite below compares against.
+    suite("Accuracy Suite Self-Checks", "test_accuracy_selfcheck.py", TIMEOUT_UNIT)
+
+    # 0e. Hardware-accuracy test ROMs (Mooneye + Blargg), issue #65.
+    #
+    # Skipped rather than failed when the pack has not been fetched: these are
+    # a download, not a checked-in fixture, and CI runs them in the public
+    # `test` job where the fetch step always precedes them.
+    have_roms = subprocess.run(
+        [sys.executable, str(SCRIPT_DIR / "fetch_accuracy_roms.py"), "--check"],
+        capture_output=True, text=True, cwd=PROJECT_DIR).returncode == 0
+    if have_roms:
+        accuracy_args = ["--diff-dir", args.diff_dir] if args.diff_dir else []
+        suite("Hardware Accuracy ROMs (Mooneye + Blargg)",
+              "run_accuracy_tests.py", TIMEOUT_ACCURACY, accuracy_args)
+    else:
+        print("\n  [SKIPPED] Hardware accuracy ROMs -- not downloaded. "
+              "Fetch with: python3 test_roms/fetch_accuracy_roms.py")
 
     # 1. Visual regression tests (26 ROMs)
     visual_args = ["--diff-dir", args.diff_dir] if args.diff_dir else []
