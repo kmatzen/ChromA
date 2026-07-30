@@ -339,9 +339,13 @@ dont_use_true_sram:
 	str_ r1,memmap_tbl+52
 	ldr r1,=XGB_RAM-0xE000	@E000-EFFF echoes WRAM bank 0 at C000
 	str_ r1,memmap_tbl+56
-	@F000 has to serve HRAM: the direct memmap paths (push16/pop16/encodePC)
-	@index by the top address nibble alone, and SP=FFFE is universal, so this
-	@entry cannot also echo F000-FDFF onto D000-DDFF.  See issue #46.
+	@F000-FDFF echoes D000-DDFF, which SVBK banks on CGB.  It cannot live in
+	@this entry: the direct memmap paths (push16/pop16/encodePC) index by the
+	@top address nibble alone, and SP=FFFE is universal, so entry 15 has to
+	@keep serving OAM/IO/HRAM.  Those paths range-check F000-FDFF and use
+	@echomap instead, which starts out as the bank-1 echo and is re-derived
+	@by _FF70W on every SVBK write.  See issue #46.
+	str_ r1,echomap
 	ldr r1,=XGB_HRAM-0xFF80
 	str_ r1,memmap_tbl+60
 

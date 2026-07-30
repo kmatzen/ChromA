@@ -708,6 +708,8 @@ _FF70W:@		SVBK - CGB Mode Only - WRAM Bank
 	bge select_gbc_ram
 	ldr_ r1,memmap_tbl+48
 	str_ r1,memmap_tbl+52
+	sub r1,r1,#0x2000	@F000-FDFF echoes D000-DDFF (#46)
+	str_ r1,echomap
 	ldr r1,=wram_W
 	str_ r1,writemem_tbl+52
     
@@ -725,6 +727,8 @@ select_gbc_ram:
 	add r1,r1,r0,lsl#12
 	@D000
 	str_ r1,memmap_tbl+52
+	sub r1,r1,#0x2000	@F000-FDFF echoes D000-DDFF (#46)
+	str_ r1,echomap
 	ldr r1,=wram_W_2
 	str_ r1,writemem_tbl+52
 

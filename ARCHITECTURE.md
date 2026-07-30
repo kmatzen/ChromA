@@ -33,8 +33,21 @@ The emulator runs GBC games on GBA by:
 | 0x0000-0x7FFF | ROM (via memmap_tbl) | Bank-switched by mapper |
 | 0x8000-0x9FFF | XGB_VRAM (EWRAM) | Two banks for GBC |
 | 0xC000-0xDFFF | XGB_RAM (IWRAM) | Fast access for WRAM |
+| 0xE000-0xFDFF | Echo of 0xC000-0xDDFF | See below |
 | 0xFF00-0xFF7F | IO handlers (io_write_tbl) | Per-register dispatch |
 | 0xFF80-0xFFFE | XGB_HRAM (IWRAM) | High RAM |
+
+`readmem`/`writemem` fold the echo in their handlers, but the *direct memmap
+paths* — `push16`/`pop16`/`popAF` (PUSH, POP, CALL, RET, RST) and `encodePC`
+(instruction fetch) — index `memmap_tbl` by the top address nibble alone, so
+they need the echo built into the table. Entry 14 (0xE000) is the echo of WRAM
+bank 0. Entry 15 cannot be: 0xF000-0xFFFF also holds OAM, IO and HRAM, and
+SP=0xFFFE plus HRAM-resident code are universal, so entry 15 serves
+0xFE00-0xFFFF and those macros range-check 0xF000-0xFDFF against the separate
+`echomap` slot (a mirror of entry 13 minus 0x2000, resynced by `_FF70W` on
+every SVBK write). Anything else that resolves a guest address through
+`memmap_tbl` — `FF46_W`, `dma.c`'s `GetRealAddress`, the game-specific hacks —
+still sees entry 15 as OAM/IO/HRAM and does not fold the 0xF000 echo.
 
 ## Source Files
 

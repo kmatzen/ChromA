@@ -165,7 +165,9 @@ _08:@	LD (nnnn),SP	write SP to (nnnn)
 	orr addy,addy,r0,lsl#8
 	mov r0,gb_sp,lsr#16
 	writemem
-	add addy,addy,#1		@Might be changed!!!
+	add addy,addy,#1
+	bic addy,addy,#0x10000		@nnnn=FFFF wraps: the high byte goes to
+					@0000, not to an unmapped 0x10000 (#46)
 	mov r0,gb_sp,lsr#24
 	writemem
 	fetch 20
@@ -2860,6 +2862,10 @@ speedhack_jpc:
  .section .iwram.end.100, "ax", %progbits
 @----------------------------------------------------------------------------
 
+_echomap:
+	.word XGB_RAM-0xE000	@echomap: F000-FDFF echoes D000-DDFF, WRAM bank 1
+				@at reset.  _FF70W re-derives it from memmap_tbl
+				@entry 13 on every SVBK write (#46).
 _speedhack_ram_address:
 	.byte 0,0
 	.byte 0,0
