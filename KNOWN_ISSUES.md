@@ -12,6 +12,28 @@ One artifact remains on the Hercules title screen:
 
 1. **Half-palette vertical banding**: The game writes 32 bytes per scanline (palettes 0-3 only). Tiles using palettes 4-7 don't participate in the per-scanline gradient effect, causing visible vertical bands where those tile columns show static colors instead of the gradient.
 
+### Scanlines the guest never writes (fixed, issue #36)
+
+`ff69_w_tail` only fires when the BCPS index wraps, so it fills the buffer entry
+for *some* scanlines and leaves the rest holding whatever they held before. DMA3
+replays every entry regardless, so an entry the guest never wrote reached PALRAM
+as its power-on zeros — a black scanline. Cannon Fodder tripped per-scanline mode
+while writing on only part of the screen, and rendered 62 of 144 lines black.
+
+Two rules now keep the buffer honest:
+
+1. **Forward fill.** A write at scanline N first copies the previous write's entry
+   over every line between the two. A line with no write of its own shows the
+   palette last written above it, which is what the hardware does.
+2. **Range extension.** Lines outside the range the game has *ever* written
+   (`pal_min_line_p1` / `pal_max_line`) are extended from the nearest real entry
+   once per frame. These are the only entries still at their power-on contents.
+
+Lines *inside* that range are never rewritten at frame start even when the
+current frame skipped them. Hercules builds its per-line palettes up over
+several frames, and overwriting them with a frame-start snapshot corrupts the
+lower half of the screen — see "What was tried and didn't work" below.
+
 ### Why DMA3 can't use 64 words for all games
 
 GBA DMA has no source-reload option. With fixed source + 64 words, DMA reads the same 4 bytes and smears them across all 64 destination words — corrupting palettes 9-15. The per-scanline buffer (36KB) works because the source increments through unique data per scanline. Filling that buffer at VBlank costs ~27K cycles (DMA from PALRAM), which is too expensive for the VBlank budget. The 1-word self-refresh avoids both problems.
@@ -62,6 +84,8 @@ The hook was replaced with `b checkTimerIRQ` (zero overhead). Palette detection 
 
 - **Hold timer for DMA3 activation**: Kept DMA3 active for N frames after detection. Broke gameplay because stale palette data persisted during non-title-screen scenes.
 - **Flat buffer fill from pal_hdma_wrapper**: Filled all 144 entries with the final gbc_palette state. Wrong colors (no per-scanline variation).
+- **Flattening the buffer tail at frame start** (issue #36): Extending the frame's last write down to line 143 fixed Cannon Fodder's last two lines but wrecked the bottom half of Hercules' title screen, because those lines carry per-line palettes accumulated over earlier frames. Only lines the game has *never* written are safe to overwrite.
+- **Seeding line 0 from the live palette at frame start** (issue #36): Semantically the palette in effect at the top of the frame, but it repainted Lufia's menu cursor. The forward fill already carries line 0 over from the previous frame, which is the same value without the write.
 - **Dual scanline fill (current + previous)**: Filled both scanline entries at the 64-byte boundary. Caused visual streaks from the double-write overhead.
 - **Double-buffered DMA**: Two 36KB buffers, swap at frame start. Didn't help because the issue is write timing, not read/write contention.
 - **STAT timing adjustment**: Extended HBlank by 42 dots to eliminate the 84-cycle overrun. Made things worse — the handler's self-correction mechanism was already compensating.

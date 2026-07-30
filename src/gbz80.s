@@ -3050,8 +3050,18 @@ pal_split_palettes:	.skip 64*8	@ BG palette snapshot for each split (64 bytes ×
  .global pal_scanline_active
  .global pal_dma_buffer
  .global pal_dma_uniform
+ .global pal_fill_line
+ .global pal_max_line
+ .global pal_min_line_p1
+ .global pal_frame_writes
  .align 2
 pal_scanline_active:	.skip 4		@ nonzero = DMA3 per-scanline mode active
+ .align 2
+pal_frame_writes:	.skip 4		@ pal_dma_buffer writes this emulated frame
+pal_fill_line:		.skip 1		@ newest scanline written to pal_dma_buffer
+pal_max_line:		.skip 1		@ highest scanline ever written to pal_dma_buffer
+pal_min_line_p1:	.skip 1		@ lowest such scanline, +1 (0 = none yet)
+ .skip 1				@ padding for alignment
  .align 2
 pal_dma_uniform:	.skip 256	@ single-scanline palette for DMA3 fixed-source mode
 pal_dma_buffer:		.skip 256*144	@ per-scanline PALRAM data for HBlank DMA3
