@@ -213,6 +213,47 @@ def check_branding():
           "found %s" % bad)
 
 
+# ------------------------------------------------------------------- the tutorial
+def check_tutorial():
+    """docs/tutorial.html is published teaching material, so wrong facts in it
+    are worse than wrong facts in an internal note (#63).  Two things there are
+    mechanically checkable: the register map it draws, and the symbol names it
+    quotes."""
+    equates = read("src/equates.h")
+    regs = dict(re.findall(r"^\s*(\w+)\s*\.req\s*(r\d+)", equates, re.M))
+    tut = read("docs/tutorial.html")
+
+    # The interactive register diagram: 'PC': { arm: 'r9', ... }
+    diagram = dict(re.findall(r"^\s*(\w+):\s*\{\s*arm:\s*'(r\d+)'", tut, re.M))
+    expect = {
+        "AF": regs.get("gb_a"), "BC": regs.get("gb_bc"), "DE": regs.get("gb_de"),
+        "HL": regs.get("gb_hl"), "SP": regs.get("gb_sp"), "PC": regs.get("gb_pc"),
+        "CYC": regs.get("cycles"),
+    }
+    for name, want in expect.items():
+        got = diagram.get(name)
+        check("tutorial register diagram %s = %s" % (name, want),
+              want is not None and got == want,
+              "tutorial says %s, src/equates.h says %s" % (got, want))
+
+    # The fetch-execute sample used r6/r12/r9 for PC/table/cycles; the real
+    # macro uses gb_pc/gb_optbl/cycles.  Require it to name them symbolically,
+    # which is both correct and immune to a future renumbering.
+    sample = re.search(r"the `fetch` macro.*?</pre>", tut, re.S)
+    check("tutorial fetch sample names gb_pc/gb_optbl/cycles",
+          sample is not None
+          and all(n in sample.group(0) for n in ("gb_pc", "gb_optbl", "cycles")),
+          "the sample should quote src/gbz80mac.h's `fetch`, not invented registers")
+
+    # Every XGB_* buffer the tutorial names must exist in the source.
+    src = "".join(read(os.path.join("src", f)) for f in sorted(os.listdir(os.path.join(ROOT, "src")))
+                  if f.endswith((".s", ".h", ".c")))
+    named = set(re.findall(r"\bXGB_\w+", tut))
+    missing = sorted(n for n in named if n not in src)
+    check("tutorial only names buffers that exist in src/", not missing,
+          "no such symbol: %s" % missing)
+
+
 def main():
     print("=== Documentation Consistency ===")
     check_cycle_constants()
@@ -220,6 +261,7 @@ def main():
     check_opcode_count()
     check_mappers()
     check_test_counts()
+    check_tutorial()
     check_no_line_refs()
     check_branding()
     print()
