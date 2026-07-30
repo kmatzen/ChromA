@@ -7,6 +7,45 @@ A Game Boy / Game Boy Color emulator for Game Boy Advance. Forked from Jagoomba 
 
 ### [▶ Try it in your browser](https://kmatzen.com/ChromA/) — drop a .gb/.gbc ROM to play
 
+## Documentation
+
+| Document | What it covers |
+|---|---|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | How the emulator is put together: register mapping, the scanline state machine, memory layout, mappers |
+| [COMPATIBILITY.md](COMPATIBILITY.md) | What is emulated, what is approximated, and what is not feasible — with the reason for each |
+| [KNOWN_ISSUES.md](KNOWN_ISSUES.md) | Open rendering artifacts and the analysis behind them |
+| [PROFILING.md](PROFILING.md) | Cycle budgets and where the time goes |
+| [Tutorial](https://kmatzen.com/ChromA/tutorial.html) | An illustrated walkthrough of how a GB emulator on GBA hardware works |
+| [formal/](formal/) | TLA+ models of the dirty-tile protocol |
+
+The drift-prone figures in these documents (cycle constants, thresholds, mapper
+lists, test counts) are checked against the source by
+`python3 scripts/check_docs.py`, which runs in CI.
+
+## FAQ
+
+**My in-game saves disappear when I reload the browser demo.**
+They no longer should — saves are keyed to the ROM's content hash and persisted
+in browser storage. Use the Export .sav button to keep a copy outside the
+browser, since clearing site data still erases it.
+
+**The demo page reloads itself once when I first open it.**
+It installs a cross-origin-isolation service worker (needed for the WASM
+threads mGBA uses) and reloads to pick it up. It happens once per browser.
+
+**How do I open the emulator's own menu (savestates, palettes, settings)?**
+Press L+R together — `A` and `S` on the demo page's keyboard mapping.
+
+**Which cartridge mappers work?**
+MBC0/1/2/3/5 are fully supported. MBC7 is ROM-banking only (no tilt sensor),
+HuC1/HuC3 have basic banking, and MMM01/MBC4/MBC6 share a stub. See
+[ARCHITECTURE.md](ARCHITECTURE.md#rom-banking-carts) for the canonical list.
+
+**Audio clicks or sounds slightly wrong.**
+Sound is a direct pass-through to the GBA's own PSG hardware rather than
+software synthesis, so a handful of DMG-specific quirks follow GBA silicon.
+[COMPATIBILITY.md](COMPATIBILITY.md#sound) explains which ones and why.
+
 ## License
 
 This project is licensed under the GNU General Public License v2. See [LICENSE](LICENSE) for the full copyright chain and third-party component licenses.
@@ -19,7 +58,7 @@ This project is licensed under the GNU General Public License v2. See [LICENSE](
 - GBC color palettes, VRAM banking, double-speed mode, HDMA
 - SGB border and palette support
 - 10 sprites per scanline limit
-- MBC1/2/3/5 with SRAM write-through persistence
+- MBC1/2/3/5 with SRAM write-through persistence (MBC7/HuC1/HuC3/MMM01 partial — see [ARCHITECTURE.md](ARCHITECTURE.md#rom-banking-carts) for the canonical list)
 - MBC3 software RTC fallback
 - Savestate support with RLE compression
 - Browser demo via mGBA WASM
@@ -36,7 +75,7 @@ Output: `chroma.gba`
 ## Testing
 
 ```bash
-# Run all tests locally (26 visual + 26 menu/behavioral + RST + SRAM)
+# Run all tests locally (28 visual + 25 menu/behavioral + RST + SRAM)
 python3 test_roms/run_all_tests.py
 
 # Quick mode (skip slow SRAM tests)
@@ -47,9 +86,11 @@ python3 test_roms/fetch_accuracy_roms.py     # one-off, ~3.7 MB pinned download
 python3 test_roms/run_accuracy_tests.py
 python3 test_roms/run_accuracy_tests.py --list
 
-# Instruction-level trace comparison (20 ROMs)
+# Instruction-level trace comparison
 make clean && make TRACE=1
 make -f test_roms/Makefile.test
+# combined.gba = chroma.gba with the guest ROM appended:
+python3 test_roms/goomba_compile.py chroma.gba rom.gb combined.gba
 test_roms/trace_compare rom.gb combined.gba --frames 600 --max-insns 5000
 ```
 
@@ -71,7 +112,7 @@ The `test_roms/baselines/` directory contains screenshot images captured from co
 
 - **Jaga** (EvilJagaGenius) for creating the Jagoomba Color fork
 - **Dwedit** (Dan Weiss) for the Goomba Color emulator: https://www.dwedit.org/gba/goombacolor.php
-- **FluBBa** (Fredrik Olsson) for the original Goomba emulator: http://goomba.webpersona.com/
+- **FluBBa** (Fredrik Olsson) for the original Goomba emulator ([archived homepage](https://web.archive.org/web/*/goomba.webpersona.com))
 - **Minucce** for help with ASM
 - **Sterophonick** for code tweaks and EZ-Flash Omega integration
 - **EZ-Flash** for releasing modified Goomba Color source
@@ -79,4 +120,4 @@ The `test_roms/baselines/` directory contains screenshot images captured from co
 - **Radimerry** for MGS:Ghost Babel elevator fix, Faceball menu fix, SMLDX SRAM fix
 - **Therealteamplayer** for default-to-grayscale for GB games
 
-The browser demo uses [mGBA](https://github.com/mgba-emu/mgba) (MPL-2.0) via [@thenick775/mgba-wasm](https://github.com/thenick775/mgba-wasm) (BSD-2-Clause).
+The browser demo uses [mGBA](https://github.com/mgba-emu/mgba) (MPL-2.0) built to WebAssembly by [@thenick775](https://github.com/thenick775) as part of [gbajs3](https://github.com/thenick775/gbajs3) (BSD-2-Clause).
