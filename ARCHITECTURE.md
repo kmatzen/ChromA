@@ -49,6 +49,18 @@ every SVBK write). Anything else that resolves a guest address through
 `memmap_tbl` — `FF46_W`, `dma.c`'s `GetRealAddress`, the game-specific hacks —
 still sees entry 15 as OAM/IO/HRAM and does not fold the 0xF000 echo.
 
+The stack macros resolve **each byte's own page**, via the shared
+`resolve_page` macro. The two 4K pages either side of a boundary are generally
+not adjacent in host memory — 0xCFFF/0xD000 with SVBK≥2 spans XGB_RAM and
+GBC_EXRAM, 0xDFFF/0xE000 wraps to the bottom of WRAM, 0x9FFF/0xA000 and
+0x7FFF/0x8000 cross into different buffers — so a stack straddling one cannot
+share a base between its bytes. `resolve_page` needs only its destination
+register as scratch: `and` and `ldr` leave the flags alone, so the echo range
+test stays live across the table lookup. Instruction fetch is *not* covered:
+`encodePC` resolves once per jump and the fetch pointer then walks forward, so
+an instruction whose operands cross a page boundary still reads them through
+the page the opcode started in.
+
 ## Source Files
 
 ### Core Emulation

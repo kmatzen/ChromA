@@ -3,6 +3,10 @@
         "description": "echo RAM through PUSH/POP/instruction fetch - verified via .sav inspection in test_echo_ram.py, not a screenshot",
         "skip_visual": true
     },
+    "stack_straddle_test": {
+        "description": "stack straddling a 4K page boundary (issue #98) - verified via .sav inspection in test_stack_straddle.py, not a screenshot (it runs with the LCD off so VRAM and cart RAM can be probed, and never draws anything)",
+        "skip_visual": true
+    },
     "joypad_irq_test": {
         "description": "joypad interrupt and FF00 refresh probe - verified via .sav inspection in test_joypad_irq.py, not a screenshot",
         "skip_visual": true
