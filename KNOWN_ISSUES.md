@@ -2,11 +2,11 @@
 
 ## Per-scanline palette rendering (Hercules GBC title screen)
 
-**Status**: Mostly working — no flicker, residual vertical banding
+**Status**: Mostly working — no flicker, residual vertical banding (root causes below)
 
 ### Current State
 
-DMA3 is always armed during active display. For most games it performs a 1-word PALRAM self-refresh per HBlank (harmless no-op). When per-scanline palette writes are detected (>10 FF69 writes during visible scanlines), DMA3 switches to 64-word mode replaying a per-scanline buffer filled by `ff69_w_tail`. Games with a few mid-frame palette changes (≤10) use VCount interrupts to patch PALRAM at split boundaries.
+DMA3 is always armed during active display. For most games it performs a 1-word PALRAM self-refresh per HBlank (harmless no-op). When per-scanline palette writes are detected (>4 FF69 writes during visible scanlines), DMA3 switches to 64-word mode replaying a per-scanline buffer filled by `ff69_w_tail`. Games with a few mid-frame palette changes (≤4) use VCount interrupts to patch PALRAM at split boundaries.
 
 One artifact remains on the Hercules title screen:
 
@@ -49,7 +49,7 @@ The game's VBlank handler at ROM address `0x0DA2`:
 The emulator captures these writes:
 - `FF69_W` in IWRAM writes to `gbc_palette` and sets `pal_dirty`
 - Every 32nd write (BCPS index & 0x1F == 0), branches to `ff69_w_tail` in `.text`
-- The tail checks if per-scanline mode is active (>10 visible-scanline triggers)
+- The tail checks if per-scanline mode is active (>4 visible-scanline triggers)
 - If active, expands `gbc_palette` to the DMA buffer at `buffer[scanline * 256]`
 - `pal_hdma_wrapper` sets up DMA3 to replay the buffer during GBA display
 
@@ -72,7 +72,7 @@ The original scanline hook in `timeout.s` ran ~30 instructions per scanline when
 
 The hook was replaced with `b checkTimerIRQ` (zero overhead). Palette detection is now done entirely from `FF69_W`'s tail function in `.text`, which only runs every 32nd palette write (~142 times per frame instead of every scanline).
 
-### Root causes of remaining flicker
+### Root causes of the remaining banding
 
 1. **GBC/GBA frame desync**: The GBA ARM CPU needs ~3 cycles to emulate 1 GBC cycle. A full GBC frame (154 scanlines × 912 cycles = 140,448 GBC cycles) requires ~420,000-560,000 ARM cycles, but the GBA only has 280,896 ARM cycles per frame. The GBC frame spans ~2 GBA frames, causing the VBlank handler's palette writes to be split across GBA display periods.
 
