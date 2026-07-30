@@ -281,7 +281,14 @@ RECENT_TILENUM_SIZE = 128
 
 @everything in wram_globals* areas:
 
- start_map -19*4,globalptr	@gbz80.s
+ start_map -20*4,globalptr	@gbz80.s
+@Base address for the 0xF000-0xFDFF WRAM echo, used only by the direct memmap
+@paths (push16/pop16/popAF/encodePC).  memmap_tbl entry 15 cannot hold it:
+@those paths index the table by the top address nibble alone and SP=0xFFFE is
+@universal, so entry 15 has to keep resolving OAM/IO/HRAM.  Kept at the front
+@of the map so adding it does not shift xgb_hram (see the note above).
+@Mirrors memmap_tbl entry 13 minus 0x2000; _FF70W keeps it in sync.  Issue #46.
+ _m_ echomap,4
  _m_ speedhack_ram_address,4
  _m_ quickhackused,1
  _m_ quickhackcounter,1

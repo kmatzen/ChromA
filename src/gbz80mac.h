@@ -10,18 +10,32 @@
  C = 0b00010000	@carry
 
 
+@memmap_tbl is indexed by the top address nibble, so entry 15 has to serve both
+@the 0xF000-0xFDFF WRAM echo and OAM/IO/HRAM.  HRAM wins -- SP=0xFFFE and
+@HRAM-resident code are universal -- so these macros range-check 0xF000-0xFDFF
+@and take the echo base from `echomap` instead.  The test is one sub plus one
+@cmp: (addr - 0xF000) unsigned-less-than 0x0E00 is true only inside the echo.
+@Everything else (including every other memmap_tbl consumer) is unaffected;
+@see issue #46 and the note by `echomap` in equates.h.
+
 	.macro encodePC		@translate gb_pc from GB-Z80 PC to rom offset
 	and r1,gb_pc,#0xF000
 	adr_ r2,memmap_tbl
 	ldr r0,[r2,r1,lsr#10]
+	sub r1,gb_pc,#0xF000	@F000-FDFF: WRAM echo, not memmap_tbl entry 15
+	cmp r1,#0x0E00
+	ldrlo_ r0,echomap
 	str_ r0,lastbank
 	add gb_pc,gb_pc,r0
 	.endm
 
-	.macro encodePC_afterpush16		@push16 already does "adr r2,memmap_tbl"
+	.macro encodePC_afterpush16		@push16_novram already did "adr_ r2,memmap_tbl"
 	and r1,gb_pc,#0xF000
 @	adr r2,memmap_tbl
 	ldr r0,[r2,r1,lsr#10]
+	sub r1,gb_pc,#0xF000	@F000-FDFF: WRAM echo, not memmap_tbl entry 15
+	cmp r1,#0x0E00
+	ldrlo_ r0,echomap
 	str_ r0,lastbank
 	add gb_pc,gb_pc,r0
 	.endm
@@ -88,50 +102,66 @@
 @note: stack writes to SRAM do not properly save to GBA sram as well.
 
 	.macro push16		@push r0
-	subs gb_sp,gb_sp,#0x00020000	@use "negative flag" as indicator we are writing to ROM
-	and r1,gb_sp,#0xF0000000
+	sub r1,gb_sp,#0x00020000	@the new SP -- the page is resolved from it,
+					@so the range test has to run before the
+					@"subs" whose N flag gates the stores below
 	adr_ r2,memmap_tbl
-	ldr r2,[r2,r1,lsr#26]
+	sub addy,r1,#0xF0000000		@F000-FDFF: WRAM echo, not entry 15 (#46)
+	and r1,r1,#0xF0000000
+	cmp addy,#0x0E000000
+	ldrlo_ r2,echomap
+	ldrhs r2,[r2,r1,lsr#26]
+	subs gb_sp,gb_sp,#0x00020000	@use "negative flag" as indicator we are writing to ROM
 	strmib r0,[r2,gb_sp,lsr#16]		@reject rom write
 	adds addy,gb_sp,#0x00010000
 	mov r0,r0,lsr#8
 	strmib r0,[r2,addy,lsr#16]		@reject rom write
 	tstmi r1,#0x60000000	@just to solve some games
 	bleq vram_W2			@that use push16 to write to vram
-	.endm		@r1,r2=?
+	.endm		@r1,r2,addy=?
 
 	.macro push16_novram		@push r0 with no VRAM check (because who would fill VRAM with PC?)
+	sub r1,gb_sp,#0x00020000	@the new SP (see push16)
+	adr_ r2,memmap_tbl		@left in r2 for encodePC_afterpush16
+	sub addy,r1,#0xF0000000		@F000-FDFF: WRAM echo, not entry 15 (#46)
+	and r1,r1,#0xF0000000
+	cmp addy,#0x0E000000
+	ldrlo_ addy,echomap
+	ldrhs addy,[r2,r1,lsr#26]
 	subs gb_sp,gb_sp,#0x00020000	@use "negative flag" as indicator we are writing to ROM
-	and r1,gb_sp,#0xF0000000
-	adr_ r2,memmap_tbl
-	ldr addy,[r2,r1,lsr#26]
 	strmib r0,[addy,gb_sp,lsr#16]		@reject rom write
 	adds r1,gb_sp,#0x00010000
 	mov r0,r0,lsr#8
 	strmib r0,[addy,r1,lsr#16]		@reject rom write
-	.endm		@r1,r2=?
+	.endm		@r1,addy=?  (r2=memmap_tbl)
 
 	.macro pop16 x		@pop BC,DE,HL,PC
 	and r1,gb_sp,#0xF0000000
 	adr_ r2,memmap_tbl
 	ldr r1,[r2,r1,lsr#26]
+	sub r2,gb_sp,#0xF0000000	@F000-FDFF: WRAM echo, not entry 15 (#46)
+	cmp r2,#0x0E000000
+	ldrlo_ r1,echomap
 	ldrb \x,[r1,gb_sp,lsr#16]
 	add gb_sp,gb_sp,#0x00010000
 	ldrb r0,[r1,gb_sp,lsr#16]
 	add gb_sp,gb_sp,#0x00010000
 	orr \x,\x,r0,lsl#8
-	.endm		@r0,r1=?
+	.endm		@r0,r1,r2=?
 
 	.macro popAF			@pop AF
 	and r1,gb_sp,#0xF0000000
 	adr_ r2,memmap_tbl
 	ldr r1,[r2,r1,lsr#26]
+	sub r2,gb_sp,#0xF0000000	@F000-FDFF: WRAM echo, not entry 15 (#46)
+	cmp r2,#0x0E000000
+	ldrlo_ r1,echomap
 	ldrb r0,[r1,gb_sp,lsr#16]
 	add gb_sp,gb_sp,#0x00010000
 	ldrb gb_a,[r1,gb_sp,lsr#16]
 	add gb_sp,gb_sp,#0x00010000
 	mov gb_a,gb_a,lsl#24
-	.endm		@r0=flags,r1=?
+	.endm		@r0=flags,r1,r2=?
 @----------------------------------------------------------------------------
 
 	.macro opADC
