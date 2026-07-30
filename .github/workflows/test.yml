@@ -117,6 +117,14 @@ jobs:
     - name: Validate menu/SRAM harness assertions
       run: python3 test_roms/test_menu_selfcheck.py
 
+    # Guards --rebaseline's own filtering (issue #99). A blanket rebaseline
+    # rewrote expected_fail baselines too, which replaces the record of what
+    # the output should look like while a bug is open with the current broken
+    # output -- retiring bugs like #36 silently. Host-native, so it runs here
+    # on every push rather than only in test-full.
+    - name: Validate rebaseline filtering
+      run: python3 test_roms/test_rebaseline_selfcheck.py
+
     - name: Run custom ROM visual tests
       run: |
         python3 test_roms/run_tests.py \
