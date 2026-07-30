@@ -166,6 +166,15 @@ jobs:
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
 
+    # push16/pop16/popAF resolved the host page once, from the first byte, so a
+    # stack straddling a 4K boundary sent its second byte to the page the first
+    # one was in -- a different buffer entirely for WRAM/echo, SVBK and
+    # VRAM/cart-RAM (#98).
+    - name: Run stack page straddle test
+      run: python3 test_roms/test_stack_straddle.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
     # Nothing ever set IF bit 4, so a game that HALTs with IE=0x10 waiting on
     # input hung, and polled input froze until the game rewrote FF00 (#43).
     - name: Run joypad interrupt test
