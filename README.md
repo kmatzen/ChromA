@@ -42,6 +42,11 @@ python3 test_roms/run_all_tests.py
 # Quick mode (skip slow SRAM tests)
 python3 test_roms/run_all_tests.py --quick
 
+# Hardware-accuracy test ROMs (Mooneye Test Suite + Blargg)
+python3 test_roms/fetch_accuracy_roms.py     # one-off, ~3.7 MB pinned download
+python3 test_roms/run_accuracy_tests.py
+python3 test_roms/run_accuracy_tests.py --list
+
 # Instruction-level trace comparison (20 ROMs)
 make clean && make TRACE=1
 make -f test_roms/Makefile.test
@@ -49,6 +54,14 @@ test_roms/trace_compare rom.gb combined.gba --frames 600 --max-insns 5000
 ```
 
 CI runs on every PR (custom ROM tests) and on every push to main (full suite with game ROMs). Visual regression reports are published to the [test report page](https://kmatzen.com/ChromA/test-report.html).
+
+### Hardware-accuracy suite
+
+`run_accuracy_tests.py` runs the [Mooneye Test Suite](https://github.com/Gekkio/mooneye-test-suite) and [Blargg's test ROMs](https://github.com/retrio/gb-test-roms) from a pinned, SHA-256-verified [gameboy-test-roms](https://github.com/c-sp/gameboy-test-roms) release. These ROMs are freely redistributable, so the suite runs in the public CI job and gates every PR.
+
+Each ROM is rendered twice: once natively on mGBA's own Game Boy core (the reference, committed under `test_roms/baselines/accuracy/`) and once wrapped in `chroma.gba`, then compared pixel-for-pixel over the 160x144 LCD area. Because the reference never comes from ChromA, `--rebaseline` cannot turn current broken output into the new truth.
+
+Current state: **14 pass, 35 expected-fail, 7 not covered**. The expected failures are the open accuracy bugs (#41, #42/#43, #44, #52, #53, #56); they report XFAIL and do not fail the build, but a fix flips one to XPASS, which does — so progress has to be recorded in `accuracy_config.json` rather than going unnoticed. The 7 uncovered ROMs are ones mGBA itself does not pass, so it cannot supply a correct reference; they are listed with reasons under `unusable` and reported on every run.
 
 ## Test baselines
 

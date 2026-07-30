@@ -1,0 +1,310 @@
+{
+  "rom_pack": {
+    "version": "v7.0",
+    "url": "https://github.com/c-sp/gameboy-test-roms/releases/download/v7.0/game-boy-test-roms-v7.0.zip",
+    "sha256": "b9a9d7a1075aa35a3d07c07c34974048672d8520dca9e07a50178f5860c3832c"
+  },
+  "geometry": {
+    "chroma_crop": [
+      40,
+      8,
+      200,
+      152
+    ],
+    "native_crop": [
+      0,
+      0,
+      160,
+      144
+    ]
+  },
+  "tests": {
+    "blargg/halt_bug": {
+      "rom": "blargg/halt_bug.gb",
+      "frames": 900,
+      "expected_fail": true,
+      "note": "blargg halt_bug: ChromA prints 'Failed'"
+    },
+    "blargg/interrupt_time/interrupt_time": {
+      "rom": "blargg/interrupt_time/interrupt_time.gb",
+      "frames": 900,
+      "expected_fail": true,
+      "note": "blargg interrupt_time: ChromA prints 'Failed'"
+    },
+    "mooneye-test-suite/acceptance/add_sp_e_timing": {
+      "rom": "mooneye-test-suite/acceptance/add_sp_e_timing.gb",
+      "frames": 600,
+      "expected_fail": true,
+      "note": "ChromA renders a blank screen; still black after 3600 frames"
+    },
+    "mooneye-test-suite/acceptance/bits/mem_oam": {
+      "rom": "mooneye-test-suite/acceptance/bits/mem_oam.gb",
+      "frames": 600,
+      "expected_fail": false
+    },
+    "mooneye-test-suite/acceptance/bits/reg_f": {
+      "rom": "mooneye-test-suite/acceptance/bits/reg_f.gb",
+      "frames": 600,
+      "expected_fail": false
+    },
+    "mooneye-test-suite/acceptance/bits/unused_hwio-GS": {
+      "rom": "mooneye-test-suite/acceptance/bits/unused_hwio-GS.gb",
+      "frames": 600,
+      "expected_fail": true,
+      "note": "ChromA reports $FF02 write mismatch"
+    },
+    "mooneye-test-suite/acceptance/call_timing": {
+      "rom": "mooneye-test-suite/acceptance/call_timing.gb",
+      "frames": 600,
+      "expected_fail": true,
+      "note": "ChromA renders a blank screen; still black after 3600 frames"
+    },
+    "mooneye-test-suite/acceptance/div_timing": {
+      "rom": "mooneye-test-suite/acceptance/div_timing.gb",
+      "frames": 600,
+      "expected_fail": false
+    },
+    "mooneye-test-suite/acceptance/ei_sequence": {
+      "rom": "mooneye-test-suite/acceptance/ei_sequence.gb",
+      "frames": 600,
+      "expected_fail": true
+    },
+    "mooneye-test-suite/acceptance/ei_timing": {
+      "rom": "mooneye-test-suite/acceptance/ei_timing.gb",
+      "frames": 600,
+      "expected_fail": false
+    },
+    "mooneye-test-suite/acceptance/halt_ime0_ei": {
+      "rom": "mooneye-test-suite/acceptance/halt_ime0_ei.gb",
+      "frames": 600,
+      "expected_fail": false
+    },
+    "mooneye-test-suite/acceptance/halt_ime0_nointr_timing": {
+      "rom": "mooneye-test-suite/acceptance/halt_ime0_nointr_timing.gb",
+      "frames": 600,
+      "expected_fail": true
+    },
+    "mooneye-test-suite/acceptance/halt_ime1_timing": {
+      "rom": "mooneye-test-suite/acceptance/halt_ime1_timing.gb",
+      "frames": 600,
+      "expected_fail": false
+    },
+    "mooneye-test-suite/acceptance/halt_ime1_timing2-GS": {
+      "rom": "mooneye-test-suite/acceptance/halt_ime1_timing2-GS.gb",
+      "frames": 600,
+      "expected_fail": true,
+      "note": "ChromA prints 'FAIL: ROUND 1'"
+    },
+    "mooneye-test-suite/acceptance/if_ie_registers": {
+      "rom": "mooneye-test-suite/acceptance/if_ie_registers.gb",
+      "frames": 600,
+      "expected_fail": false
+    },
+    "mooneye-test-suite/acceptance/instr/daa": {
+      "rom": "mooneye-test-suite/acceptance/instr/daa.gb",
+      "frames": 600,
+      "expected_fail": false
+    },
+    "mooneye-test-suite/acceptance/interrupts/ie_push": {
+      "rom": "mooneye-test-suite/acceptance/interrupts/ie_push.gb",
+      "frames": 600,
+      "expected_fail": true,
+      "note": "ChromA prints 'R1: not cancelled'"
+    },
+    "mooneye-test-suite/acceptance/intr_timing": {
+      "rom": "mooneye-test-suite/acceptance/intr_timing.gb",
+      "frames": 600,
+      "expected_fail": true
+    },
+    "mooneye-test-suite/acceptance/ld_hl_sp_e_timing": {
+      "rom": "mooneye-test-suite/acceptance/ld_hl_sp_e_timing.gb",
+      "frames": 600,
+      "expected_fail": true,
+      "note": "ChromA renders a blank screen; still black after 3600 frames"
+    },
+    "mooneye-test-suite/acceptance/oam_dma/basic": {
+      "rom": "mooneye-test-suite/acceptance/oam_dma/basic.gb",
+      "frames": 600,
+      "expected_fail": false
+    },
+    "mooneye-test-suite/acceptance/oam_dma/reg_read": {
+      "rom": "mooneye-test-suite/acceptance/oam_dma/reg_read.gb",
+      "frames": 600,
+      "expected_fail": true,
+      "note": "ChromA prints 'Fail: r1'"
+    },
+    "mooneye-test-suite/acceptance/oam_dma/sources-GS": {
+      "rom": "mooneye-test-suite/acceptance/oam_dma/sources-GS.gb",
+      "frames": 600,
+      "expected_fail": true,
+      "note": "ChromA prints 'Fail: $7F00'"
+    },
+    "mooneye-test-suite/acceptance/oam_dma_restart": {
+      "rom": "mooneye-test-suite/acceptance/oam_dma_restart.gb",
+      "frames": 600,
+      "expected_fail": true
+    },
+    "mooneye-test-suite/acceptance/oam_dma_timing": {
+      "rom": "mooneye-test-suite/acceptance/oam_dma_timing.gb",
+      "frames": 600,
+      "expected_fail": true
+    },
+    "mooneye-test-suite/acceptance/pop_timing": {
+      "rom": "mooneye-test-suite/acceptance/pop_timing.gb",
+      "frames": 600,
+      "expected_fail": true
+    },
+    "mooneye-test-suite/acceptance/ppu/intr_1_2_timing-GS": {
+      "rom": "mooneye-test-suite/acceptance/ppu/intr_1_2_timing-GS.gb",
+      "frames": 600,
+      "expected_fail": true
+    },
+    "mooneye-test-suite/acceptance/ppu/intr_2_0_timing": {
+      "rom": "mooneye-test-suite/acceptance/ppu/intr_2_0_timing.gb",
+      "frames": 600,
+      "expected_fail": true
+    },
+    "mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing": {
+      "rom": "mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing.gb",
+      "frames": 600,
+      "expected_fail": false
+    },
+    "mooneye-test-suite/acceptance/ppu/intr_2_mode3_timing": {
+      "rom": "mooneye-test-suite/acceptance/ppu/intr_2_mode3_timing.gb",
+      "frames": 600,
+      "expected_fail": false
+    },
+    "mooneye-test-suite/acceptance/ppu/intr_2_oam_ok_timing": {
+      "rom": "mooneye-test-suite/acceptance/ppu/intr_2_oam_ok_timing.gb",
+      "frames": 600,
+      "expected_fail": true
+    },
+    "mooneye-test-suite/acceptance/ppu/stat_irq_blocking": {
+      "rom": "mooneye-test-suite/acceptance/ppu/stat_irq_blocking.gb",
+      "frames": 600,
+      "expected_fail": true
+    },
+    "mooneye-test-suite/acceptance/ppu/stat_lyc_onoff": {
+      "rom": "mooneye-test-suite/acceptance/ppu/stat_lyc_onoff.gb",
+      "frames": 600,
+      "expected_fail": true,
+      "note": "ChromA prints 'Fail: r1 step 2'"
+    },
+    "mooneye-test-suite/acceptance/ppu/vblank_stat_intr-GS": {
+      "rom": "mooneye-test-suite/acceptance/ppu/vblank_stat_intr-GS.gb",
+      "frames": 600,
+      "expected_fail": false
+    },
+    "mooneye-test-suite/acceptance/rapid_di_ei": {
+      "rom": "mooneye-test-suite/acceptance/rapid_di_ei.gb",
+      "frames": 600,
+      "expected_fail": false
+    },
+    "mooneye-test-suite/acceptance/ret_timing": {
+      "rom": "mooneye-test-suite/acceptance/ret_timing.gb",
+      "frames": 600,
+      "expected_fail": true,
+      "note": "ChromA renders a blank screen; still black after 3600 frames"
+    },
+    "mooneye-test-suite/acceptance/reti_intr_timing": {
+      "rom": "mooneye-test-suite/acceptance/reti_intr_timing.gb",
+      "frames": 600,
+      "expected_fail": false
+    },
+    "mooneye-test-suite/acceptance/rst_timing": {
+      "rom": "mooneye-test-suite/acceptance/rst_timing.gb",
+      "frames": 600,
+      "expected_fail": true
+    },
+    "mooneye-test-suite/acceptance/timer/div_write": {
+      "rom": "mooneye-test-suite/acceptance/timer/div_write.gb",
+      "frames": 600,
+      "expected_fail": true
+    },
+    "mooneye-test-suite/acceptance/timer/tim00": {
+      "rom": "mooneye-test-suite/acceptance/timer/tim00.gb",
+      "frames": 600,
+      "expected_fail": true
+    },
+    "mooneye-test-suite/acceptance/timer/tim00_div_trigger": {
+      "rom": "mooneye-test-suite/acceptance/timer/tim00_div_trigger.gb",
+      "frames": 600,
+      "expected_fail": true
+    },
+    "mooneye-test-suite/acceptance/timer/tim01": {
+      "rom": "mooneye-test-suite/acceptance/timer/tim01.gb",
+      "frames": 600,
+      "expected_fail": true
+    },
+    "mooneye-test-suite/acceptance/timer/tim01_div_trigger": {
+      "rom": "mooneye-test-suite/acceptance/timer/tim01_div_trigger.gb",
+      "frames": 600,
+      "expected_fail": true
+    },
+    "mooneye-test-suite/acceptance/timer/tim10": {
+      "rom": "mooneye-test-suite/acceptance/timer/tim10.gb",
+      "frames": 600,
+      "expected_fail": true
+    },
+    "mooneye-test-suite/acceptance/timer/tim10_div_trigger": {
+      "rom": "mooneye-test-suite/acceptance/timer/tim10_div_trigger.gb",
+      "frames": 600,
+      "expected_fail": true
+    },
+    "mooneye-test-suite/acceptance/timer/tim11": {
+      "rom": "mooneye-test-suite/acceptance/timer/tim11.gb",
+      "frames": 600,
+      "expected_fail": true
+    },
+    "mooneye-test-suite/acceptance/timer/tim11_div_trigger": {
+      "rom": "mooneye-test-suite/acceptance/timer/tim11_div_trigger.gb",
+      "frames": 600,
+      "expected_fail": true
+    },
+    "mooneye-test-suite/acceptance/timer/tima_reload": {
+      "rom": "mooneye-test-suite/acceptance/timer/tima_reload.gb",
+      "frames": 600,
+      "expected_fail": true
+    },
+    "mooneye-test-suite/acceptance/timer/tima_write_reloading": {
+      "rom": "mooneye-test-suite/acceptance/timer/tima_write_reloading.gb",
+      "frames": 600,
+      "expected_fail": true
+    },
+    "mooneye-test-suite/acceptance/timer/tma_write_reloading": {
+      "rom": "mooneye-test-suite/acceptance/timer/tma_write_reloading.gb",
+      "frames": 600,
+      "expected_fail": true
+    }
+  },
+  "unusable": {
+    "mooneye-test-suite/acceptance/oam_dma_start": {
+      "rom": "mooneye-test-suite/acceptance/oam_dma_start.gb",
+      "reason": "mGBA prints 'C: 01!' and 'Test failed'"
+    },
+    "mooneye-test-suite/acceptance/ppu/hblank_ly_scx_timing-GS": {
+      "rom": "mooneye-test-suite/acceptance/ppu/hblank_ly_scx_timing-GS.gb",
+      "reason": "mGBA prints 'Test failed'"
+    },
+    "mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing_sprites": {
+      "rom": "mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing_sprites.gb",
+      "reason": "mGBA prints 'TEST #01 FAILED'"
+    },
+    "mooneye-test-suite/acceptance/ppu/lcdon_timing-GS": {
+      "rom": "mooneye-test-suite/acceptance/ppu/lcdon_timing-GS.gb",
+      "reason": "mGBA prints 'Test failed: STAT LYC=0'"
+    },
+    "mooneye-test-suite/acceptance/ppu/lcdon_write_timing-GS": {
+      "rom": "mooneye-test-suite/acceptance/ppu/lcdon_write_timing-GS.gb",
+      "reason": "mGBA prints 'Test failed: OAM write'"
+    },
+    "mooneye-test-suite/acceptance/push_timing": {
+      "rom": "mooneye-test-suite/acceptance/push_timing.gb",
+      "reason": "mGBA prints 'E: 24!' / 'H: 42!' and 'Test failed'"
+    },
+    "mooneye-test-suite/acceptance/timer/rapid_toggle": {
+      "rom": "mooneye-test-suite/acceptance/timer/rapid_toggle.gb",
+      "reason": "mGBA prints 'FAIL: NO INTR'"
+    }
+  }
+}
