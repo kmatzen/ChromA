@@ -90,7 +90,7 @@ python3 test_roms/run_accuracy_tests.py --list
 make clean && make TRACE=1
 make -f test_roms/Makefile.test
 # combined.gba = chroma.gba with the guest ROM appended:
-python3 test_roms/goomba_compile.py chroma.gba rom.gb combined.gba
+python3 test_roms/goomba_compile.py -e chroma.gba -o combined.gba rom.gb
 test_roms/trace_compare rom.gb combined.gba --frames 600 --max-insns 5000
 ```
 
