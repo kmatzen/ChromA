@@ -136,6 +136,12 @@ def main():
     # 4. MBC2 SRAM echo/write-through regression (issue #47) — fast, custom ROM
     suite("MBC2 SRAM Write-Through Test", "test_mbc2_sram.py", TIMEOUT_SHORT_ROM)
 
+    # 4a-0. Timer phase coherence (issue #44 item 1).  Runs the probe twice --
+    # once in ChromA, once in mGBA's own GB core as the reference -- so it
+    # needs room for two short emulator runs.
+    suite("Timer Phase Coherence Test", "test_timer_phase.py",
+          TIMEOUT_SHORT_ROM * 2)
+
     # 4a. STAT/LY register accuracy (issue #52). Runs the probe twice per model
     # (once in ChromA, once in mGBA's own GB core as the reference), so it needs
     # room for four short emulator runs rather than one.
