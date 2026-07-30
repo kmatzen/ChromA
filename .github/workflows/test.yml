@@ -78,6 +78,15 @@ jobs:
     - name: Validate font assets
       run: python3 scripts/validate_font.py
 
+    # ARCHITECTURE/COMPATIBILITY/README/KNOWN_ISSUES each carried numbers that
+    # had been true once: a cycle constant off by 16, a palette threshold
+    # retuned from 10 to 4, a mapper list promising a tilt sensor that does not
+    # exist, hand-maintained IWRAM figures (#64).  Fixing the prose buys a few
+    # months; deriving each figure from the source at CI time is what keeps it
+    # fixed.  Host-native: no toolchain, no emulator, no ROM.
+    - name: Check documentation against source
+      run: python3 scripts/check_docs.py
+
     - name: Download GBA binary
       uses: actions/download-artifact@v4
       with:

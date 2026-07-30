@@ -26,7 +26,7 @@ What this GB/GBC emulator implements, what it's missing, and why.
 ## CPU (SM83 / LR35902)
 
 ### What works
-- All 246 valid base opcodes + 256 CB-prefixed opcodes
+- All 245 valid base opcodes + 256 CB-prefixed opcodes (11 of the 256 encodings are illegal: D3 DB DD E3 E4 EB EC ED F4 FC FD)
 - Cycle counts correct for most instructions (validated by `scripts/validate_timing.py`)
 - HALT with interrupt wake-up (including HALT bug: exits without servicing when IME=0)
 - DAA (decimal adjust) fully correct
@@ -206,7 +206,11 @@ and the off-then-on double buffer still works.
 - **MBC2**: 4-bit ROM bank, built-in 512-nibble RAM
 - **MBC3**: 7-bit ROM bank, RTC with software fallback for emulators
 - **MBC5**: 9-bit ROM bank, rumble bit (conditional compilation)
-- **HuC1/HuC3**: Hudson Soft mappers (basic support)
+- **HuC1/HuC3**: Hudson Soft mappers (basic banking; HuC3 RTC not emulated)
+- **MBC7**: ROM banking only — no accelerometer, no EEPROM save
+
+`ARCHITECTURE.md` holds the canonical mapper list; `scripts/check_docs.py`
+checks both against `mappertbl` in `src/cart.s`.
 - RAM enable/disable (0x0A magic value)
 - SRAM bank switching + write-through persistence (no compressed saves)
 - SRAM layout: top 32KB reserved for write-through, bottom 32KB for
