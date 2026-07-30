@@ -52,10 +52,13 @@
 ;   A010  last phase reached (for diagnosing a hang)
 ;   A01F  $5A once every phase has run
 ;
-; Build:
+; Build (the same object is fixed twice, once per model, so that the DMG-only
+; STAT-write bug can be checked to be present on DMG and absent on CGB):
 ;   rgbasm -o stat.o test_roms/stat_ly_test.asm
 ;   rgblink -o test_roms/stat_ly_test.gb stat.o
 ;   rgbfix -v -p 0 -t "STATLY" -m 0x1B -r 2 test_roms/stat_ly_test.gb
+;   rgblink -o test_roms/stat_ly_test_cgb.gbc stat.o
+;   rgbfix -v -C -p 0 -t "STATLY" -m 0x1B -r 2 test_roms/stat_ly_test_cgb.gbc
 
 SECTION "VBlank", ROM0[$40]
     jp VblankIrq
