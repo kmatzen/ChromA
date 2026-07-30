@@ -50,6 +50,13 @@ EWRAM_DATA u32 gba_chip_size = GBA_SRAM_SIZE;
 #define CONFIGSAVE 2
 #define MBC_SAV 2
 
+//FindStateByIndex()/updatestates() "match every deletable record", i.e. every
+//record except the config.  This has to be a named constant rather than a bare
+//-1: sh->type is a u16, so `sh->type == type` promotes the field to 0..65535
+//and can never equal -1.  The delete menu passed -1 and so matched nothing --
+//its erase was a silent no-op (issue #57 item 2).
+#define ANYSAVE (-1)
+
 //How much SRAM the savestate list uses. NOTE: the three walkers below do NOT
 //agree on the base, and callers must not rely on a stale value:
 //  FindStateByIndex()  sets it to  sum(size)          -- what updatestates() wants
@@ -174,6 +181,60 @@ void getsram()	//copy GBA sram to sram_copy
 			sramCopy32[1] = 0;
 		}
 	}
+}
+
+//---------------------------------------------------------------------------
+// Walking the record chain
+//
+// The savestate heap is a run of variable-length records in sram_copy starting
+// at +4, terminated by a zero size.  Every walker used to trust sh->size:
+//
+//	sh=(stateheader*)(sram_copy+4);
+//	while(sh->size) sh=(stateheader*)((u8*)sh+sh->size);
+//
+// with no bound against save_start (issue #57 item 4).  That is fine for a
+// chain we wrote, but this one comes off battery-backed cart SRAM: it survives
+// power loss mid-write, and the STATEID magic is shared with other
+// Goomba-family forks that lay the records out differently.  A size of 1 walks
+// off the end of the buffer a byte at a time; a size that steps over the
+// terminator runs until it happens to land on a zero halfword.  Either way the
+// walk leaves sram_copy and reads (and, through updatestates(), writes) EWRAM
+// belonging to something else.
+//
+// chain_ok() gives all four walkers the same bound: a record must start inside
+// the heap, be at least a header long, and end inside the heap.  Anything else
+// ends the walk exactly as a zero size does -- callers already treat that as
+// "no more records", so a corrupt chain now truncates instead of escaping.
+//---------------------------------------------------------------------------
+static stateheader *chain_first(void)
+{
+	return (stateheader*)(sram_copy + 4);
+}
+
+static int chain_ok(stateheader *sh)
+{
+	u8 *base = (u8*)sh;
+	u8 *heap_end;
+
+	if (sram_copy == NULL)
+		return 0;
+	heap_end = sram_copy + save_start;
+
+	//The header has to be readable before sh->size can be trusted.
+	if (base < sram_copy + 4 || base + sizeof(stateheader) > heap_end)
+		return 0;
+	if (sh->size == 0)
+		return 0;			//normal end of chain
+	if (sh->size < sizeof(stateheader))
+		return 0;			//too short to be a record
+	if (base + sh->size > heap_end)
+		return 0;			//runs off the end of the heap
+	return 1;
+}
+
+static stateheader *chain_next(stateheader *sh)
+{
+	return (stateheader*)((u8*)sh + sh->size);
 }
 
 #if USETRIM
@@ -407,7 +468,7 @@ stateheader* drawstates(int menutype,int *menuitems,int *menuoffset, int needed_
 	stateheader *selectedstate=0;
 	int time;
 	int selectedstatesize;
-	stateheader *sh=(stateheader*)(sram_copy + 4);
+	stateheader *sh=chain_first();
 
 	type=(menutype==SRAMMENU)?SRAMSAVE:STATESAVE;
 
@@ -428,7 +489,7 @@ stateheader* drawstates(int menutype,int *menuitems,int *menuoffset, int needed_
 	cls(2);
 	statecount=0;
 	total=8;	//header+null terminator
-	while(sh->size) {
+	while(chain_ok(sh)) {
 		size=sh->size;
 		if(sh->type==type || (menutype==DELETEMENU && sh->type!=CONFIGSAVE)  ) {
 			if(startline+statecount>=FIRSTLINE && startline+statecount<=LASTLINE) {
@@ -446,6 +507,13 @@ stateheader* drawstates(int menutype,int *menuitems,int *menuoffset, int needed_
 	}
 
 	freespace=save_start-total;
+	//getstatetimeandsize() takes freespace as a u32 and renders it through
+	//number_at(), so a negative value printed as ten digits and pushed the
+	//line past the end of str[] (issue #57 item 4).  chain_ok() keeps the walk
+	//inside the heap, which bounds total, but the +8 for the header and
+	//terminator can still tip this a few bytes negative on a full heap.
+	if(freespace<0)
+		freespace=0;
 
 	//Guard on what the loop actually resolved, not on sel!=statecount: after
 	//a SELECT-delete shrinks the list, sel can sit past the last entry, and
@@ -543,6 +611,11 @@ void deletemenu(int statesize)
 	drawstates(DELETEMENU,&menuitems,&offset,statesize);
 	if (!menuitems)
 	{
+		//Nothing deletable, so there is nothing to offer -- but this bailed
+		//out having already set ui_x=0 and moved the UI, leaving the caller's
+		//menu shifted with no way back.
+		ui_x = old_ui_x;
+		move_ui();
 		return;
 	}
 	scrolll(0);
@@ -550,17 +623,38 @@ void deletemenu(int statesize)
 		i=getmenuinput(menuitems);
 		if(i&SELECT)
 		{
-			updatestates(selected,1,-1);
+			updatestates(selected,1,ANYSAVE);
 			if (selected==menuitems-1) selected--;
 		}
 		if(i&(SELECT+UP+DOWN+LEFT+RIGHT))
 			drawstates(DELETEMENU,&menuitems,&offset,statesize);
-	} while(!(i&(L_BTN+R_BTN+B_BTN)));
+		//Deleting the last record leaves nothing to select; managesram()
+		//guards its loop the same way rather than calling getmenuinput(0).
+	} while(menuitems && !(i&(L_BTN+R_BTN+B_BTN)));
 	getsram();
-	
+
 	scrollr(0);
 	ui_x = old_ui_x;
 	move_ui();
+}
+
+//The heap is full.  writeerror() says "Delete some saves", and deletemenu()
+//is the screen that lets you do it -- it even draws "Please free up N bytes"
+//against the record that would not fit -- but nothing had ever called it, so
+//the advice was the end of the flow (issue #57 item 2).  Show the error, then
+//the delete menu, and let the caller retry the save.
+//
+//`selected` is a global shared by every menu, and deletemenu() moves it, so
+//it has to be saved and restored around the call or the caller's menu comes
+//back with the delete menu's cursor position.  Note that restoring the number
+//does not make it mean the same thing: the callers re-derive which record to
+//write rather than reusing it as an index.
+static void memory_full(int needed_size)
+{
+	int old_selected=selected;
+	writeerror();
+	deletemenu(needed_size);
+	selected=old_selected;
 }
 
 
@@ -588,8 +682,18 @@ void savestatemenu() {
 	do {
 		i=getmenuinput(menuitems);
 		if(i&(A_BTN)) {
-			if(!updatestates(selected,0,STATESAVE))
-				writeerror();
+			if(!updatestates(selected,0,STATESAVE)) {
+				//Out of heap space: offer the delete menu, then retry once.
+				//The retry appends (any index past the end means "new")
+				//rather than reusing `selected`.  That row number indexed the
+				//list as it was drawn before the delete menu ran, so after a
+				//deletion it can name a different state -- and overwriting is
+				//destructive, which is the last thing to get wrong on a path
+				//the user reached by trying to free space.
+				memory_full(current_save_file?current_save_file->size:0);
+				if(!updatestates(65536,0,STATESAVE))
+					writeerror();
+			}
 		}
 		if(i&SELECT)
 			updatestates(selected,1,STATESAVE);
@@ -603,25 +707,31 @@ void savestatemenu() {
 int FindStateByIndex(int index, int type, stateheader **stateptr)
 {
 	getsram();
-	stateheader *sh = (stateheader*)(sram_copy+4);
-	int size = sh->size;
+	stateheader *sh = chain_first();
 	int i = 0;
 	int total = 0;
 	int foundstate = 0;
-	while (size != 0)
+	while (chain_ok(sh))
 	{
-		if (sh->type == type)
+		//ANYSAVE has to select exactly the records drawstates() draws in
+		//DELETEMENU mode (everything but the config), or the index the user
+		//picked off the screen won't name the record they were looking at.
+		//See the ANYSAVE definition for why `sh->type == type` could not
+		//express this.
+		int match = (type == ANYSAVE) ? (sh->type != CONFIGSAVE)
+		                              : (sh->type == type);
+		if (match)
 		{
 			if (index == i)
 			{
-				*stateptr = sh;
+				if (stateptr != NULL)
+					*stateptr = sh;
 				foundstate = 1;
 			}
 			i++;
 		}
-		total += size;
-		sh = (stateheader*)(((u8*)sh) + size);
-		size = sh->size;
+		total += sh->size;
+		sh = chain_next(sh);
 	}
 	totalstatesize = total;
 	return foundstate;
@@ -639,17 +749,16 @@ int findstate(u32 checksum,int type,stateheader **stateptr)
 	}
 	
 //need to check this
-	int state,size,foundstate,total;
+	int state,foundstate,total;
 	stateheader *sh;
 
 	getsram();
-	sh=(stateheader*)(sram_copy+4);
+	sh=chain_first();
 
 	state=-1;
 	foundstate=-1;
 	total=8;
-	size=sh->size;
-	while(size) {
+	while(chain_ok(sh)) {
 		if(sh->type==type) {
 			state++;
 			if(sh->checksum==checksum) {
@@ -660,9 +769,8 @@ int findstate(u32 checksum,int type,stateheader **stateptr)
 				}
 			}
 		}
-		total+=size;
-		sh=(stateheader*)(((u8*)sh)+size);
-		size=sh->size;
+		total+=sh->size;
+		sh=chain_next(sh);
 	}
 	totalstatesize=total;
 	return foundstate;
@@ -720,7 +828,13 @@ void quicksave() {
 	if(i<0) i=65536;	//make new save if one doesn't exist
 	if(!updatestates(i,0,STATESAVE))
 	{
-		writeerror();
+		//Out of heap space: offer the delete menu, then retry once.  The
+		//index has to be re-derived -- deleting records renumbers them.
+		memory_full(current_save_file?current_save_file->size:0);
+		i=findstate(checksum_this(),STATESAVE,&sh);
+		if(i<0) i=65536;
+		if(!updatestates(i,0,STATESAVE))
+			writeerror();
 	}
 	scrollr(2);
 	cls(3);
