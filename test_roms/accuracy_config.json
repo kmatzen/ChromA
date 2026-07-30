@@ -114,7 +114,7 @@
     "mooneye-test-suite/acceptance/intr_timing": {
       "rom": "mooneye-test-suite/acceptance/intr_timing.gb",
       "frames": 600,
-      "expected_fail": true
+      "expected_fail": false
     },
     "mooneye-test-suite/acceptance/ld_hl_sp_e_timing": {
       "rom": "mooneye-test-suite/acceptance/ld_hl_sp_e_timing.gb",
