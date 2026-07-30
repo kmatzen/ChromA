@@ -19,6 +19,10 @@
         "description": "TIMA reload-period and DIV-write glitch probe - verified via .sav inspection in test_timer_overflow.py, not a screenshot",
         "skip_visual": true
     },
+    "timer_phase_test": {
+        "description": "timer phase coherence across scanlines (issue #44 item 1) - verified via .sav inspection in test_timer_phase.py, not a screenshot (it never draws anything)",
+        "skip_visual": true
+    },
     "invalid_opcode_test": {
         "description": "invalid opcode / FEA0-FEFF / KEY1 probe - verified via .sav inspection in test_invalid_opcode.py, not a screenshot",
         "skip_visual": true

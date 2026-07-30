@@ -1,5 +1,6 @@
 Notes.txt
 SymbolTable.txt
+__pycache__/
 *.gba
 *.gb
 *.gbc
