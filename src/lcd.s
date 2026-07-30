@@ -436,8 +436,9 @@ GFX_reset:	@called with CPU reset
 	
 	mov r0,#0
 	ldr r1,=lcdstat
-	strb r0,[r1]@lcdstat		;flags off
-	strb r0,[r1,#-12] @fixme
+	mov r2,#0x80		@STAT bit 7 reads 1 even before anything writes FF41
+	strb r2,[r1]@lcdstat		;flags off
+	strb r2,[r1,#-12] @fixme
 	strb_ r0,scrollX
 	strb_ r0,scrollY
 	strb_ r0,windowX
@@ -3872,16 +3873,60 @@ FF40W_entry:
 	strb_ r2,scanline
 
 	and cycles,cycles,#CYC_MASK
-0:	
+0:
 	stmfd sp!,{r0,lr}
 	bl tobuffer
 	ldr r0,[sp]
 	strb_ r0,lcdctrl
+	bl FF41_repoint_mode_source
 	bl newmode
 @	mov r2,r1,lsr#16
 @	cmp r2,#0x0300
 @	bxeq r1
 	ldmfd sp!,{r0,pc}
+
+@----------------------------------------------------------------------------
+FF41_repoint_mode_source:
+@	Point FF41_R's mode compare at the constant matching the current LCD state
+@	and speed.  With the LCD off, hardware reports mode 0 while `cycles` keeps
+@	right on counting, so the compare is set to one that can never be taken and
+@	FF41_R falls straight through to the dispatcher carrying only the stored
+@	STAT byte.  Patching here, rather than testing CYC_LCD_ENABLED inside
+@	FF41_R, keeps the LCD-on read path -- the hottest in the emulator, and the
+@	one every commercial visual baseline leans on -- byte-for-byte unchanged.
+@
+@	Called from FF40_W's common tail, so it also covers FF40W_entry's other
+@	caller: loadstate, which reaches here having already stored lcdctrl and
+@	which passes the same value in r0 and r1 (i.e. looks like "no change").
+@	Reads lcdctrl from memory for that reason.  Clobbers r2 and r12 only; r0
+@	must survive for the `bl newmode` that follows.
+@----------------------------------------------------------------------------
+	ldr r12,=FF41_modifydata
+	ldrb_ r2,lcdctrl
+	tst r2,#0x80
+	bne .Lmode_source_on
+	ldr r2,[r12,#48]	@off: cmp cycles,#0x00FF0000 -- never taken
+	ldr r12,=FF41_modify1
+	str r2,[r12]
+	@Hardware reports mode 0 the instant the LCD goes off, so the stored byte's
+	@mode field has to be cleared as well.  Games switch the LCD off during
+	@VBlank, which is exactly when line144 has left mode 1 sitting in that
+	@field, and nothing else would clear it until the next line0 -- a whole
+	@frame of reads returning mode 1 with the LCD disabled.
+	ldr r12,=lcdstat
+	ldrb r2,[r12]
+	and r2,r2,#0xFC
+	strb r2,[r12]
+	strb r2,[r12,#-12]
+	bx lr
+.Lmode_source_on:
+	ldr_ r2,cyclesperscanline
+	cmp r2,#DOUBLE_SPEED
+	ldreq r2,[r12,#8]	@double speed: cmp cycles,#204*CYCLE*2
+	ldrne r2,[r12,#0]	@single speed: cmp cycles,#204*CYCLE
+	ldr r12,=FF41_modify1
+	str r2,[r12]
+	bx lr
 
 
  .pushsection .iwram.3
@@ -3889,23 +3934,42 @@ FF40W_entry:
 FF41_W:@		LCD Status
 @----------------------------------------------------------------------------
 	ldrb r1,lcdstat
-	and r2,r1,#0x07		@Preserve VBlank bit, mode flags, and LCDYC bit
+	and r2,r1,#0x87		@Preserve bit 7, VBlank bit, mode flags, LCDYC bit
 	and r0,r0,#0x78		@only use new interrupt and LCDYC test flags
 	orr r2,r0,r2
+	orr r2,r2,#0x80		@STAT bit 7 is wired high on hardware.  Forced (not
+				@just preserved) so a savestate written by a build
+				@without this, or the power-on byte, self-heals.
 	eors r0,r2,r1		@anything changed?
 	bxeq lr
 	strb r2,lcdstat
 	strb r2,lcdstat2
 
-	@ Check if mode 0/2 interrupt bits just became enabled (0→1).
-	@ If so and we're not in VBlank, fire STAT interrupt immediately
-	@ (real GB behavior: writing STAT can trigger the interrupt line).
-	ands r1,r2,r0		@r1 = bits that are now 1 AND changed
-	tst r1,#0x28		@mode 0 (bit 3) or mode 2 (bit 5) enabled?
-	beq lcdyc_check		@no → just check LYC
-	and r1,r2,#0x03		@current mode from STAT
-	cmp r1,#0x01
-	beq lcdyc_check		@mode 1 (VBlank) → no trigger
+	@ The DMG STAT-write bug: writing FF41 briefly drives the STAT condition
+	@ line as though every enable bit were set, so the write itself raises the
+	@ IRQ.  Three gates, none of which used to exist -- the old code compared
+	@ the *stored* mode field, which line0 clears for the whole visible frame,
+	@ so enabling bit 3 or 5 mid-frame fired instantly every time:
+	@   - CGB fixed the bug, so this is DMG-only;
+	@   - with the LCD off there is no STAT line to drive;
+	@   - mode 3 has no STAT condition, so a write during mode 3 raises
+	@     nothing.  The mode must come from `cycles` -- what FF41_R would
+	@     report -- not from the stored byte.
+	ldrb_ r1,gbcmode
+	cmp r1,#0
+	bne lcdyc_check		@CGB: no write-triggered STAT IRQ exists
+	tst cycles,#CYC_LCD_ENABLED
+	beq lcdyc_check		@LCD off: no STAT line to drive
+	ldrb_ r1,scanline
+	cmp r1,#144
+	bge 1f			@VBlank: mode 1, whose condition can match
+FF41_W_modify2:
+	cmp cycles,#376*CYCLE	@mode 2 (OAM) above this
+	bge 1f
+FF41_W_modify1:
+	cmp cycles,#204*CYCLE	@mode 3 in between: no condition can match
+	bge lcdyc_check
+1:
 	ldrb_ r1,gb_if
 	orr r1,r1,#0x02		@set LCD STAT interrupt
 	strb_ r1,gb_if
@@ -3918,7 +3982,12 @@ FF41_R_vblank_hack:
 	sub cycles,cycles,#21*CYCLE
 FF41_R_vblank:
 lcdstat2:
-	mov r0,#1
+	@The immediate here IS the stored STAT byte: FF41_W and friends strb into
+	@it.  Bit 7 is wired high on hardware, so it lives in the stored byte --
+	@that way every exit of the LCD_HACKS dispatcher below inherits it for
+	@free, including the handlers that fold the read into a bit test (bit 7 is
+	@irrelevant to those, and they only ever look at bits 0-2).
+	mov r0,#0x81
 #if LCD_HACKS
 	b FF41_R_look_at_top_3
 #else
@@ -3944,8 +4013,13 @@ FF41_R_hack:
 FF41_R:@		LCD Status
 @----------------------------------------------------------------------------
 lcdstat:
-	mov r0,#1
+	mov r0,#0x81		@stored STAT byte; bit 7 is wired high (see lcdstat2)
 FF41_modify1:
+	@Patched: by updatespeed for the double-speed thresholds, and by FF40_W
+	@when the LCD is switched off -- to a compare that can never be taken, so
+	@this falls straight through to the dispatcher with only the stored byte.
+	@`cycles` keeps counting with the LCD off, and hardware reports mode 0
+	@there, so the derived mode bits below must not be applied at all.
 	cmp cycles,#204*CYCLE	@mode 0 HBLANK if 0-203
 #if LCD_HACKS
 	blt 0f
@@ -4806,11 +4880,18 @@ lcdyc_check:
 _lcdyc_check_2:
 	tst r2,#0x40
 	bxeq lr
-	
+
+	@With the LCD off there is no STAT line, so an LYC write cannot raise the
+	@IRQ.  The internal scanline counter free-runs while disabled, so without
+	@this a game that parks LYC while the LCD is off gets interrupts driven by
+	@a counter hardware isn't even reporting.
+	tst cycles,#CYC_LCD_ENABLED
+	bxeq lr
+
 	@new code: don't cause multiple interrupts while signal stays high
 	tst r0,#0x04
 	bxne lr
-	
+
 	ldrb_ r0,gb_if
 	orr r0,r0,#0x02		@2=LCD STAT
 	strb_ r0,gb_if

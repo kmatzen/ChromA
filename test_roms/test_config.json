@@ -39,6 +39,14 @@
         "description": "APU power-off shadow probe - verified via .sav inspection in test_sound_power.py across a quicksave/quickload, not a screenshot",
         "skip_visual": true
     },
+    "stat_ly_test": {
+        "description": "STAT bit 7, LCD-off mode reporting and STAT IRQ gating probe (DMG) - verified via .sav inspection in test_stat_ly.py against mGBA's own DMG core, not a screenshot (it spends most of its run with the LCD off and never draws anything)",
+        "skip_visual": true
+    },
+    "stat_ly_test_cgb": {
+        "description": "the same STAT probe with the CGB flag set, so the DMG-only STAT-write bug can be checked to be absent on CGB - verified via .sav inspection in test_stat_ly.py, not a screenshot",
+        "skip_visual": true
+    },
     "mbc2_banking_test": {
         "description": "MBC2 A8 register decode and 512-nibble RAM model - verified via .sav inspection in test_mbc2_banking.py, not a screenshot",
         "skip_visual": true
