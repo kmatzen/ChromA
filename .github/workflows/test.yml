@@ -252,6 +252,16 @@ jobs:
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
 
+    # checkTimerIRQ stored a flat TMA<<24 on overflow, so the timer restarted
+    # from phase zero at every scanline boundary that contained one and drifted
+    # steadily (#44 item 1).  A free-running counter sampled at a fixed
+    # interval has to give a periodic sequence; before the fix ChromA's period
+    # was 19 against mGBA's 4.
+    - name: Run timer phase coherence test
+      run: python3 test_roms/test_timer_phase.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
     # Opcode 0xED fell into jr_fixup and moved PC; FEA0-FEFF reads ran off
     # the end of the OAM buffer; KEY1's unused bits read 0 (#56).
     - name: Run invalid opcode test
