@@ -20,12 +20,12 @@ java -cp tla2tools.jar tlc2.TLC -deadlock -config Redundant.cfg DirtyTiles.tla
 Models `DIRTY_TILE_BITS`, shared between:
 
 - **Producer — foreground (emulated-CPU context).** `DoDma()` rewrites tile data
-  in VRAM, then `SetBits()` (`src/dma.c:57-81`) marks the tiles with a plain
+  in VRAM, then `SetBits()` (`src/dma.c`) marks the tiles with a plain
   `base[i] |= mask` — a non-atomic load / or / store. Reached only from
-  `FF55_W` (`src/io.s:790`) and `tick_hdma` (`src/timeout.s:391`).
-- **Consumer — GBA hardware IRQ.** `consume_dirty_tiles` (`src/lcd.s:812`) has
-  exactly one caller, `src/lcd.s:1644`, inside `vblankinterrupt`
-  (`src/lcd.s:1589`), reached via `irqhandler` → `jmpintr`.
+  `FF55_W` (`src/io.s`) and `tick_hdma` (`src/timeout.s`).
+- **Consumer — GBA hardware IRQ.** `consume_dirty_tiles` (`src/lcd.s`) has
+  exactly one caller, inside `vblankinterrupt` (`src/lcd.s`), reached via
+  `irqhandler` → `jmpintr`.
 
 The IRQ preempts foreground; foreground never preempts the IRQ. `jmpintr`
 re-enabling IRQ/FIQ lets *other handlers* nest — it does not resume the emulated
@@ -72,9 +72,9 @@ produce.
 
 The same mistake invalidated a companion claim about `vram_packets_registered_*`
 being raced between `RegisterDmaPackets` and `store_dirty_packets`. Tracing the
-callers: `RegisterDmaPackets` runs from `DoDma` (`src/dma.c:146`, foreground),
-and `store_dirty_packets` from `newframe_vblank` (`src/lcd.s:3346`), whose only
-caller is `src/timeout.s:220` — the *emulated* VBlank in the foreground scanline
+callers: `RegisterDmaPackets` runs from `DoDma` (`src/dma.c`, foreground),
+and `store_dirty_packets` from `newframe_vblank` (`src/lcd.s`), whose only
+caller is the `line144` entry in `src/timeout.s` — the *emulated* VBlank in the foreground scanline
 state machine, not the hardware IRQ. Both foreground, therefore sequential. No
 race.
 
@@ -86,9 +86,9 @@ happily produce a confident counterexample to a premise you invented.
 ## What this does not prove
 
 - The model abstracts the bitmap as a set of tiles, not 48 bytes of packed bits
-  split into two 24-byte per-VRAM-bank halves (`src/lcd.s:4873`).
+  split into two 24-byte per-VRAM-bank halves (`DIRTY_TILE_BITS`, defined in `src/equates.h`).
 - It treats `render_dirty_tiles` as rendering everything flagged in one step. The
-  real walker (`GetNextTileAndLength_dirty`, `src/lcd.s:945+`) reads the bitmap
+  real walker (`GetNextTileAndLength_dirty`, `src/lcd.s`) reads the bitmap
   incrementally — but since no producer step can interleave, that is a faithful
   abstraction here.
 - It says nothing about `dirty_map_words`, `vram_packets_dirty`, or
