@@ -56,6 +56,20 @@ jobs:
     - name: Run RLE codec unit tests
       run: python3 test_roms/test_rle_unit.py
 
+    # The savestate heap lives in battery-backed cart SRAM whose STATEID magic
+    # is shared with other Goomba-family forks, and every chain walker trusted
+    # the record sizes in it; the delete menu also asked for "any record" with
+    # a -1 that a u16 type field can never match, so it erased nothing (#57).
+    # Host-native: no toolchain, no emulator, no ROM.
+    - name: Run SRAM record chain unit tests
+      run: python3 test_roms/test_sram_chain_unit.py
+
+    # The 256-entry ROM bank table was filled without masking, so every entry
+    # past the end of a sub-4MB cart pointed outside it, while cart.s masked
+    # bank numbers against the size byte the table ignored (#57).
+    - name: Run ROM bank table unit tests
+      run: python3 test_roms/test_rom_banks_unit.py
+
     # src/font.lz77 and src/fontpal.bin are committed binaries with no build
     # step, so nothing stopped them drifting from the C code that indexes them,
     # and the shipped stream carried displacement-1 back-references that

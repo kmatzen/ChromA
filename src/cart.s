@@ -117,6 +117,8 @@ mbcflagstbl:
 	.byte 0
 	.byte MBC_RAM|MBC_SAV
 	.byte 0
+mbcflagstbl_end:
+ .equ MBCFLAGSTBL_ENTRIES, (mbcflagstbl_end - mbcflagstbl)
 
 
 loadcart_after_sgb_border:
@@ -275,11 +277,24 @@ loadcart: @called from C:  r0=rom number, r1=emuflags
 @	bl mapBIOS_		;01=BIOS
 
 	ldrb r0,[r3,#0x147]	@get mbc#
-	cmp r0,#0xFF		@HuC-1
+	cmp r0,#0xFF		@HuC-1: RAM+battery
 	moveq r0,#3
-	adr r1,mbcflagstbl
-	ldrb r0,[r1,r0]		@get mbc flags.
-	
+	@HuC-3 is in mappertbl below, but 0xFE is way past the end of
+	@mbcflagstbl, which stops at 0x23 and is followed immediately by code --
+	@so HuC-3 carts were assigned ARM instruction bytes as cart flags.  It
+	@has RAM, a battery and a timer, same as cart type 0x10.
+	cmp r0,#0xFE
+	moveq r0,#0x10
+	@Any other cart type above the end of the table read code as flags too
+	@(issue #57 item 6), and those bits drive real behaviour: MBC_SAV turns
+	@on battery write-through to cart SRAM.  An unsupported cart type falls
+	@back to mbc0init below, so give it mbc0's answer -- no RAM, no battery,
+	@no timer -- instead of whatever byte happened to be there.
+	cmp r0,#MBCFLAGSTBL_ENTRIES
+	adrcc r1,mbcflagstbl
+	ldrccb r0,[r1,r0]	@get mbc flags.
+	movcs r0,#0		@unsupported cart type: no RAM/battery/timer
+
 	@autoborderstate == 1 overrides the flags, we want NO SRAM while we're getting the SGB border
 	@-----
 	ldrb_ r1,autoborderstate

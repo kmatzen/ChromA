@@ -85,6 +85,13 @@ def main():
     suite("Menu Text Row Unit Tests", "test_drawtextl_unit.py", TIMEOUT_UNIT)
     suite("Dirty Tile Bitmap Unit Tests", "test_dirtybits_unit.py", TIMEOUT_UNIT)
 
+    # 0a-2. SRAM record chain and ROM bank table (issue #57 items 2, 4 and 6).
+    # Also invisible to the screenshot suites: a delete that silently erased
+    # nothing, chain walks that ran off the end of the savestate heap, and a
+    # bank table whose out-of-range entries pointed outside the cart.
+    suite("SRAM Record Chain Unit Tests", "test_sram_chain_unit.py", TIMEOUT_UNIT)
+    suite("ROM Bank Table Unit Tests", "test_rom_banks_unit.py", TIMEOUT_UNIT)
+
     # 0b. mgba_runner argument validation (issue #58) -- no ROM or toolchain
     # needed, and it guards the harness's own ability to report a problem, so
     # run it before anything that depends on the runner behaving.
