@@ -578,11 +578,38 @@ checkTimerIRQ:
 	ldr_ r0,timercounter
 	adds r0,r0,r2,lsl r1
 	bcc noTimerIRQ
-	ldrb_ r0,gb_if
-	orr r0,r0,#0x04		@4=Timer
-	strb_ r0,gb_if
-	ldrb_ r0,timermodulo
-	mov r0,r0,lsl#24
+	ldrb_ r1,gb_if
+	orr r1,r1,#0x04		@4=Timer
+	strb_ r1,gb_if
+	@ TIMA overflowed at least once during this scanline.  r0 now holds the
+	@ excess past the wrap point; fold it back through the reload period
+	@ rather than dropping it (#44 item 1).
+	@
+	@ This used to store a flat TMA<<24, discarding the sub-period fraction
+	@ and every overflow after the first.  Both matter: at TAC=01 the period
+	@ is 16 cycles, so one scanline is ~28 TIMA periods, and with a high TMA
+	@ the reload period is short enough that several overflows land in a
+	@ single scanline.  Restarting from a flat TMA<<24 each time made the
+	@ timer lose the leftover phase every scanline and drift steadily.
+	@
+	@ _FF05R already projects reads through this same fold, so before this
+	@ the committed state and the value a game read back disagreed.
+	@
+	@ The IRQ is still raised once per scanline; delivering one interrupt per
+	@ overflow needs sub-scanline dispatch, which is the architecture limit
+	@ #44 items 3-4 describe.  The counter phase is now right regardless.
+	@
+	@ Bounded: the largest increment is DOUBLE_SPEED<<16, and the smallest
+	@ reload period is 1<<24 (TMA=255), so the loop runs at most 57 times and
+	@ only on a scanline that actually overflowed.
+	ldrb_ r1,timermodulo
+	rsb r2,r1,#256
+	movs r2,r2,lsl#24	@(256-TMA)<<24; 0 means a full 2^32 period
+	beq 3f
+0:	cmp r0,r2
+	subcs r0,r0,r2
+	bcs 0b
+3:	add r0,r0,r1,lsl#24
 noTimerIRQ:
 	str_ r0,timercounter
 noTimer:
