@@ -2786,11 +2786,52 @@ ff69_w_no_split:
 	ldr r1,[r0]
 	add r1,r1,#1
 	str r1,[r0]
+	ldr r0,=pal_frame_writes
+	ldr r1,[r0]
+	add r1,r1,#1
+	str r1,[r0]
 	stmfd sp!,{r0-r6,lr}
-	ldr r0,=pal_dma_buffer
-	add r0,r0,r2,lsl#8		@ buffer[scanline * 256]
+	@ Carry the previous write forward over every scanline since then, so
+	@ lines the guest never wrote hold the palette actually in effect there
+	@ instead of whatever the buffer happened to contain (issue #36).
+	ldr r6,=pal_fill_line
+	ldrb r5,[r6]
+	strb r2,[r6]
+	mov r4,r2			@ scanline of this write
+	@ Track the range of scanlines this game has ever driven.  Outside it the
+	@ buffer has never held anything but its power-on contents.  The low end
+	@ is stored biased by one so that the zero-initialised value reads as
+	@ "no line written yet" rather than as line 0.
+	ldr r6,=pal_max_line
+	ldrb r3,[r6]
+	cmp r2,r3
+	strhib r2,[r6]
+	ldr r6,=pal_min_line_p1
+	ldrb r3,[r6]
+	add r0,r2,#1
+	cmp r3,#0
+	moveq r3,#0xFF			@ unset compares as "above every line"
+	cmp r0,r3
+	strlob r0,[r6]
+	add r0,r5,#1			@ first line still holding stale data
+	sub r1,r4,#1			@ last line before this write
+	mov r2,r5			@ source: the previous write
+	bl pal_forward_fill
+	mov r0,r4
+	bl pal_store_line
+	ldmfd sp!,{r0-r6,pc}
+
+@----------------------------------------------------------------------------
+@ pal_store_line: pal_dma_buffer[r0] = current BG palette
+@ All 8 palettes are copied — unchanged ones are still needed in the entry,
+@ since DMA3 replays the whole 256-byte entry into PALRAM.
+@----------------------------------------------------------------------------
+pal_store_line:
+	stmfd sp!,{r0-r6,lr}
+	ldr r1,=pal_dma_buffer
+	add r0,r1,r0,lsl#8		@ buffer[scanline * 256]
 	ldr r2,=gbc_palette
-	mov r3,#8			@ copy all 8 palettes (unchanged ones still needed in buffer)
+	mov r3,#8
 1:	ldr r4,[r2],#4
 	ldr r5,[r2],#4
 	str r4,[r0],#4
@@ -2799,6 +2840,40 @@ ff69_w_no_split:
 	subs r3,r3,#1
 	bne 1b
 	ldmfd sp!,{r0-r6,pc}
+
+@----------------------------------------------------------------------------
+@ pal_forward_fill: replicate one pal_dma_buffer entry across a range
+@   r0 = first destination scanline, r1 = last destination scanline (inclusive)
+@   r2 = source scanline
+@ r0 > r1 is a no-op.  Only the 4 colours per palette that the GBC uses are
+@ written, matching pal_store_line; the rest of each 32-byte GBA palette slot
+@ is never read by GB tiles.
+@ The destination stride is 256 bytes, so the palette loop is outermost to
+@ load each source palette once instead of once per line.
+@----------------------------------------------------------------------------
+pal_forward_fill:
+	cmp r0,r1
+	bxgt lr
+	stmfd sp!,{r0-r9,r12,lr}
+	ldr r3,=pal_dma_buffer
+	add r2,r3,r2,lsl#8		@ source entry
+	add r12,r3,r0,lsl#8		@ first destination entry
+	sub r1,r1,r0
+	add r1,r1,#1			@ number of entries to fill
+	mov r3,#8			@ 8 BG palettes per entry
+1:	ldmia r2!,{r4,r5}		@ 4 colours of this palette
+	add r2,r2,#24			@ next palette slot in the source
+	mov r0,r12
+	mov r6,r1
+2:	stmia r0,{r4,r5}
+	add r0,r0,#256			@ same palette slot, next scanline
+	subs r6,r6,#1
+	bne 2b
+	add r12,r12,#32			@ next palette slot
+	subs r3,r3,#1
+	bne 1b
+	ldmfd sp!,{r0-r9,r12,pc}
+	.pool
 	.popsection
 
 	.pushsection .text
@@ -3167,102 +3242,6 @@ end_gba_hdma:
 @ Wrapper around do_gba_hdma that adds mid-frame palette split support.
 @ Placed in .text to avoid IWRAM pressure.
 @----------------------------------------------------------------------------
-@----------------------------------------------------------------------------
-@ Fill all 144 DMA buffer entries with current PALRAM data using doubling DMA.
-@ Step 1: DMA copy PALRAM → entry 0 (64 words, incrementing)
-@ Step 2: CPU copy entry 0 → entry 1 (64 words)
-@ Steps 3-8: DMA double-copy to fill remaining entries
-@ Total: ~36KB via hardware DMA, minimal CPU involvement.
-@----------------------------------------------------------------------------
-fill_dma_buffer_doubling:
-	stmfd sp!,{r0-r9,lr}
-	mov r9,#REG_BASE
-
-	@ Step 1: DMA3 immediate — copy 256 bytes from PALRAM to entry 0
-	ldr r0,=PALETTE_BASE+256
-	str r0,[r9,#REG_DM3SAD]
-	ldr r0,=pal_dma_buffer
-	str r0,[r9,#REG_DM3DAD]
-	ldr r0,=0x84000040		@ 64 words, enable, 32-bit, src inc, dest inc, immediate
-	str r0,[r9,#REG_DM3CNT_L]
-
-	@ Step 2: CPU copy entry 0 → entry 1 (256 bytes = 64 words)
-	ldr r0,=pal_dma_buffer
-	add r1,r0,#256
-	ldmia r0!,{r2-r8,lr}
-	stmia r1!,{r2-r8,lr}
-	ldmia r0!,{r2-r8,lr}
-	stmia r1!,{r2-r8,lr}
-	ldmia r0!,{r2-r8,lr}
-	stmia r1!,{r2-r8,lr}
-	ldmia r0!,{r2-r8,lr}
-	stmia r1!,{r2-r8,lr}
-	ldmia r0!,{r2-r8,lr}
-	stmia r1!,{r2-r8,lr}
-	ldmia r0!,{r2-r8,lr}
-	stmia r1!,{r2-r8,lr}
-	ldmia r0!,{r2-r8,lr}
-	stmia r1!,{r2-r8,lr}
-	ldmia r0!,{r2-r8,lr}
-	stmia r1!,{r2-r8,lr}
-
-	@ Steps 3-8: DMA doubling — src and dest both increment
-	ldr r4,=pal_dma_buffer
-	@ entries 0-1 → 2-3 (128 words)
-	add r0,r4,#0
-	str r0,[r9,#REG_DM3SAD]
-	add r0,r4,#512
-	str r0,[r9,#REG_DM3DAD]
-	ldr r0,=0x84000080		@ 128 words
-	str r0,[r9,#REG_DM3CNT_L]
-	@ entries 0-3 → 4-7 (256 words)
-	add r0,r4,#0
-	str r0,[r9,#REG_DM3SAD]
-	add r0,r4,#1024
-	str r0,[r9,#REG_DM3DAD]
-	ldr r0,=0x84000100		@ 256 words
-	str r0,[r9,#REG_DM3CNT_L]
-	@ entries 0-7 → 8-15 (512 words)
-	add r0,r4,#0
-	str r0,[r9,#REG_DM3SAD]
-	add r0,r4,#2048
-	str r0,[r9,#REG_DM3DAD]
-	ldr r0,=0x84000200		@ 512 words
-	str r0,[r9,#REG_DM3CNT_L]
-	@ entries 0-15 → 16-31 (1024 words)
-	add r0,r4,#0
-	str r0,[r9,#REG_DM3SAD]
-	ldr r0,=256*16
-	add r0,r4,r0
-	str r0,[r9,#REG_DM3DAD]
-	ldr r0,=0x84000400		@ 1024 words
-	str r0,[r9,#REG_DM3CNT_L]
-	@ entries 0-31 → 32-63 (2048 words)
-	add r0,r4,#0
-	str r0,[r9,#REG_DM3SAD]
-	ldr r0,=256*32
-	add r0,r4,r0
-	str r0,[r9,#REG_DM3DAD]
-	ldr r0,=0x84000800		@ 2048 words
-	str r0,[r9,#REG_DM3CNT_L]
-	@ entries 0-63 → 64-127 (4096 words)
-	add r0,r4,#0
-	str r0,[r9,#REG_DM3SAD]
-	ldr r0,=256*64
-	add r0,r4,r0
-	str r0,[r9,#REG_DM3DAD]
-	ldr r0,=0x84001000		@ 4096 words
-	str r0,[r9,#REG_DM3CNT_L]
-	@ entries 0-15 → 128-143 (1024 words, fills remaining 16 entries)
-	add r0,r4,#0
-	str r0,[r9,#REG_DM3SAD]
-	ldr r0,=256*128
-	add r0,r4,r0
-	str r0,[r9,#REG_DM3DAD]
-	ldr r0,=0x84000400		@ 1024 words
-	str r0,[r9,#REG_DM3CNT_L]
-
-	ldmfd sp!,{r0-r9,pc}
 
 @----------------------------------------------------------------------------
 pal_hdma_wrapper:
