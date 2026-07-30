@@ -54,7 +54,7 @@ def main():
         binary = Path(tmpdir) / "test_sram_chain"
 
         compile_result = subprocess.run(
-            ["cc", "-O1", "-Wall", f"-I{SRC_INC}", *HOST_DEFINES, *HOST_WARN_OFF,
+            ["cc", "-O1", "-Wall", "-fno-common", f"-I{SRC_INC}", *HOST_DEFINES, *HOST_WARN_OFF,
              str(SRC_C), str(SRAM_C), "-o", str(binary)],
             capture_output=True, text=True
         )

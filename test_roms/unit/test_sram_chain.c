@@ -47,11 +47,11 @@
 
 /* --- globals and helpers the rest of the build owns.  Only the ones the
    chain walkers actually reach need real behaviour. --------------------- */
+/* Both of these are defined by sram.c -- declare them only.  Defining them
+   here as well links on mach-o, which merges tentative definitions, but not
+   against GNU ld, which rejects the duplicate. */
 extern u8 *sram_copy;
 extern u32 save_start;
-
-u8 *sram_copy;
-u32 save_start;
 
 int FindStateByIndex(int index, int type, stateheader **stateptr);
 

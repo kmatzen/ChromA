@@ -50,7 +50,7 @@ def main():
         binary = Path(tmpdir) / "test_rom_banks"
 
         compile_result = subprocess.run(
-            ["cc", "-O1", "-Wall", f"-I{SRC_INC}", *HOST_DEFINES,
+            ["cc", "-O1", "-Wall", "-fno-common", f"-I{SRC_INC}", *HOST_DEFINES,
              str(SRC_C), str(CACHE_C), "-o", str(binary)],
             capture_output=True, text=True
         )
