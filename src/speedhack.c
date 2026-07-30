@@ -147,7 +147,11 @@ static const u8 *find_first_instruction(const u8 *initpc, const u8 *lastbank, co
 			case UnconditionalBranch:
 				{
 					int branchLength = gets8(pc,1);
-					targetPc = pc + 1 - lastbank + branchLength;
+					/* A JR is two bytes and its displacement is measured from
+					 * the byte after it, so the target is (pc16 + 2) + disp.
+					 * Computing it from pc16 + 1 biased the
+					 * `targetPc <= init_pc_16` test below by one (#45 item 3). */
+					targetPc = pc + 2 - lastbank + branchLength;
 					
 					//conditional branch backwards:
 					//  to satisfy the loop rules:
@@ -176,7 +180,17 @@ static const u8 *find_first_instruction(const u8 *initpc, const u8 *lastbank, co
 					if (targetPc <= init_pc_16 && branchLength >= -LOOKBACK)
 					{
 						*branchpc = pc;
-						return pc + 3 + branchLength;
+						/* branchLength is measured from pc16+2, so the host
+						 * pointer for the target is pc + 2 + branchLength.
+						 * Returning pc + 3 + branchLength handed back
+						 * target+1, and find_hack then decoded the loop body
+						 * one byte out of phase -- mis-classifying every
+						 * instruction in it, which can turn a loop that polls
+						 * FF41/FF44/the timer into one the reject list below
+						 * never sees, and install a time-skip on a raster
+						 * wait (#45 item 2).  The JR path above was already
+						 * right, which is why only JP loops were affected. */
+						return pc + 2 + branchLength;
 					}
 				}
 				break;
@@ -243,7 +257,10 @@ static const u8 *find_hack(const u8 *start_pc, const u8 *branchpc, const u8 *las
 				break;
 			case ConditionalBranch:
 			case UnconditionalBranch:
-				addressOfJump = pc + 1 + gets8(pc, 1) - lastbank;
+				/* Same +2 rule as above.  addressOfJump is still unused (the
+				 * acknowledged TODO below), but a wrong formula sitting next
+				 * to a TODO is an invitation to build on it. */
+				addressOfJump = pc + 2 + gets8(pc, 1) - lastbank;
 				break;
 			case ConditionalJump:
 			case UnconditionalJump:
