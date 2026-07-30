@@ -2394,6 +2394,24 @@ updatespeed:
 	ldr r12,=FF41_modify2
 	ldr r0,FF41_modifydata+4
 	str r0,[r12]
+	@FF41_W derives the current mode the same way FF41_R does, to decide
+	@whether the DMG STAT-write bug can fire, so its compares need the same
+	@double-speed treatment.
+	ldr r12,=FF41_W_modify1
+	ldr r0,FF41_modifydata
+	str r0,[r12]
+	ldr r12,=FF41_W_modify2
+	ldr r0,FF41_modifydata+4
+	str r0,[r12]
+	@FF40_W patches FF41_modify1 to a never-taken compare while the LCD is
+	@off (hardware reports mode 0 there).  Re-apply that, or a speed switch
+	@with the LCD disabled -- the usual CGB sequence -- would silently restore
+	@mode reporting behind FF40_W's back.
+	ldrb_ r0,lcdctrl
+	tst r0,#0x80
+	ldreq r12,=FF41_modify1
+	ldreq r0,FF41_modifydata+48
+	streq r0,[r12]
 #if LCD_HACKS
 #if !LCD_HACKS_ACCURATE_DIV
 	ldr r0,FF41_modifydata+16
@@ -2438,6 +2456,17 @@ updatespeed:
 	ldr r12,=FF41_modify2
 	ldr r0,FF41_modifydata+12
 	str r0,[r12]
+	ldr r12,=FF41_W_modify1
+	ldr r0,FF41_modifydata+8
+	str r0,[r12]
+	ldr r12,=FF41_W_modify2
+	ldr r0,FF41_modifydata+12
+	str r0,[r12]
+	ldrb_ r0,lcdctrl
+	tst r0,#0x80
+	ldreq r12,=FF41_modify1
+	ldreq r0,FF41_modifydata+48
+	streq r0,[r12]
 #if LCD_HACKS
 #if !LCD_HACKS_ACCURATE_DIV
 	ldr r0,FF41_modifydata+20
@@ -2462,19 +2491,24 @@ updatespeed:
 #endif
 	bx lr
 
+	.global FF41_modifydata
 FF41_modifydata:
-	cmp cycles,#204*CYCLE
-	cmp cycles,#376*CYCLE
-	cmp cycles,#204*CYCLE*2
-	cmp cycles,#376*CYCLE*2
-	add cycles,cycles,#204*CYCLE
-	add cycles,cycles,#204*CYCLE*2
-	adds cycles,cycles,#8*CYCLE
-	adds cycles,cycles,#16*CYCLE
-	sub r0,r0,#8*CYCLE
-	sub r0,r0,#16*CYCLE
-	subs r2,cycles,#204*CYCLE
-	subs r2,cycles,#204*CYCLE*2
+	cmp cycles,#204*CYCLE		@+0
+	cmp cycles,#376*CYCLE		@+4
+	cmp cycles,#204*CYCLE*2		@+8
+	cmp cycles,#376*CYCLE*2		@+12
+	add cycles,cycles,#204*CYCLE	@+16
+	add cycles,cycles,#204*CYCLE*2	@+20
+	adds cycles,cycles,#8*CYCLE	@+24
+	adds cycles,cycles,#16*CYCLE	@+28
+	sub r0,r0,#8*CYCLE		@+32
+	sub r0,r0,#16*CYCLE		@+36
+	subs r2,cycles,#204*CYCLE	@+40
+	subs r2,cycles,#204*CYCLE*2	@+44
+	@+48: the LCD-off mode compare.  `cycles` never comes anywhere near this,
+	@so the branch after it in FF41_R is always taken and the derived mode bits
+	@are never applied -- leaving the stored STAT byte, whose mode field is 0.
+	cmp cycles,#0x00FF0000		@+48
 
  .if PROFILE
 fetch_profile:

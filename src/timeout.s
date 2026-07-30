@@ -139,7 +139,9 @@ line0x:
 @	tst r1,#0x80
 	ldr r1,=lcdstat
 	ldrb r0,[r1]		@
-	and r2,r0,#0x7C		@reset lcd mode flags (vblank/hblank/oam/lcd)
+	and r2,r0,#0xFC		@reset lcd mode flags (vblank/hblank/oam/lcd),
+				@keeping bit 7 -- it is wired high on hardware, and
+				@masking it out here would clear it once a frame
 	cmp r0,r2
 	strneb r2,[r1]		@
 	strneb r2,[r1,#-12] @FIXME
@@ -273,7 +275,7 @@ line144: @------------------------
 
 	adrl r1,lcdstat
 	ldrb r0,[r1]		@vbl flag
-	and r0,r0,#0x7C
+	and r0,r0,#0xFC		@keep bit 7 (wired high); clear only the mode field
 	orr r2,r0,#0x01		@set mode 1 (VBlank)
 	strb r2,[r1]		@vbl flag
 	strb r2,[r1,#-12] @FIXME
@@ -283,7 +285,10 @@ line144: @------------------------
 	@ Fire STAT interrupt if mode 1 (VBlank) STAT IE is enabled (bit 4).
 	@ Also apply IRQ blocking: skip if LYC is already holding line high.
 	ldrb r1,[r1]		@re-read lcdstat (now has mode 1 set)
-	tst r1,#0x10		@mode 1 STAT IE enabled?
+	@Entering line 144 asserts the mode-2 (OAM) STAT condition as well as the
+	@mode-1 one, so a game that enables only bit 5 still gets a STAT IRQ at
+	@VBlank start.  Checking bit 4 alone missed that.
+	tst r1,#0x30		@mode 1 (bit 4) or mode 2 (bit 5) STAT IE enabled?
 	beq .noVblStat
 	@ Check IRQ blocking: if STAT line was already high, no rising edge
 	@ Block if mode 0 (HBlank) IE held line high from preceding scanline
@@ -466,6 +471,17 @@ _checkScanlineIRQ:
 	strneb r2,[r1]
 	strneb r2,[r1,#-12] @FIXME
 	@has it turned on, and interrupts are enabled?
+	@
+	@Deliberately NOT blocked when mode-0 IE held the STAT line high through
+	@the preceding HBlank, which issue #52 item 8 asks for.  A pure
+	@OR-of-conditions rising-edge model says the LYC coincidence opening this
+	@line cannot be an edge, so the line should yield nothing -- but measured
+	@against mGBA's DMG core (test_roms/test_stat_ly.py), mode-0 IE plus LYC IE
+	@gives exactly 144 STAT IRQs per frame, the same as mode-0 IE alone, and
+	@adding the block drops it to 143.  The likely reason is the documented
+	@one-cycle window at the start of a line where the LY==LYC comparison reads
+	@false: the line dips low for that cycle and the coincidence then is a real
+	@edge.  Left alone rather than changed away from the reference.
 	tstne r2,#4
 	tstne r2,#0x40
 	bne ScanlineIRQ_fromLYC
