@@ -3044,6 +3044,15 @@ CANARY2:	.skip 4
  .global pal_before
  .global pal_after
  .global pal_after_gba
+@IO registers that are cold enough to keep out of the IWRAM globals struct.
+@Adding to that struct shifts every offset in it and the savestate layout with
+@it; these are read once in a blue moon, so an EWRAM literal load is fine.
+ .global io_dma_shadow
+ .global cgb_undoc_regs
+io_dma_shadow:	.byte 0		@FF46 DMA: reads back the last source page written
+cgb_undoc_regs:	.skip 4		@FF6C (OPRI), FF72, FF73, FF74 -- CGB only
+	.align 2
+
 gbc_palette2:	.skip 128	@ moved to EWRAM (accessed once/frame)
 pal_before:	.skip 128	@ full palette (BG+OBJ) at frame start
 pal_after:	.skip 64	@ BG palette after mid-frame change
