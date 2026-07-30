@@ -2634,11 +2634,16 @@ white_palette:
 	bne 3f
 	mov r2,#4
 sgb_mask_palette:
+	@SGB MASK_EN modes: 2 = freeze to black, 3 = freeze to SGB colour 0.
+	@4 is this file's internal 'screen off' value, which white_palette
+	@sets just above.  Only 4 took the colour-0 branch, so a game that
+	@asked for mode 3 got a black screen instead of the background colour
+	@(#54 item 2).
 	mov r0,#0
-	cmp r2,#4
-	ldreq r0,=SGB_PALETTE @if 3, use black, if 4, use SGB color #0
-	ldreqh r0,[r0]
-	orreq r0,r0,r0,lsl#16
+	cmp r2,#3
+	ldrge r0,=SGB_PALETTE
+	ldrgeh r0,[r0]
+	orrge r0,r0,r0,lsl#16
 3:
 	mov r1,r0
 	mov r2,#16
@@ -2881,6 +2886,11 @@ pal_forward_fill:
 FF46_W:@		sprite DMA transfer
 @----------------------------------------------------------------------------
 @	and r0,r0,#0xff		;not needed?
+	@FF46 reads back the last source page written; there was no read
+	@handler at all, so it returned 0xFF via `void` and mooneye's
+	@oam_dma/reg_read failed on it (#56).
+	ldr r1,=io_dma_shadow
+	strb r0,[r1]
 	and r1,r0,#0xF0
 	adr_ r2,memmap_tbl
 	ldr r1,[r2,r1,lsr#2]	@in: addy,r1=addy&0xE000 (for rom_R)
@@ -3086,11 +3096,26 @@ dm_ps_loop:
 
 	@check sprite disable range: skip if sprite top scanline is in [disable_start, disable_end)
 	sub r1,r0,#16		@top scanline of sprite
+	@This sprite's height, by the same 8x16-window test the size decision
+	@below uses.  The range check assumed a flat 8 even in 8x16 mode, so a
+	@tall sprite whose lower half was the part overlapping the disabled
+	@band stayed visible (#53 item 5).  r11 is scratch here -- it is
+	@recomputed from r3 further down.
+	mov r11,#8
+	cmp r6,r7			@is the 8x16 range valid?
+	bhs 5f
+	cmp r1,r7			@top scanline >= end? -> 8x8
+	bhs 5f
+	add r11,r1,#16		@bottom scanline if this sprite is 8x16
+	cmp r11,r6			@bottom <= 8x16 start? -> 8x8
+	movhi r11,#16
+	movls r11,#8
+5:
 	cmp r4,r8			@is there a valid disable range?
 	bhs 4f			@no disable range, skip check
 	cmp r1,r8			@top scanline >= disable_end?
 	bge 4f			@sprite is after disable range, keep it
-	add r11,r1,#8		@bottom of 8x8 sprite
+	add r11,r1,r11		@bottom scanline of this sprite
 	cmp r11,r4			@bottom scanline <= disable_start?
 	ble 4f			@sprite is before disable range, keep it
 	b dm_ps_skip		@sprite overlaps disable range, hide it

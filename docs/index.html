@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <script src="coi-serviceworker.js"></script>
 <meta charset="utf-8">
@@ -21,6 +21,9 @@
     50%  { border-color: #5bf; box-shadow: 0 0 20px rgba(85,187,255,0.15); }
     100% { border-color: #2a2a3a; box-shadow: 0 0 0px transparent; }
   }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     background: #08080e;
@@ -39,38 +42,43 @@
     margin-bottom: 4px;
     text-shadow: none;
   }
-  .sub { color: #889; font-size: 0.85em; margin-bottom: 24px; letter-spacing: 0.15em; text-transform: uppercase; }
+  .sub { color: #99a; font-size: 0.85em; margin-bottom: 24px; letter-spacing: 0.15em; text-transform: uppercase; text-align: center; }
   .screen-wrap {
     position: relative; border-radius: 8px; overflow: hidden;
     border: 2px solid #2a2a3a;
     box-shadow: 0 4px 30px rgba(0,0,0,0.6), inset 0 0 60px rgba(0,0,0,0.3);
     transition: border-color 0.3s, box-shadow 0.3s;
+    width: 100%; max-width: 480px;
   }
   .screen-wrap.playing {
     animation: pulse-border 3s ease infinite;
   }
   #screen {
     image-rendering: pixelated; background: #000;
-    width: 480px; height: 320px; display: block;
+    width: 100%; height: auto; aspect-ratio: 3 / 2; display: block;
   }
   .keys {
-    font-size: 11px; color: #778; margin: 10px 0; letter-spacing: 0.02em;
+    font-size: 11px; color: #99a; margin: 10px 0; letter-spacing: 0.02em;
+    text-align: center; line-height: 2; max-width: 480px;
   }
   kbd {
     background: #12121a; padding: 2px 6px; border-radius: 4px;
-    border: 1px solid #444; font-family: inherit; font-size: 11px; color: #aab;
+    border: 1px solid #555; font-family: inherit; font-size: 11px; color: #ccd;
   }
   #drop-zone {
-    border: 2px dashed #222; border-radius: 12px;
+    border: 2px dashed #333; border-radius: 12px;
     padding: 36px 50px; cursor: pointer;
     transition: all 0.3s; margin: 20px 0;
     background: rgba(255,255,255,0.01);
+    text-align: center;
   }
-  #drop-zone:hover {
+  #drop-zone:hover, #drop-zone:focus-visible {
     border-color: #0ff;
     background: rgba(0,255,255,0.02);
     box-shadow: 0 0 30px rgba(0,255,255,0.05);
+    outline: none;
   }
+  #drop-zone:focus-visible { border-color: #f0f; }
   #drop-zone.drag {
     border-color: #f0f;
     background: rgba(255,0,255,0.03);
@@ -82,22 +90,62 @@
     -webkit-background-clip: text; background-clip: text;
     -webkit-text-fill-color: transparent;
   }
-  #drop-zone .hint { margin-top: 6px; color: #778; font-size: 0.85em; }
+  #drop-zone .hint { margin-top: 6px; color: #99a; font-size: 0.85em; }
   #status {
-    font-size: 13px; margin: 8px 0; min-height: 20px;
-    animation: shimmer 2s ease infinite;
+    font-size: 13px; margin: 8px 0; min-height: 20px; text-align: center;
+    animation: shimmer 2s ease infinite; max-width: 520px;
   }
   #status.ready { color: #0fa; animation: none; }
-  #status.error { color: #f55; animation: none; }
-  #status.loading { color: #fa0; }
+  #status.error { color: #f77; animation: none; }
+  #status.loading { color: #fb4; }
+  .toolbar {
+    display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+    margin: 12px 0 4px;
+  }
+  .toolbar button {
+    background: #12121a; color: #ccd; border: 1px solid #444;
+    border-radius: 6px; padding: 8px 14px; font: inherit; font-size: 12px;
+    cursor: pointer; transition: border-color 0.2s, color 0.2s;
+  }
+  .toolbar button:hover, .toolbar button:focus-visible {
+    border-color: #0ff; color: #fff; outline: none;
+  }
+  .save-note {
+    font-size: 11px; color: #99a; max-width: 480px; text-align: center;
+    margin: 6px 0 0; line-height: 1.7;
+  }
+  /* Touch controls: only shown on devices without a fine pointer, so a mouse
+     user never sees them and a phone user is not locked out for lack of a
+     keyboard. */
+  #touch { display: none; width: 100%; max-width: 480px; margin: 16px 0 0; }
+  @media (hover: none), (pointer: coarse) {
+    #touch.enabled { display: block; }
+  }
+  #touch .row { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+  #touch button {
+    -webkit-user-select: none; user-select: none; touch-action: manipulation;
+    background: #16161f; border: 1px solid #3a3a4a; color: #ccd;
+    border-radius: 10px; font: inherit; font-size: 15px; font-weight: 600;
+  }
+  #touch .dpad { display: grid; grid-template-columns: repeat(3, 46px); grid-template-rows: repeat(3, 46px); gap: 4px; }
+  #touch .dpad button { width: 46px; height: 46px; }
+  #touch .face { display: grid; grid-template-columns: repeat(2, 54px); gap: 10px; }
+  #touch .face button { width: 54px; height: 54px; border-radius: 50%; }
+  #touch .meta { display: flex; justify-content: center; gap: 10px; margin-top: 12px; }
+  #touch .meta button { padding: 8px 16px; font-size: 12px; }
+  #touch button:active { background: #24243a; border-color: #0ff; }
   .footer {
-    color: #667; font-size: 10px;
+    color: #889; font-size: 11px;
     margin-top: auto; padding-top: 30px;
     text-align: center; line-height: 1.8;
   }
-  .footer a { color: #89a; text-decoration: none; border-bottom: 1px solid #222; }
+  .footer a { color: #9ab; text-decoration: none; border-bottom: 1px solid #333; }
   .footer a:hover { color: #0ff; border-color: #0ff; }
   .hidden { display: none; }
+  .visually-hidden {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  }
 </style>
 </head>
 <body>
@@ -106,22 +154,54 @@
 <p class="sub">Game Boy &middot; Game Boy Color &middot; on GBA</p>
 
 <div class="screen-wrap" id="screen-wrap">
-  <canvas id="screen" width="240" height="160" tabindex="0"></canvas>
+  <canvas id="screen" width="240" height="160" tabindex="0" aria-label="Emulator screen"></canvas>
 </div>
 
 <p class="keys">
   <kbd>X</kbd> A &ensp; <kbd>Z</kbd> B &ensp;
   <kbd>Enter</kbd> Start &ensp; <kbd>Backspace</kbd> Select &ensp;
   <kbd>&larr;&uarr;&darr;&rarr;</kbd> D-pad
+  <br>
+  <kbd>A</kbd> GBA L &ensp; <kbd>S</kbd> GBA R &ensp;&mdash;&ensp;
+  press <kbd>A</kbd>+<kbd>S</kbd> together for ChromA's own menu
+  (savestates, palettes, settings)
 </p>
 
-<div id="drop-zone">
+<div id="drop-zone" role="button" tabindex="0"
+     aria-label="Load a Game Boy ROM: activate to browse, or drop a file here">
   <p class="big">Drop a .gb or .gbc ROM here</p>
   <p class="hint">or click to browse</p>
-  <input type="file" id="rom-input" accept=".gb,.gbc" style="display:none">
+  <input type="file" id="rom-input" accept=".gb,.gbc" class="visually-hidden">
 </div>
 
-<p id="status" class="loading"></p>
+<p id="status" class="loading" role="status" aria-live="polite"></p>
+
+<div class="toolbar hidden" id="toolbar">
+  <button type="button" id="btn-load-another">Load another ROM</button>
+  <button type="button" id="btn-export-save">Export .sav</button>
+  <button type="button" id="btn-import-save">Import .sav</button>
+  <input type="file" id="save-input" accept=".sav" class="visually-hidden">
+</div>
+<p class="save-note hidden" id="save-note"></p>
+
+<div id="touch" aria-label="Touch controls">
+  <div class="row">
+    <div class="dpad">
+      <span></span><button type="button" data-key="Up" aria-label="Up">&uarr;</button><span></span>
+      <button type="button" data-key="Left" aria-label="Left">&larr;</button><span></span><button type="button" data-key="Right" aria-label="Right">&rarr;</button>
+      <span></span><button type="button" data-key="Down" aria-label="Down">&darr;</button><span></span>
+    </div>
+    <div class="face">
+      <button type="button" data-key="B" aria-label="B">B</button>
+      <button type="button" data-key="A" aria-label="A">A</button>
+    </div>
+  </div>
+  <div class="meta">
+    <button type="button" data-key="Select" aria-label="Select">SELECT</button>
+    <button type="button" data-key="Start" aria-label="Start">START</button>
+    <button type="button" data-key="MENU" aria-label="Open the ChromA menu (L plus R)">MENU</button>
+  </div>
+</div>
 
 <div class="footer">
   GBA emulation: <a href="https://github.com/mgba-emu/mgba">mGBA</a>
@@ -135,12 +215,17 @@
 
 <script type="module">
 import mGBA from './mgba.js';
+import { validateRom, romKey, romFileName, saveFileName, romTitle } from './rom-utils.js';
 
 const canvas = document.getElementById('screen');
 const statusEl = document.getElementById('status');
 const dropZone = document.getElementById('drop-zone');
 const romInput = document.getElementById('rom-input');
+const saveInput = document.getElementById('save-input');
 const screenWrap = document.getElementById('screen-wrap');
+const toolbar = document.getElementById('toolbar');
+const saveNote = document.getElementById('save-note');
+const touch = document.getElementById('touch');
 
 function setStatus(msg, cls) {
   statusEl.textContent = msg;
@@ -151,6 +236,9 @@ setStatus('Initializing emulator...', 'loading');
 
 let emu = null;
 let chromaData = null;
+let ready = false;
+let current = null;   // { romPath, savePath, name, bytes }
+let pendingFile = null;
 
 async function init() {
   try {
@@ -162,50 +250,183 @@ async function init() {
     if (!resp.ok) throw new Error(`Failed to load chroma.gba (${resp.status})`);
     chromaData = new Uint8Array(await resp.arrayBuffer());
 
-    setStatus('Ready \u2014 drop a Game Boy ROM', 'ready');
+    ready = true;
+    setStatus('Ready — drop a Game Boy ROM', 'ready');
+    // A ROM dropped while the WASM module was still starting used to be
+    // silently discarded, which reads as the page ignoring you.
+    if (pendingFile) {
+      const f = pendingFile;
+      pendingFile = null;
+      loadGB(f);
+    }
   } catch (e) {
     setStatus('Error: ' + e.message, 'error');
     console.error(e);
   }
 }
 
-async function loadGB(file) {
-  if (!emu || !chromaData) return;
-  setStatus('Building ROM...', 'loading');
+/* ------------------------------------------------------------------ saves */
 
-  const gbData = new Uint8Array(await file.arrayBuffer());
+// The /data mount is IDBFS but not autoPersist, so nothing reaches IndexedDB
+// until syncfs runs.  Previously the page never called it *and* deleted the
+// save directory on every load, so in-game saves lived only for one page
+// session.  Sync on a timer and whenever the page is backgrounded or closed.
+let syncTimer = null;
 
-  const combined = new Uint8Array(chromaData.length + gbData.length + 264);
-  combined.set(chromaData, 0);
-  combined.set(gbData, chromaData.length);
-
-  // Use a unique path each time to prevent mGBA from loading stale saves
-  const romPath = emu.filePaths().gamePath + '/chroma_' + Date.now() + '.gba';
-
-  // Clean up old ROMs and saves from previous sessions
+async function persist() {
+  if (!emu) return;
   try {
-    const gamePath = emu.filePaths().gamePath;
-    const savePath = emu.filePaths().savePath;
-    for (const dir of [gamePath, savePath]) {
-      try {
-        emu.FS.readdir(dir).filter(f => f !== '.' && f !== '..').forEach(f => {
-          try { emu.FS.unlink(dir + '/' + f); } catch(e) {}
-        });
-      } catch(e) {}
-    }
-  } catch(e) {}
-
-  emu.FS.writeFile(romPath, combined);
-
-  if (emu.loadGame(romPath)) {
-    setStatus('', '');
-    dropZone.classList.add('hidden');
-    screenWrap.classList.add('playing');
-    canvas.focus();
-  } else {
-    setStatus('Failed to load ROM', 'error');
+    await emu.FSSync();
+  } catch (e) {
+    console.warn('Could not persist saves:', e);
   }
 }
+
+function startPersisting() {
+  if (syncTimer) return;
+  syncTimer = setInterval(persist, 5000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') persist();
+  });
+  // Best-effort: syncfs is async and the page may die first, which is why the
+  // 5s timer above exists rather than relying on this.
+  window.addEventListener('pagehide', persist);
+  window.addEventListener('beforeunload', persist);
+}
+
+function download(bytes, filename) {
+  const blob = new Blob([bytes], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function exportSave() {
+  if (!current) return;
+  await persist();
+  let bytes = null;
+  try {
+    bytes = emu.getSave();
+  } catch (e) {
+    bytes = null;
+  }
+  if (!bytes || bytes.length === 0) {
+    setStatus('No battery save yet — save inside the game first.', 'error');
+    return;
+  }
+  download(bytes, saveFileName(current.bytes, current.name));
+  setStatus('Exported ' + saveFileName(current.bytes, current.name), 'ready');
+}
+
+async function importSave(file) {
+  if (!current) return;
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    emu.FS.writeFile(current.savePath, bytes);
+    await persist();
+    // Reload so the core picks the file up as cartridge RAM.
+    emu.quitGame();
+    if (!emu.loadGame(current.romPath)) {
+      throw new Error('the emulator refused to restart the game');
+    }
+    canvas.focus();
+    setStatus('Imported ' + file.name + ' — game restarted', 'ready');
+  } catch (e) {
+    setStatus('Could not import that .sav: ' + e.message, 'error');
+    console.error(e);
+  }
+}
+
+/* ------------------------------------------------------------------- ROMs */
+
+async function loadGB(file) {
+  if (!ready) {
+    // Hold it rather than dropping it; init() will pick it up.
+    pendingFile = file;
+    setStatus('Still starting up — will load ' + file.name + ' when ready...', 'loading');
+    return;
+  }
+  setStatus('Reading ' + file.name + '...', 'loading');
+
+  let gbData;
+  try {
+    // A dropped *directory* yields a File whose arrayBuffer() rejects; without
+    // this the status stuck on "Building ROM..." forever with no explanation.
+    gbData = new Uint8Array(await file.arrayBuffer());
+  } catch (e) {
+    setStatus('Could not read "' + file.name + '" — if that was a folder, drop the ROM file inside it.', 'error');
+    return;
+  }
+
+  const verdict = validateRom(file.name, gbData);
+  if (!verdict.ok) {
+    setStatus(verdict.detail, 'error');
+    return;
+  }
+
+  try {
+    setStatus('Building ROM...', 'loading');
+
+    const key = await romKey(gbData);
+    const romPath = emu.filePaths().gamePath + '/' + romFileName(key, file.name);
+    const savePath = emu.filePaths().savePath + '/' +
+      romFileName(key, file.name).replace(/\.[^.]*$/, '') + '.sav';
+
+    // src/main.c finds the guest ROM with a 32-bit load at textstart+0x104,
+    // so the emulator image has to end on a 4-byte boundary; on ARM7 an
+    // unaligned ldr rotates rather than faults, so getting this wrong shows
+    // up as "No ROM found!" and nothing else.  chroma.gba is aligned today,
+    // but pad rather than depend on it (same rule as goomba_compile.py).
+    const romStart = (chromaData.length + 3) & ~3;
+    const combined = new Uint8Array(romStart + gbData.length + 264);
+    combined.set(chromaData, 0);
+    combined.set(gbData, romStart);
+
+    // Deliberately NOT clearing the save directory: that is what destroyed
+    // every battery save on load.  The ROM name is derived from the ROM's
+    // content, so a second visit resolves to the same .sav.
+    emu.FS.writeFile(romPath, combined);
+
+    if (current) emu.quitGame();
+    if (!emu.loadGame(romPath)) {
+      throw new Error('the emulator rejected the built ROM image');
+    }
+
+    current = { romPath, savePath, name: file.name, bytes: gbData };
+    const title = romTitle(gbData);
+    setStatus('', '');
+    dropZone.classList.add('hidden');
+    toolbar.classList.remove('hidden');
+    saveNote.classList.remove('hidden');
+    saveNote.textContent =
+      'In-game saves for ' + (title || file.name) + ' are kept in this browser’s ' +
+      'storage and reloaded automatically next visit. Clearing site data erases ' +
+      'them — use Export .sav to keep a copy.';
+    screenWrap.classList.add('playing');
+    touch.classList.add('enabled');
+    canvas.focus();
+    startPersisting();
+    await persist();
+  } catch (e) {
+    setStatus('Failed to load "' + file.name + '": ' + e.message, 'error');
+    console.error(e);
+  }
+}
+
+function pickFiles(list) {
+  if (!list || list.length === 0) return;
+  if (list.length > 1) {
+    setStatus('Loading the first of ' + list.length + ' files: ' + list[0].name, 'loading');
+  }
+  loadGB(list[0]);
+}
+
+/* --------------------------------------------------------------- controls */
 
 const keyMap = {
   'ArrowUp': 'Up', 'ArrowDown': 'Down', 'ArrowLeft': 'Left', 'ArrowRight': 'Right',
@@ -215,6 +436,9 @@ const keyMap = {
 };
 
 window.addEventListener('keydown', e => {
+  // Don't swallow keys aimed at the toolbar buttons or the file inputs.
+  const t = e.target;
+  if (t && (t.tagName === 'BUTTON' || t.tagName === 'INPUT') && (e.key === 'Enter' || e.key === ' ')) return;
   if (keyMap[e.key]) e.preventDefault();
   if (emu && keyMap[e.key]) emu.buttonPress(keyMap[e.key]);
 });
@@ -223,14 +447,51 @@ window.addEventListener('keyup', e => {
   if (emu && keyMap[e.key]) emu.buttonUnpress(keyMap[e.key]);
 });
 
+for (const btn of touch.querySelectorAll('button[data-key]')) {
+  const key = btn.dataset.key;
+  const keys = key === 'MENU' ? ['L', 'R'] : [key];
+  const press = (ev) => {
+    ev.preventDefault();
+    if (emu) keys.forEach(k => emu.buttonPress(k));
+  };
+  const release = (ev) => {
+    ev.preventDefault();
+    if (emu) keys.forEach(k => emu.buttonUnpress(k));
+  };
+  btn.addEventListener('pointerdown', press);
+  btn.addEventListener('pointerup', release);
+  btn.addEventListener('pointercancel', release);
+  btn.addEventListener('pointerleave', release);
+}
+
+/* ------------------------------------------------------------------- wiring */
+
 dropZone.addEventListener('click', () => romInput.click());
-romInput.addEventListener('change', e => { if (e.target.files[0]) loadGB(e.target.files[0]); });
+dropZone.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); romInput.click(); }
+});
+romInput.addEventListener('change', e => pickFiles(e.target.files));
+saveInput.addEventListener('change', e => { if (e.target.files[0]) importSave(e.target.files[0]); });
+
+document.getElementById('btn-load-another').addEventListener('click', () => romInput.click());
+document.getElementById('btn-export-save').addEventListener('click', exportSave);
+document.getElementById('btn-import-save').addEventListener('click', () => saveInput.click());
+
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
 dropZone.addEventListener('drop', e => {
   e.preventDefault();
   dropZone.classList.remove('drag');
-  if (e.dataTransfer.files[0]) loadGB(e.dataTransfer.files[0]);
+  pickFiles(e.dataTransfer.files);
+});
+
+// A drop anywhere else navigated the tab away from the emulator, losing the
+// session (and, before persistence, the save).  Accept it as a ROM load once a
+// game is running -- the drop zone is hidden by then -- and otherwise swallow it.
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => {
+  e.preventDefault();
+  if (!dropZone.contains(e.target)) pickFiles(e.dataTransfer.files);
 });
 
 init();

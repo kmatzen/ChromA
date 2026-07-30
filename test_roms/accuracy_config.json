@@ -51,7 +51,7 @@
       "rom": "mooneye-test-suite/acceptance/bits/unused_hwio-GS.gb",
       "frames": 600,
       "expected_fail": true,
-      "note": "ChromA reports $FF02 write mismatch"
+      "note": "ChromA reports a $FF4D write mismatch: DMG reads of the CGB-only registers return live values, not 0xFF"
     },
     "mooneye-test-suite/acceptance/call_timing": {
       "rom": "mooneye-test-suite/acceptance/call_timing.gb",
@@ -130,8 +130,7 @@
     "mooneye-test-suite/acceptance/oam_dma/reg_read": {
       "rom": "mooneye-test-suite/acceptance/oam_dma/reg_read.gb",
       "frames": 600,
-      "expected_fail": true,
-      "note": "ChromA prints 'Fail: r1'"
+      "expected_fail": false
     },
     "mooneye-test-suite/acceptance/oam_dma/sources-GS": {
       "rom": "mooneye-test-suite/acceptance/oam_dma/sources-GS.gb",
