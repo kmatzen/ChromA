@@ -377,9 +377,15 @@ async function loadGB(file) {
     const savePath = emu.filePaths().savePath + '/' +
       romFileName(key, file.name).replace(/\.[^.]*$/, '') + '.sav';
 
-    const combined = new Uint8Array(chromaData.length + gbData.length + 264);
+    // src/main.c finds the guest ROM with a 32-bit load at textstart+0x104,
+    // so the emulator image has to end on a 4-byte boundary; on ARM7 an
+    // unaligned ldr rotates rather than faults, so getting this wrong shows
+    // up as "No ROM found!" and nothing else.  chroma.gba is aligned today,
+    // but pad rather than depend on it (same rule as goomba_compile.py).
+    const romStart = (chromaData.length + 3) & ~3;
+    const combined = new Uint8Array(romStart + gbData.length + 264);
     combined.set(chromaData, 0);
-    combined.set(gbData, chromaData.length);
+    combined.set(gbData, romStart);
 
     // Deliberately NOT clearing the save directory: that is what destroyed
     // every battery save on load.  The ROM name is derived from the ROM's
