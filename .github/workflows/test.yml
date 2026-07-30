@@ -78,6 +78,14 @@ jobs:
     - name: Validate font assets
       run: python3 scripts/validate_font.py
 
+    # The browser demo deleted every battery save on each ROM load and wrote
+    # the ROM under a timestamped name, so a .sav could never be found again
+    # (#62).  The two functions that decide whether a user keeps their save --
+    # content-hash ROM identity and ROM validation -- are pure, so they are
+    # tested here without a browser or a WASM build.
+    - name: Run browser demo ROM utility tests
+      run: node test_roms/test_demo_rom_utils.mjs
+
     - name: Download GBA binary
       uses: actions/download-artifact@v4
       with:
