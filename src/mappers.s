@@ -83,6 +83,15 @@ mbc1init:
 	ldr r0,=empty_W					@ Disable RAM = $00
 	str_ r0,writemem_tbl+40
 	str_ r0,writemem_tbl+44
+	@Cart RAM is disabled out of reset until the game writes 0x0A to
+	@0000-1FFF, and a disabled chip reads 0xFF -- but only the *write*
+	@handler was pointed at the stub, so reads fell through to mem_RA0 and
+	@handed the guest the contents of its own save file before it had
+	@enabled anything (#56 item 5).  RamEnable already installs the right
+	@pair; this just makes the initial state match it.
+	ldr r0,=empty_R
+	str_ r0,readmem_tbl_-40
+	str_ r0,readmem_tbl_-44
 
 	mov pc,lr
 	
@@ -148,6 +157,15 @@ mbc2init:
 	ldr r0,=empty_W					@ Disable RAM = $00
 	str_ r0,writemem_tbl+40
 	str_ r0,writemem_tbl+44
+	@Cart RAM is disabled out of reset until the game writes 0x0A to
+	@0000-1FFF, and a disabled chip reads 0xFF -- but only the *write*
+	@handler was pointed at the stub, so reads fell through to mem_RA0 and
+	@handed the guest the contents of its own save file before it had
+	@enabled anything (#56 item 5).  RamEnable already installs the right
+	@pair; this just makes the initial state match it.
+	ldr r0,=empty_R
+	str_ r0,readmem_tbl_-40
+	str_ r0,readmem_tbl_-44
 
 	mov pc,lr
 	.popsection
@@ -175,6 +193,15 @@ mbc3init:
 	ldr r0,=empty_W					@ Disable RAM = $00
 	str_ r0,writemem_tbl+40
 	str_ r0,writemem_tbl+44
+	@Cart RAM is disabled out of reset until the game writes 0x0A to
+	@0000-1FFF, and a disabled chip reads 0xFF -- but only the *write*
+	@handler was pointed at the stub, so reads fell through to mem_RA0 and
+	@handed the guest the contents of its own save file before it had
+	@enabled anything (#56 item 5).  RamEnable already installs the right
+	@pair; this just makes the initial state match it.
+	ldr r0,=empty_R
+	str_ r0,readmem_tbl_-40
+	str_ r0,readmem_tbl_-44
 
 	mov pc,lr
 @----------------------------------------------------------------------------
@@ -290,6 +317,15 @@ mbc5init:
 	ldr r0,=empty_W					@ Disable RAM = $00
 	str_ r0,writemem_tbl+40
 	str_ r0,writemem_tbl+44
+	@Cart RAM is disabled out of reset until the game writes 0x0A to
+	@0000-1FFF, and a disabled chip reads 0xFF -- but only the *write*
+	@handler was pointed at the stub, so reads fell through to mem_RA0 and
+	@handed the guest the contents of its own save file before it had
+	@enabled anything (#56 item 5).  RamEnable already installs the right
+	@pair; this just makes the initial state match it.
+	ldr r0,=empty_R
+	str_ r0,readmem_tbl_-40
+	str_ r0,readmem_tbl_-44
 
 	mov pc,lr
 	.popsection
@@ -351,6 +387,15 @@ huc1init:
 	ldr r0,=empty_W					@ Disable RAM = $00
 	str_ r0,writemem_tbl+40
 	str_ r0,writemem_tbl+44
+	@Cart RAM is disabled out of reset until the game writes 0x0A to
+	@0000-1FFF, and a disabled chip reads 0xFF -- but only the *write*
+	@handler was pointed at the stub, so reads fell through to mem_RA0 and
+	@handed the guest the contents of its own save file before it had
+	@enabled anything (#56 item 5).  RamEnable already installs the right
+	@pair; this just makes the initial state match it.
+	ldr r0,=empty_R
+	str_ r0,readmem_tbl_-40
+	str_ r0,readmem_tbl_-44
 
 	mov pc,lr
 	.popsection
@@ -373,6 +418,15 @@ huc3init:
 	ldr r0,=empty_W					@ Disable RAM = $00
 	str_ r0,writemem_tbl+40
 	str_ r0,writemem_tbl+44
+	@Cart RAM is disabled out of reset until the game writes 0x0A to
+	@0000-1FFF, and a disabled chip reads 0xFF -- but only the *write*
+	@handler was pointed at the stub, so reads fell through to mem_RA0 and
+	@handed the guest the contents of its own save file before it had
+	@enabled anything (#56 item 5).  RamEnable already installs the right
+	@pair; this just makes the initial state match it.
+	ldr r0,=empty_R
+	str_ r0,readmem_tbl_-40
+	str_ r0,readmem_tbl_-44
 
 	mov pc,lr
 
@@ -386,6 +440,15 @@ mbc6init:
 	ldr r0,=empty_W					@ Disable RAM = $00
 	str_ r0,writemem_tbl+40
 	str_ r0,writemem_tbl+44
+	@Cart RAM is disabled out of reset until the game writes 0x0A to
+	@0000-1FFF, and a disabled chip reads 0xFF -- but only the *write*
+	@handler was pointed at the stub, so reads fell through to mem_RA0 and
+	@handed the guest the contents of its own save file before it had
+	@enabled anything (#56 item 5).  RamEnable already installs the right
+	@pair; this just makes the initial state match it.
+	ldr r0,=empty_R
+	str_ r0,readmem_tbl_-40
+	str_ r0,readmem_tbl_-44
 
 	mov pc,lr
 	.popsection

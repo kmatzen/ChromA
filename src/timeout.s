@@ -624,6 +624,13 @@ noTimer:
 	ldreqb_ r0,stctrl
 	andeq r0,r0,#0x7F		@Clear Serial Transfer flag.
 	streqb_ r0,stctrl
+	@With no cable attached the shift register clocks in all-ones, so SB
+	@reads 0xFF once the transfer finishes.  SB is a real readable register
+	@now (#56 item 7), so that has to be stored rather than hardcoded in
+	@the reader.
+	ldreq r1,=io_sb_shadow
+	moveq r0,#0xFF
+	streqb r0,[r1]
 checkMasterIRQDelayed:
 	tst cycles,#CYC_IE
 	beq _GO

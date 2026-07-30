@@ -147,10 +147,29 @@ const u8 gameHashTable[] =
 
 static const int FIRST_GBC_PALETTE = 49;
 
+/* The CGB boot ROM only consults its title-hash table for carts Nintendo
+ * itself published: old licensee code 0x01, or 0x33 with new licensee "01".
+ * Skipping that check (#56 item 9) let a third-party title whose 16-byte
+ * header name happens to sum to the same byte inherit a Nintendo palette --
+ * the hash is one byte wide, so collisions are not rare. */
+static int IsNintendoLicensed(u8 *rom)
+{
+	u8 oldLicensee = rom[0x014B];
+	if (oldLicensee == 0x01)
+		return 1;
+	if (oldLicensee == 0x33)
+		return rom[0x0144] == '0' && rom[0x0145] == '1';
+	return 0;
+}
+
 int GetGbcPaletteNumber(u8 *rom)
 {
 	int entryCount = ARRSIZE(gameHashTable);
 	int nameSum = 0;
+
+	if (!IsNintendoLicensed(rom))
+		return 0;
+
 	for (int i = 0; i < 16; i++)
 	{
 		nameSum += rom[0x0134 + i];

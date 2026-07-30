@@ -2881,6 +2881,11 @@ pal_forward_fill:
 FF46_W:@		sprite DMA transfer
 @----------------------------------------------------------------------------
 @	and r0,r0,#0xff		;not needed?
+	@FF46 reads back the last source page written; there was no read
+	@handler at all, so it returned 0xFF via `void` and mooneye's
+	@oam_dma/reg_read failed on it (#56).
+	ldr r1,=io_dma_shadow
+	strb r0,[r1]
 	and r1,r0,#0xF0
 	adr_ r2,memmap_tbl
 	ldr r1,[r2,r1,lsr#2]	@in: addy,r1=addy&0xE000 (for rom_R)

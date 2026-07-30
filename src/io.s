@@ -406,7 +406,7 @@ FF41_R_ptr:
 FF44_R_ptr:
 	.word FF44_R	@LY - LCD Y-Coordinate
 	.word FF45_R	@LYC - LCD Y Compare
-	.word void	@DMA - DMA Transfer and Start Address (W?)
+	.word _FF46R	@DMA - DMA Transfer and Start Address
 	.word FF47_R	@BGP - BG Palette Data - Non CGB Mode Only
 	.word FF48_R	@OBP0 - Object Palette 0 Data - Non CGB Mode Only
 	.word FF49_R	@OBP1 - Object Palette 1 Data - Non CGB Mode Only
@@ -446,16 +446,16 @@ FF44_R_ptr:
 	.word FF69_R	@BCPD - BG Color Palette Data
 	.word FF6A_R	@OCPS - OBJ Color Palette Specification
 	.word FF6B_R	@OCPD - OBJ Color Palette Data
-	.word void
+	.word _FF6CR	@OPRI - object priority mode (CGB)
 	.word void
 	.word void
 	.word void
 
 	.word _FF70R	@SVBK - WRAM Bank - CGB Mode Only
 	.word void
-	.word void
-	.word void
-	.word void
+	.word _FF72R	@undocumented CGB scratch register
+	.word _FF73R	@undocumented CGB scratch register
+	.word _FF74R	@undocumented CGB scratch register
 	.word void
 	.word void
 	.word void
@@ -660,16 +660,16 @@ joypad_write_ptr:
 	.word FF69_W	@BCPD - BG Color Palette Data
 	.word FF6A_W	@OCPS - OBJ Color Palette Specification
 	.word FF6B_W	@OCPD - OBJ Color Palette Data
-	.word void
+	.word _FF6CW	@OPRI - object priority mode (CGB)
 	.word void
 	.word void
 	.word void
 
 	.word _FF70W	@SVBK - WRAM Bank - CGB Mode Only
 	.word void
-	.word void
-	.word void
-	.word void
+	.word _FF72W	@undocumented CGB scratch register
+	.word _FF73W	@undocumented CGB scratch register
+	.word _FF74W	@undocumented CGB scratch register
 	.word void
 	.word void
 	.word void
@@ -1187,6 +1187,25 @@ IO_reset:
 	str r0,[r1,#0x6A*4] @obj palette index
 	str r0,[r1,#0x6B*4] @obj palette data
 	str r0,[r1,#0x70*4] @wram bank
+
+	@The write table was locked for DMG but the read table was not, so a
+	@DMG game (or mooneye's unused_hwio-GS) reading FF4D/FF4F/FF51-56/
+	@FF68-6B/FF70 got a live CGB value instead of the 0xFF an absent
+	@register reads (#56 item 8).  `void` is the 0xFF reader.
+	ldr r1,=io_read_tbl
+	str r0,[r1,#0x4D*4] @KEY1
+	str r0,[r1,#0x4F*4] @VBK
+	str r0,[r1,#0x51*4] @HDMA1
+	str r0,[r1,#0x52*4] @HDMA2
+	str r0,[r1,#0x53*4] @HDMA3
+	str r0,[r1,#0x54*4] @HDMA4
+	str r0,[r1,#0x55*4] @HDMA5
+	str r0,[r1,#0x56*4] @infrared
+	str r0,[r1,#0x68*4] @BCPS
+	str r0,[r1,#0x69*4] @BCPD
+	str r0,[r1,#0x6A*4] @OCPS
+	str r0,[r1,#0x6B*4] @OCPD
+	str r0,[r1,#0x70*4] @SVBK
 	b 1f
 	
 0:	
@@ -1223,6 +1242,13 @@ IO_reset:
 @----------------------------------------------------------------------------
 _FF01W:@		SB - Serial Transfer Data
 @----------------------------------------------------------------------------
+	@SB is a plain read/write register.  The write was dropped and the read
+	@returned a constant 0xFF, so a game that stages a byte and reads it
+	@back -- or any test ROM checking the unused-bit mask -- saw the wrong
+	@value (#56 item 7).  0xFF is what SB reads *after* a transfer completes
+	@with no cable attached, which the serial completion path now stores.
+	ldr r1,=io_sb_shadow
+	strb r0,[r1]
 	mov pc,lr
 @----------------------------------------------------------------------------
 _FF02W:@		SC - Serial Transfer Ctrl
@@ -1353,14 +1379,88 @@ _FF50W:@		Undocumented BIOS banking
 @----------------------------------------------------------------------------
 _FF01R:@		SB - Serial Transfer Data
 @----------------------------------------------------------------------------
-	mov r0,#0xff		@When no GB attached
+	ldr r0,=io_sb_shadow
+	ldrb r0,[r0]
 	mov pc,lr
 @----------------------------------------------------------------------------
 _FF02R:@		SC - Serial Transfer Ctrl
 @----------------------------------------------------------------------------
+	@Only bit 7 (transfer start) and bit 0 (shift clock) exist on DMG; CGB
+	@adds bit 1 (fast clock).  Everything else reads 1 on hardware, and the
+	@raw stored byte was being returned instead -- which is the first thing
+	@mooneye's unused_hwio-GS complains about (#56 item 7).
 	ldrb_ r0,stctrl
-@	mov r0,#0x00		;0x80 when transfering, 0x00 when finnished.
-	mov pc,lr		@Rc Pro Am ,wants 0x80, Cosmo Tank wants 0x00.
+	ldrb_ r1,gbcmode
+	cmp r1,#0
+	andeq r0,r0,#0x81
+	orreq r0,r0,#0x7E
+	andne r0,r0,#0x83
+	orrne r0,r0,#0x7C
+	mov pc,lr		@Rc Pro Am wants 0x80, Cosmo Tank wants 0x00.
+@----------------------------------------------------------------------------
+@ CGB registers that exist but are not in the official map (#56 item 8).
+@ FF72/FF73/FF74 are plain read/write bytes and FF6C's bit 0 is the object
+@ priority mode; every other bit reads 1.  All of them read 0xFF on DMG,
+@ which is what `void` already did -- so the DMG path is unchanged and only
+@ CGB gains the storage.  Detection and test ROMs are the users.
+@----------------------------------------------------------------------------
+_FF6CR:
+	ldrb_ r1,gbcmode
+	cmp r1,#0
+	moveq r0,#0xFF
+	moveq pc,lr
+	ldr r0,=cgb_undoc_regs
+	ldrb r0,[r0,#0]
+	and r0,r0,#1
+	orr r0,r0,#0xFE
+	mov pc,lr
+_FF6CW:
+	ldrb_ r1,gbcmode
+	cmp r1,#0
+	moveq pc,lr
+	ldr r1,=cgb_undoc_regs
+	and r0,r0,#1
+	strb r0,[r1,#0]
+	mov pc,lr
+_FF72R:
+	mov r1,#1
+	b cgb_undoc_R
+_FF73R:
+	mov r1,#2
+	b cgb_undoc_R
+_FF74R:
+	mov r1,#3
+	b cgb_undoc_R
+cgb_undoc_R:
+	ldrb_ r0,gbcmode
+	cmp r0,#0
+	moveq r0,#0xFF
+	moveq pc,lr
+	ldr r0,=cgb_undoc_regs
+	ldrb r0,[r0,r1]
+	mov pc,lr
+_FF72W:
+	mov r1,#1
+	b cgb_undoc_W
+_FF73W:
+	mov r1,#2
+	b cgb_undoc_W
+_FF74W:
+	mov r1,#3
+	b cgb_undoc_W
+cgb_undoc_W:
+	ldrb_ addy,gbcmode
+	cmp addy,#0
+	moveq pc,lr
+	ldr addy,=cgb_undoc_regs
+	strb r0,[addy,r1]
+	mov pc,lr
+@----------------------------------------------------------------------------
+_FF46R:@		DMA - last source page written
+@----------------------------------------------------------------------------
+	ldr r0,=io_dma_shadow
+	ldrb r0,[r0]
+	mov pc,lr
 @----------------------------------------------------------------------------
 _FF56R:@		RP - Infrared Port
 @----------------------------------------------------------------------------
@@ -1422,7 +1522,9 @@ _FF06R:@		TMA - Timer Modulo
 @----------------------------------------------------------------------------
 _FF07R:@		TAC - Timer Control
 @----------------------------------------------------------------------------
+	@Only bits 0-2 exist (clock select + enable); 3-7 read 1 (#56 item 7).
 	ldrb_ r0,timerctrl
+	orr r0,r0,#0xF8
 	mov pc,lr
 @----------------------------------------------------------------------------
 _FF0FR:
