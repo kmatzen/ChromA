@@ -254,8 +254,16 @@ RECENT_TILENUM_SIZE = 128
  REG_SIOMLT_SEND	= 0x2a @+100
  REG_RCNT		= 0x34 @+100
 
-		@r0,r1,r2=temp regs
- gb_flg		.req r3 @bit 31=N, Z=1 if bits 0-7=0
+		@r0,r1,r2=temp regs -- and only these three (plus addy) are scratch.
+		@r3-r11 hold guest state.  IO handlers are entered by a direct jump
+		@from the dispatcher with nothing saved, so using r3 as scratch inside
+		@one silently destroys the guest's F register; use addy there instead
+		@(see the note in FF40W_entry, lcd.s).
+		@All four GB flags live in bits 28-31, in ARM's own NZCV positions with
+		@H in the V slot, so `mrs gb_flg,cpsr` / `msr cpsr_f,gb_flg` transfer
+		@them for free.  encodeFLG/decodeFLG in gbz80mac.h pack to and from the
+		@guest-visible F byte.  Bits 0-27 are unused.
+ gb_flg		.req r3 @bit31=N bit30=Z bit29=C bit28=H
  gb_a		.req r4 @bits 0-15=0
  gb_bc		.req r5 @bits 0-15=0
  gb_de		.req r6 @bits 0-15=0
