@@ -380,6 +380,14 @@ jobs:
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
 
+    # Making the registers writable was only half of it: the next latch
+    # recomputed the clock from the frame counter and threw the write away, so
+    # a game's clock-set snapped back.  Also covers the DH halt bit (#49).
+    - name: Run MBC3 RTC latch test
+      run: python3 test_roms/test_mbc3_rtc_latch.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
   test-full:
     needs: build
     runs-on: ubuntu-latest

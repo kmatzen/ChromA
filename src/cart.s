@@ -333,6 +333,14 @@ dont_use_true_sram:
 	ldr r0,=mapperstate	@clear mapperdata so we don't have to do that in every MapperInit.
 	mov r2,#32
 	bl memset32_
+	@The software RTC keeps a derived clock (offset, halt state, and a shadow
+	@of the register bytes) that outlives the cart, so clearing mapperdata is
+	@not enough on its own -- without this the next game inherits the last
+	@one's clock-set.  r3 still holds the ROM pointer that the mapper lookup
+	@below reads the cart header through, and it is call-clobbered.
+	stmfd sp!,{r3}
+	blx_long rtc_reset
+	ldmfd sp!,{r3}
 
 	ldr r0,=joy0_W
 	ldr r1,=joypad_write_ptr
