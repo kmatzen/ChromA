@@ -1641,6 +1641,12 @@ canary_value_doesnt_match:
 	strb_ r0,spr_disable_start	@144 = no mid-frame disable
 	strb_ r0,spr_disable_end	@144 = no mid-frame re-enable
 
+	@A WY raise that was deferred because the window had already latched on
+	@takes effect now, with LY back at 0 (#53 item 1).
+	ldr r1,=window_y_pending
+	ldrb r1,[r1]
+	strb_ r1,windowY
+
 	bl consume_recent_tiles
 	bl consume_dirty_tiles
 	bl_long force_ui_at_top
@@ -5100,11 +5106,32 @@ FF4A_W:@		WINY - Window Y
 	ldrb_ r1,windowY
 	cmp r0,r1
 	bxeq lr
+	@The window latches on when LY reaches WY and stays on for the rest of the
+	@frame; raising WY afterwards does not retract it (#53 item 1).  That is
+	@decided here, in the cold write handler, rather than in newmode: newmode
+	@sits on the register-write path, and this renderer has already been shown
+	@to move a CGB frame by 70 pixels on nothing more than a save/restore pair.
+	stmfd sp!,{r2,r3}
+	ldr r3,=window_y_pending
+	strb r0,[r3]			@the write always lands for the next frame
+	cmp r0,r1
+	bls 1f				@lowering WY takes effect immediately, as before
+	ldrb_ r2,lcdctrl
+	tst r2,#0x20
+	beq 1f				@window disabled: nothing has latched
+	ldrb_ r2,scanline
+	cmp r2,r1
+	blo 1f				@LY has not reached the old WY yet
+	ldmfd sp!,{r2,r3}
+	bx lr				@latched on: this frame keeps the old WY
+1:	ldmfd sp!,{r2,r3}
 FF4A_W_:
 	stmfd sp!,{r0,lr}
 	bl tobuffer
 	ldr r0,[sp]
 	strb_ r0,windowY
+	ldr r1,=window_y_pending
+	strb r0,[r1]			@keep the pending copy in step (savestate load)
 	bl newmode
 	ldmfd sp!,{r0,pc}
 

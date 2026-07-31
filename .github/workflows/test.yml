@@ -409,6 +409,13 @@ jobs:
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
 
+    # The window latches on once LY reaches WY; raising WY mid-frame used to
+    # switch it back off from that line down (#53 item 1).
+    - name: Run window WY latch test
+      run: python3 test_roms/test_wy_latch.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
   test-full:
     needs: build
     runs-on: ubuntu-latest
