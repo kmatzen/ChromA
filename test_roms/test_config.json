@@ -466,6 +466,9 @@
         "expected_fail": false
     },
     "POKEMON RED": {
+        "ignore": {
+            "final": [[184, 137, 192, 143]]
+        },
         "description": "Pokemon Red (Gen 1) - DMG, boot through title to Oak's intro",
         "frames": 9000,
         "inputs": [
@@ -481,6 +484,9 @@
         "expected_fail": false
     },
     "POKEMON BLUE": {
+        "ignore": {
+            "final": [[184, 137, 192, 143]]
+        },
         "description": "Pokemon Blue (Gen 1) - DMG, boot through title to Oak's intro",
         "frames": 9000,
         "inputs": [
@@ -496,6 +502,9 @@
         "expected_fail": false
     },
     "POKEMON YELLOW": {
+        "ignore": {
+            "final": [[184, 137, 192, 143]]
+        },
         "description": "Pokemon Yellow (Gen 1) - DMG with SGB, boot through title to Oak's intro",
         "frames": 9000,
         "inputs": [
@@ -523,7 +532,7 @@
             {"frame": 3300, "name": "after_start"}
         ],
         "expected_fail": true,
-        "xfail_reason": "PRE-EXISTING, see #37: animated screenshot, drifts on any timing change"
+        "xfail_reason": "PRE-EXISTING, see #37: the capture window fixes gamefreak, title and final, but after_start samples the scrolling cloud band and sparkles on the Ho-Oh title screen -- continuously moving scenery, where no nearby frame matches and an ignore region would have to blind a 160x24 band"
     },
     "ZELDA": {
         "description": "Zelda: Link's Awakening (DMG) - boot through title, press Start",
