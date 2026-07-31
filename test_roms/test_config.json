@@ -83,6 +83,10 @@
         "description": "MBC3 clock-set survival across a latch and the DH halt bit - verified via .sav inspection in test_mbc3_rtc_latch.py, not a screenshot",
         "skip_visual": true
     },
+    "stop_div_test": {
+        "description": "what STOP does to DIV and KEY1 across a CGB speed switch - verified via .sav inspection in test_stop_div.py, not a screenshot",
+        "skip_visual": true
+    },
     "sram_owner_test_a": {
         "description": "cross-game SRAM ownership probe A - verified via .sav inspection in test_sram_ownership.py, not a screenshot",
         "skip_visual": true

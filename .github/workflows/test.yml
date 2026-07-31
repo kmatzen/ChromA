@@ -388,6 +388,13 @@ jobs:
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
 
+    # #56 item 4 asks for a DIV reset on the CGB speed switch; mGBA's own GB
+    # core does not do one, so this pins the agreement rather than the issue.
+    - name: Run STOP/DIV test
+      run: python3 test_roms/test_stop_div.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
   test-full:
     needs: build
     runs-on: ubuntu-latest
