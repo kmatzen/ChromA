@@ -219,17 +219,29 @@ def test_suite_bookkeeping():
     check("menu suite no longer nests the SRAM suite",
           not hasattr(test_menu, "test_sram_persistence"))
 
-    # The three settings whose visual halves measured exactly 0.0% against a
-    # matched control keep their state assertions and drop the pixel claim.
+    # These settings' visual halves measured exactly 0.0% against a matched
+    # control, so they keep their state assertions and drop the pixel claim.
     # A threshold creeping back in would be a vacuous assertion again.
     menu_src = (SCRIPT_DIR / "test_menu.py").read_text()
     for marker, label in [
             ("half-vs-full", "double speed"),
-            ("hack OFF vs High", "LCD scanline hack"),
-            ("autofire-vs-control", "A autofire")]:
+            ("hack OFF vs High", "LCD scanline hack")]:
         line = next((l for l in menu_src.splitlines() if marker in l), "")
         check(f"{label} diff is reported as a diagnostic, not asserted",
               "not asserted" in line, line.strip())
+
+    # A autofire used to be on that list.  It is not any more: with the
+    # runner's `frame:keys:hold` spec the A press can be held for 300 frames
+    # instead of the fixed 15, and autofire then diverges from the control by
+    # 2.71% and 2.75% at the two samples where running the control twice gives
+    # 0.00%.  Guard the assertion rather than its absence -- the reason the
+    # claim was dropped no longer holds, but a future edit could still quietly
+    # weaken it back to a print.
+    check("A autofire asserts its gameplay diff, not just prints it",
+          "gameplay_changed = all(d > AF_MIN_DIFF for d in diffs)" in menu_src
+          and "and gameplay_changed" in menu_src)
+    check("A autofire samples the hold at more than one frame",
+          "AF_SAMPLES = (90, 290)" in menu_src)
     check("VSync keeps its visual assertion (it does discriminate)",
           "visual_ok = diff > 5" in menu_src)
 
