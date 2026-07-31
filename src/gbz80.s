@@ -3119,6 +3119,16 @@ CANARY2:	.skip 4
  .global cgb_undoc_regs
 io_dma_shadow:	.byte 0		@FF46 DMA: reads back the last source page written
 cgb_undoc_regs:	.skip 4		@FF6C (OPRI), FF72, FF73, FF74 -- CGB only
+ .global window_y_pending
+@WY as the game has most recently written it, which is not always the value
+@the renderer is using.  Hardware compares WY against LY once per line and
+@latches the window on for the rest of the frame, so raising WY after it has
+@triggered must not retract it (#53 item 1).  FF4A_W parks such a raise here
+@and the frame-start code promotes it into windowY, where newmode reads it --
+@which keeps newmode, on the register-write path, completely untouched.
+window_y_pending: .byte 0
+	.align 2
+
  .global line_cycles_base
 	.align 2
 @The value `cycles` holds at the start of the current scanline.  Position
