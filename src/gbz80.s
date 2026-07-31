@@ -2461,6 +2461,8 @@ updatespeed:
 	mov r0,#SINGLE_SPEED
 	str_ r0,timercyclesperscanline
 	str_ r0,cyclesperscanline
+	ldr r12,=line_cycles_base
+	str r0,[r12]
 	mov r0,#SINGLE_SPEED_SCANLINE_OAM_POSITION
 	str_ r0,scanline_oam_position
 	ldr r12,=FF41_modify1
@@ -2523,6 +2525,8 @@ updatespeed:
 	bxeq lr
 	@set double speed
 	str_ r0,cyclesperscanline
+	ldr r12,=line_cycles_base
+	str r0,[r12]
 	mov r0,#DOUBLE_SPEED_SCANLINE_OAM_POSITION
 	str_ r0,scanline_oam_position
 	ldr r12,=FF41_modify1
@@ -3115,6 +3119,24 @@ CANARY2:	.skip 4
  .global cgb_undoc_regs
 io_dma_shadow:	.byte 0		@FF46 DMA: reads back the last source page written
 cgb_undoc_regs:	.skip 4		@FF6C (OPRI), FF72, FF73, FF74 -- CGB only
+ .global line_cycles_base
+	.align 2
+@The value `cycles` holds at the start of the current scanline.  Position
+@within the line is `line_cycles_base - cycles`, which is what _FF04R, _FF05R,
+@_FF04W and _FF07W all want.
+@
+@They used to subtract from `cyclesperscanline` directly, which is the same
+@number right up until something borrows cycles mid-line to make `nexttimeout`
+@fire early -- the trick every mid-line event has to use.  Then `cycles` is
+@short by the borrowed amount and every one of those readers silently reports
+@the wrong position: a *no-op* mid-line event cost 3 accuracy entries that way
+@(#44, #52 item 5).  Keeping the base separate lets a hijack subtract what it
+@borrowed from the base too, leaving the derived position untouched.
+@
+@With no mid-line events in the tree yet this is always equal to
+@cyclesperscanline, so the split is a no-op by construction.
+line_cycles_base: .word 0
+
  .global pc_straddle_buf
 	.align 2
 pc_straddle_buf: .skip PC_STRADDLE_PRE + PC_STRADDLE_POST + 4
