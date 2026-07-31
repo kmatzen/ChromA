@@ -79,6 +79,10 @@
         "description": "MBC3 RTC register writes, binary day counter and DH bits - verified via .sav inspection in test_mbc3_rtc.py, not a screenshot",
         "skip_visual": true
     },
+    "mbc3_rtc_latch_test": {
+        "description": "MBC3 clock-set survival across a latch and the DH halt bit - verified via .sav inspection in test_mbc3_rtc_latch.py, not a screenshot",
+        "skip_visual": true
+    },
     "sram_owner_test_a": {
         "description": "cross-game SRAM ownership probe A - verified via .sav inspection in test_sram_ownership.py, not a screenshot",
         "skip_visual": true
