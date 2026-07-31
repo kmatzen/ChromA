@@ -2952,6 +2952,62 @@ display_sprites:
 @----------------------------------------------------------------------------
 OAMfinish:@		transfer OAM from GB to GBA
 @----------------------------------------------------------------------------
+	stmfd sp!,{r4-r11,lr}
+	bl OAMfinish_emit
+	@On DMG, overlapping sprites are ordered by X coordinate, not by OAM
+	@index -- the CGB rule.  ChromA used OAM order in both modes (#53 item 3).
+	ldrb_ r0,gbcmode
+	cmp r0,#0
+	bleq sort_sprites_by_x
+	ldmfd sp!,{r4-r11,pc}
+
+@----------------------------------------------------------------------------
+sort_sprites_by_x:
+@----------------------------------------------------------------------------
+	@Stable insertion sort of the 40 entries OAMfinish_emit just wrote,
+	@keyed on X.  GBA priority *is* OAM index order, and the emit loop always
+	@writes exactly 40 entries in GB OAM order -- the skip paths store an
+	@offscreen entry rather than omitting one -- so sorting by X here gives
+	@the DMG rule directly: lower X wins, ties broken by lower OAM index,
+	@which is what makes the sort's stability the whole point.
+	@
+	@Skipped sprites carry X=0 and sort to the front; they are parked at
+	@y=160 and draw nothing, so their position in the list does not matter.
+	@
+	@X is bits 16-24 of the first word.  0x1FF is not an encodable ARM
+	@immediate, hence the shift pair rather than an AND.
+	mov r3,#AGB_OAM
+	mov r4,#1			@i
+1:	cmp r4,#40
+	bxge lr
+	add r6,r3,r4,lsl#3
+	ldr r7,[r6]			@entry i, word 0
+	ldr r8,[r6,#4]			@entry i, word 1
+	mov r0,r7,lsl#7
+	mov r0,r0,lsr#23		@X of entry i
+	mov r1,r4			@j
+2:	cmp r1,#0
+	beq 3f
+	add r5,r3,r1,lsl#3
+	ldr r2,[r5,#-8]			@entry j-1, word 0
+	mov r12,r2,lsl#7
+	mov r12,r12,lsr#23
+	cmp r12,r0
+	bls 3f				@stable: stop at the first key <= ours
+	ldr r11,[r5,#-4]
+	str r2,[r5]
+	str r11,[r5,#4]
+	sub r1,r1,#1
+	b 2b
+3:	add r5,r3,r1,lsl#3
+	str r7,[r5]
+	str r8,[r5,#4]
+	add r4,r4,#1
+	b 1b
+
+@----------------------------------------------------------------------------
+OAMfinish_emit:
+@----------------------------------------------------------------------------
  PRIORITY = 0x800	@0x800=AGB OBJ priority 2
 	ldr_ addy,gb_oam_buffer_screen
 	add r9,addy,#0xA0
