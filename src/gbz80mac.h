@@ -24,7 +24,14 @@
 	ldr r0,[r2,r1,lsr#10]
 	sub r1,gb_pc,#0xF000	@F000-FDFF: WRAM echo, not memmap_tbl entry 15
 	cmp r1,#0x0E00
-	ldrlo_ r0,echomap
+	@#116: the echo case is now handled out of line, because the last bytes
+	@of the region need more than a base: 0xFDFF is 0x1DFF into XGB_RAM, so
+	@a fetch crossing into 0xFE00 walks on into WRAM instead of reaching
+	@OAM.  This replaces the conditional echomap load rather than adding to
+	@it -- one extra instruction on the paths that are not in echo, against
+	@five for a test that computed the boundary distance inline.
+	addlo addy,pc,#8		@link: resume past the two instructions below
+	ldrlo pc,=encodePC_echo
 	str_ r0,lastbank
 	add gb_pc,gb_pc,r0
 	.endm
@@ -35,7 +42,14 @@
 	ldr r0,[r2,r1,lsr#10]
 	sub r1,gb_pc,#0xF000	@F000-FDFF: WRAM echo, not memmap_tbl entry 15
 	cmp r1,#0x0E00
-	ldrlo_ r0,echomap
+	@#116: the echo case is now handled out of line, because the last bytes
+	@of the region need more than a base: 0xFDFF is 0x1DFF into XGB_RAM, so
+	@a fetch crossing into 0xFE00 walks on into WRAM instead of reaching
+	@OAM.  This replaces the conditional echomap load rather than adding to
+	@it -- one extra instruction on the paths that are not in echo, against
+	@five for a test that computed the boundary distance inline.
+	addlo addy,pc,#8		@link: resume past the two instructions below
+	ldrlo pc,=encodePC_echo
 	str_ r0,lastbank
 	add gb_pc,gb_pc,r0
 	.endm

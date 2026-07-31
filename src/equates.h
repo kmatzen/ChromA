@@ -534,6 +534,18 @@ RECENT_TILENUM_SIZE = 128
 				@bits 16-31=sprite follow val
 
 @----------------------------------------------------------------------------
+@#116: the last PC_STRADDLE_PRE bytes of echo RAM execute out of
+@pc_straddle_buf, which holds them followed by the first PC_STRADDLE_POST
+@bytes of OAM, so a fetch crossing 0xFDFF->0xFE00 stays inside one buffer.
+@Echo mirrors 0xC000-0xDDFF, so the byte after echo is a real WRAM byte
+@(0xDE00) -- one buffer cannot continue into both, which is why this is a
+@copy rather than a layout trick.  The byte after the window is
+@PC_STRADDLE_TRAP, an illegal opcode, so running off the end lands in _xx
+@instead of walking on.
+ PC_STRADDLE_PRE  = 16
+ PC_STRADDLE_POST = 16
+ PC_STRADDLE_TRAP = 0xD3
+
  CYC_SHIFT		= 4
  CYCLE			= 1<<CYC_SHIFT @one cycle (455*CYCLE cycles per scanline)
 
