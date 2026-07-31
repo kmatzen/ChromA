@@ -694,6 +694,7 @@ irqGBZ80:
 irqGBZ80_ifhalt:
 @	cmpne r2,#0x10                  ;or STOP
 	addeq gb_pc,gb_pc,#1	@get out of HALT
+	subeq cycles,cycles,#4*CYCLE	@waking from HALT costs 24, not 20
 irqGBZ80_nothalt:
 	bic cycles,cycles,#CYC_IE
 @	mov r2,#0				@disable IRQ
@@ -737,7 +738,12 @@ doIRQ:
 	push16_novram					@save PC
 	encodePC_afterpush16
 
-	fetch 24
+	@Interrupt dispatch is 20 T-cycles from the run state.  24 is the cost
+	@when the CPU was in HALT: waking from it adds one extra machine cycle
+	@on top.  A flat 24 made every interrupt in a running program 4 cycles
+	@too expensive (#41 item 3); irqGBZ80_ifhalt adds the 4 back on the
+	@path that actually earns it.
+	fetch 20
 
 .pushsection .text
 _irqGBZ80_:
