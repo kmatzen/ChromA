@@ -16,9 +16,16 @@
 	.global sgb_reset
 	.global g_sgb_mask
 	.global _autoborderstate
+	.global g_sgb_state
 
 
  .section .iwram.end.104, "ax", %progbits
+	@Savestates carry the first 12 bytes of this block plus lineslow -- the
+	@SGB protocol state proper.  The bytes in between (border palette flags,
+	@autoborder, the boot-hack frame stamps) are ChromA's own settings and
+	@boot-time bookkeeping, not game state, so restoring them from a state
+	@would override what the user has set now.  See SaveSgb in savestate.c.
+g_sgb_state:
 	.word 0	@packetcursor
 	.word 0   @packetbitcursor
 	.byte 0	@packetstate   ;0=invalid, 1=reset, 2=awaiting_stopbit, 3=awaiting_reset
