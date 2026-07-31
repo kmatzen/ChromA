@@ -147,6 +147,43 @@ const u8 gameHashTable[] =
 
 static const int FIRST_GBC_PALETTE = 49;
 
+/* MBC1 multicart detection (issue #50).
+ *
+ * A multicart does not declare itself: its cartridge type byte is a plain
+ * MBC1, and the difference is only in how the mapper is wired -- BANK1 is 4
+ * bits instead of 5, so BANK2 shifts by 4 and picks one of four 256KB games
+ * rather than one of four 512KB halves.
+ *
+ * So it has to be identified by content, the same way other emulators do it:
+ * a 1MB ROM that carries a cartridge header at the start of each game, since
+ * each game needs its own Nintendo logo to boot.  Comparing the logo at those
+ * offsets against bank 0's own -- which is valid by definition, the cart
+ * booted -- avoids embedding a second copy of the logo table here.
+ */
+int IsMbc1Multicart(const u8 *rom)
+{
+	int i;
+
+	/* 0x05 is 1MB; a 4x256KB multicart cannot be any other size. */
+	if (rom[0x0148] != 0x05)
+	{
+		return 0;
+	}
+
+	for (i = 0; i < 0x30; i++)
+	{
+		if (rom[0x40104 + i] != rom[0x0104 + i])
+		{
+			return 0;
+		}
+		if (rom[0x80104 + i] != rom[0x0104 + i])
+		{
+			return 0;
+		}
+	}
+	return 1;
+}
+
 int GetGbcPaletteNumber(u8 *rom)
 {
 	int entryCount = ARRSIZE(gameHashTable);

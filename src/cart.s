@@ -375,7 +375,16 @@ dont_use_true_sram:
 	mov gb_pc,#0		@(eliminates any encodePC errors during mapper*init)
 	str_ gb_pc,lastbank
 
+	@MBC1 multicart (#50).  A multicart's cartridge type is a plain MBC1, so
+	@it has to be recognised by content before the mapper is chosen; the
+	@flag lands in mapperdata+6 for mbc1init to read.  r0 holds the mapper
+	@number and r3 the ROM pointer, both call-clobbered.
 	ldrb r0,[r3,#0x147]	@get mapper#
+	stmfd sp!,{r0,r3}
+	mov r0,r3
+	blx_long IsMbc1Multicart
+	strb_ r0,mapperdata+6
+	ldmfd sp!,{r0,r3}
 				@lookup mapper*init
 	adr r1,mappertbl
 lc0:	ldr r2,[r1],#8
