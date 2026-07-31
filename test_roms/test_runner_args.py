@@ -47,6 +47,13 @@ REJECT_CASES = [
      ["--input", "10"], "100", "expected frame:keys"),
     ("input with no key names",
      ["--input", "10:"], "100", "no key names"),
+    # The hold duration (#91): a zero-frame hold would queue press and release
+    # on the same frame, which reads as "the key was never pressed" rather
+    # than as a bad spec.
+    ("input with a zero hold duration",
+     ["--input", "10:A:0"], "100", "at least 1 frame"),
+    ("input with a non-numeric hold duration",
+     ["--input", "10:A:soon"], "100", "duration"),
     ("memdump with too few fields",
      ["--memdump", "0x1000:4"], "100", "expected addr:len:file"),
     ("memdump with zero length",
@@ -66,6 +73,8 @@ ACCEPT_CASES = [
     ("screenshot inside the run", ["--screenshot", "50:/dev/null"]),
     ("input and savefile", ["--input", "10:Start", "--savefile", "/dev/null"]),
     ("multi-key input", ["--input", "10:L+R"]),
+    ("input with an explicit hold duration", ["--input", "10:A:40"]),
+    ("multi-key input held", ["--input", "10:L+R:120"]),
     ("hex memdump address", ["--memdump", "0x030038CC:4:/dev/null"]),
     ("decimal memdump address", ["--memdump", "33783808:16:/dev/null"]),
 ]
