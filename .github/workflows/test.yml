@@ -238,6 +238,14 @@ jobs:
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
 
+    # gb_pc is a raw host pointer that nothing re-checks as the CPU advances,
+    # so a fetch crossing 0xFDFF -> 0xFE00 walked linearly through XGB_RAM
+    # into WRAM instead of reaching OAM -- a hang, not a wrong value (#116).
+    - name: Run region boundary fetch test
+      run: python3 test_roms/test_region_boundary.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
     # PUSH/POP/CALL and instruction fetch in echo RAM went through memmap_tbl,
     # which resolved 0xE000 0x80 bytes too high in WRAM (#46).
     - name: Run echo RAM test

@@ -1,4 +1,8 @@
 {
+    "region_boundary_test": {
+        "description": "instruction fetch across the echo/OAM region boundary (issue #116) - verified via .sav inspection in test_region_boundary.py, not a screenshot",
+        "skip_visual": true
+    },
     "echo_ram_test": {
         "description": "echo RAM through PUSH/POP/instruction fetch - verified via .sav inspection in test_echo_ram.py, not a screenshot",
         "skip_visual": true
