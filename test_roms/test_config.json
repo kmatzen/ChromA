@@ -95,6 +95,10 @@
         "description": "software-RTC epoch persistence across a power cycle - verified via .sav inspection in test_rtc_persist.py, not a screenshot",
         "skip_visual": true
     },
+    "sprite_x_priority_test": {
+        "description": "DMG sprite-vs-sprite priority by X coordinate - verified by comparing bands within one frame in test_sprite_x_priority.py, not against a baseline",
+        "skip_visual": true
+    },
     "sram_owner_test_a": {
         "description": "cross-game SRAM ownership probe A - verified via .sav inspection in test_sram_ownership.py, not a screenshot",
         "skip_visual": true
