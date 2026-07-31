@@ -2,6 +2,17 @@
 
 void AfterLoadState(void);
 
+/* The SGB globals block in sgb.s, starting at packetcursor.  Only the SGB
+ * protocol state is part of a savestate; see SaveSgb below for the layout and
+ * for why the bytes in the middle are deliberately left out.
+ */
+extern u8 g_sgb_state[];
+
+#define SGB_PROTOCOL_BYTES 12   /* packetcursor, packetbitcursor, packetstate,
+                                 * player_turn, player_mask, sgb_mask */
+#define SGB_LINESLOW_OFF   24   /* lineslow, past the settings bytes */
+#define SGB_SAVE_BYTES     16   /* the 12 above, lineslow, 3 reserved */
+
 typedef int(*saveFuncPtr)(u8*);
 typedef bool(*loadFuncPtr)(u8*, int);
 
@@ -238,9 +249,35 @@ int SaveOam(u8 *dest)
 	memcpy32(dest, _gb_oam_buffer_writing, 160);
 	return 160;
 }
+/* SGB protocol state.  This returned 0, so no SGB section was ever written and
+ * a state taken during the SGB handshake came back with the packet assembler
+ * mid-transfer, the screen mask lost and the multiplayer turn reset (#51).
+ *
+ * What is saved is the protocol state only: the packet cursors and state
+ * machine, which player's pad is being read, the player mask, the screen mask,
+ * and lineslow (the player-switch bitmask).  The bytes between sgb_mask and
+ * lineslow -- update_border_palette, autoborder, autoborderstate,
+ * borderpartsadded, and the two boot-hack frame stamps -- are ChromA's own
+ * settings and boot bookkeeping rather than game state.  Restoring autoborder
+ * from a state would override the setting the user has now, and the frame
+ * stamps are absolute counts that mean nothing after a load.
+ *
+ * Nothing is written for a non-SGB game, exactly as SavePalette does for
+ * non-CGB: states for other games keep their existing layout, so this only
+ * changes the format of SGB states.
+ */
 int SaveSgb(u8 *dest)
 {
-	return 0;
+	if (!sgb_mode)
+	{
+		return 0;
+	}
+	memcpy32(dest, g_sgb_state, SGB_PROTOCOL_BYTES);
+	dest[12] = g_sgb_state[SGB_LINESLOW_OFF];
+	dest[13] = 0;
+	dest[14] = 0;
+	dest[15] = 0;
+	return SGB_SAVE_BYTES;
 }
 
 bool LoadVers(u8 *src, int size)
@@ -323,5 +360,11 @@ bool LoadOam(u8 *src, int size)
 }
 bool LoadSgb(u8 *src, int size)
 {
+	if (size == SGB_SAVE_BYTES)
+	{
+		memcpy32(g_sgb_state, src, SGB_PROTOCOL_BYTES);
+		g_sgb_state[SGB_LINESLOW_OFF] = src[12];
+		return true;
+	}
 	return false;
 }

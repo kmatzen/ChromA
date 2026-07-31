@@ -130,6 +130,11 @@ def main():
     # 2. Menu + savestate tests
     suite("Menu & Savestate Tests", "test_menu.py", TIMEOUT_MENU)
 
+    # 2a. Savestates in an SGB game.  SaveSgb now emits a section, and
+    # LoadState abandons the whole state if any loader rejects one, so this
+    # pins that non-SGB states are untouched.  Needs the private ROMs.
+    suite("SGB Savestate Tests", "test_sgb_savestate.py", TIMEOUT_MENU)
+
     # 3. RST timing test
     suite("RST Timing Test", "test_rst_timing.py", TIMEOUT_SHORT_ROM)
 
