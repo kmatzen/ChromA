@@ -82,6 +82,63 @@ debugwait:
 @	encodePC
 @	b _GO
 
+
+	.pushsection .text
+	.align 2
+@----------------------------------------------------------------------------
+encodePC_echo:@	#116 -- PC landed in the F000-FDFF WRAM echo
+@	In:  gb_pc = logical PC in [0xF000,0xFE00), r1 = gb_pc - 0xF000,
+@	     addy = return address.  r0/r1/r2 are scratch, as in encodePC.
+@	Out: lastbank stored, gb_pc turned into a host pointer.
+@
+@	Away from the end of the region this is exactly what the inline
+@	`ldrlo_ r0,echomap` used to do.  Within PC_STRADDLE_PRE bytes of
+@	0xFE00 it instead runs the CPU out of pc_straddle_buf, which holds the
+@	tail of echo followed by the head of OAM, so a fetch that crosses the
+@	boundary stays inside one buffer.  lastbank is rebased to match, so
+@	gb_pc - lastbank is still the true logical PC -- which jr_fixup, the
+@	IRQ push and every later encodePC depend on.
+@----------------------------------------------------------------------------
+	ldr_ r0,echomap
+	rsb r1,r1,#0x0E00		@bytes left before 0xFE00
+	cmp r1,#PC_STRADDLE_PRE
+	bhi encodePC_echo_plain		@far from the boundary: nothing to do
+
+	stmfd sp!,{r3-r7,lr}
+	ldr r2,=pc_straddle_buf
+
+	@tail of echo: r0 maps this region, window starts PRE bytes below 0xFE00
+	add r1,r0,#0xFE00
+	sub r1,r1,#PC_STRADDLE_PRE
+	mov r3,#PC_STRADDLE_PRE
+0:	ldrb r4,[r1],#1
+	strb r4,[r2],#1
+	subs r3,r3,#1
+	bne 0b
+
+	@head of OAM, which is its own buffer and not reachable via memmap_tbl
+	ldr_ r1,gb_oam_buffer_writing
+	mov r3,#PC_STRADDLE_POST
+1:	ldrb r4,[r1],#1
+	strb r4,[r2],#1
+	subs r3,r3,#1
+	bne 1b
+
+	mov r4,#PC_STRADDLE_TRAP	@illegal opcode: overrun lands in _xx
+	strb r4,[r2]
+
+	@rebase: lastbank = buf - (0xFE00 - PRE)
+	ldr r0,=pc_straddle_buf
+	sub r0,r0,#0xFE00
+	add r0,r0,#PC_STRADDLE_PRE
+	ldmfd sp!,{r3-r7,lr}
+
+encodePC_echo_plain:
+	str_ r0,lastbank
+	add gb_pc,gb_pc,r0
+	bx addy
+	.pool
+	.popsection
 @----------------------------------------------------------------------------
 jr_fixup:@	JR crossed out of current bank — re-encode PC
 @		gb_pc is the wrong ARM pointer (below lastbank).
@@ -3054,6 +3111,9 @@ CANARY2:	.skip 4
  .global cgb_undoc_regs
 io_dma_shadow:	.byte 0		@FF46 DMA: reads back the last source page written
 cgb_undoc_regs:	.skip 4		@FF6C (OPRI), FF72, FF73, FF74 -- CGB only
+ .global pc_straddle_buf
+	.align 2
+pc_straddle_buf: .skip PC_STRADDLE_PRE + PC_STRADDLE_POST + 4
 	.align 2
 
 gbc_palette2:	.skip 128	@ moved to EWRAM (accessed once/frame)
