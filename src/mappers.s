@@ -84,8 +84,67 @@ mbc1init:
 	str_ r0,writemem_tbl+40
 	str_ r0,writemem_tbl+44
 
+	@MBC1 multicart (#50): BANK1 is 4 bits wide, so BANK2 shifts by 4 and
+	@selects one of four 256KB games instead of one of four 512KB halves.
+	@Swap in dedicated handlers rather than branching inside the normal
+	@ones, so the plain-MBC1 path -- which every other MBC1 game takes --
+	@stays exactly as it was.  cart.s set this flag from the ROM contents.
+	@MBC1map1 falls through into MBC1mode, so the 4000-5FFF slot has to be
+	@replaced too or a BANK2 write would land back in the 5-bit code.
+	ldrb_ r0,mapperdata+6
+	cmp r0,#0
+	moveq pc,lr
+	ldr r0,=MBC1Mmap0
+	str_ r0,writemem_tbl+8
+	str_ r0,writemem_tbl+12
+	ldr r0,=MBC1Mmap1
+	str_ r0,writemem_tbl+16
+	str_ r0,writemem_tbl+20
+	ldr r0,=MBC1Mmode
+	str_ r0,writemem_tbl+24
+	str_ r0,writemem_tbl+28
 	mov pc,lr
-	
+
+@----------------------------------------------------------------------------
+MBC1Mmap0:	@multicart BANK1 write, 2000-3FFF -- 4 bits, not 5
+@----------------------------------------------------------------------------
+	ands r0,r0,#0x0f
+	moveq r0,#1
+	strb_ r0,mapperdata
+	ldrb_ r1,mapperdata+1
+	orr r0,r0,r1,lsl#4
+	tst r0,#0x0f
+	addeq r0,r0,#1
+	b map4567_
+@----------------------------------------------------------------------------
+MBC1Mmap1:	@multicart BANK2 write, 4000-5FFF
+@----------------------------------------------------------------------------
+	and r0,r0,#0x03
+	strb_ r0,mapperdata+5
+	ldrb_ r0,mapperdata+3
+@----------------------------------------------------------------------------
+MBC1Mmode:	@multicart mode write, 6000-7FFF
+@----------------------------------------------------------------------------
+	strb_ r0,mapperdata+3
+	tst r0,#1			@eq = mode 0, ne = mode 1
+	ldrb_ r0,mapperdata+5		@r0 = BANK2
+	mov r1,#0
+	strb_ r0,mapperdata+1
+	streqb_ r1,mapperdata+4
+	strneb_ r0,mapperdata+4
+	moveq r0,#0
+	movne r0,r0,lsl#4
+	str lr,[sp,#-4]!
+	bl map0123_
+	ldrb_ r0,mapperdata
+	ldrb_ r1,mapperdata+1
+	orr r0,r0,r1,lsl#4
+	tst r0,#0x0f
+	addeq r0,r0,#1
+	bl map4567_
+	ldr lr,[sp],#4
+	b RamSelect
+
 	.popsection
 @----------------------------------------------------------------------------
 MBC1map0:
