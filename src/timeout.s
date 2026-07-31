@@ -634,9 +634,13 @@ checkIRQDelayed:
 	ands r0,r0,#0x1f	@only 5 interrupts exist; see checkIRQ
 	beq _GO
 	
-	ldrb r2,[gb_pc]
-	cmp r2,#0x76			@Check if we're doing Halt.
-	beq irqGBZ80_ifhalt
+	@Halted-ness is a state, not a byte.  Inferring it from [gb_pc]==0x76
+	@meant an interrupt dispatched at the boundary immediately *before* a
+	@not-yet-executed HALT looked identical to waking from one: the handler
+	@stepped gb_pc over the HALT and charged the wake cycle, so a
+	@halt/nop/jr wait loop woke an interrupt period early (#41 item 2).
+	tst cycles,#CYC_HALT
+	bne irqGBZ80_ifhalt
 
 	ldr_ r12,cyclesperscanline
 	sub r12,r12,#8*CYCLE
@@ -689,12 +693,12 @@ checkIRQ:
 @----------------------------------------------------------
 irqGBZ80:
 @----------------------------------------------------------
-	ldrb r2,[gb_pc]
-	cmp r2,#0x76			@Check if we're doing Halt.
+	tst cycles,#CYC_HALT
 irqGBZ80_ifhalt:
 @	cmpne r2,#0x10                  ;or STOP
-	addeq gb_pc,gb_pc,#1	@get out of HALT
-	subeq cycles,cycles,#4*CYCLE	@waking from HALT costs 24, not 20
+	addne gb_pc,gb_pc,#1	@get out of HALT
+	subne cycles,cycles,#4*CYCLE	@waking from HALT costs 24, not 20
+	bicne cycles,cycles,#CYC_HALT
 irqGBZ80_nothalt:
 	bic cycles,cycles,#CYC_IE
 @	mov r2,#0				@disable IRQ
