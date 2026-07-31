@@ -335,6 +335,15 @@ static void SanityCheckOutList(VramPacketData2 *outList)
 	}
 }
 
+//GBA ROM is mapped from 0x08000000 up; anything below that is EWRAM, IWRAM or
+//SRAM, i.e. memory the game can rewrite behind an unchanged pointer.
+#define GBA_ROM_BASE 0x08000000u
+
+static __inline int IsImmutableSource(const u8 *source)
+{
+	return (u32)source >= GBA_ROM_BASE;
+}
+
 static void RegisterDmaPackets()
 {
 	VramPacketData2 *outList;
@@ -386,7 +395,16 @@ static void RegisterDmaPackets()
 			if (out->dest == in->dest && out->length == in->length)
 			{
 				outMin = outIndex + 1;
-				if (out->source == in->source)
+				//Same destination, same length, same source pointer -- but
+				//that only means the tiles are unchanged if the bytes behind
+				//the pointer cannot have changed.  For a source in ROM they
+				//cannot, and skipping the re-upload is the whole point of this
+				//cache.  For a source in RAM they can and do: a game that
+				//builds a tile in a WRAM scratch buffer and DMAs it from the
+				//same address every frame hit the "accept packet, do nothing"
+				//path forever and kept showing the first frame's tiles
+				//(#53 item 7).
+				if (out->source == in->source && IsImmutableSource(in->source))
 				{
 					//accept packet, do nothing
 				}
