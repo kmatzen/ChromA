@@ -135,6 +135,11 @@ def main():
     # pins that non-SGB states are untouched.  Needs the private ROMs.
     suite("SGB Savestate Tests", "test_sgb_savestate.py", TIMEOUT_MENU)
 
+    # 2b. Software-RTC epoch persistence (#49 item 5).  Three runner passes
+    # sharing a save file, so it wants the menu timeout rather than the short
+    # ROM one.
+    suite("RTC Persistence Test", "test_rtc_persist.py", TIMEOUT_MENU)
+
     # 3. RST timing test
     suite("RST Timing Test", "test_rst_timing.py", TIMEOUT_SHORT_ROM)
 

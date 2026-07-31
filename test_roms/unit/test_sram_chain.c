@@ -85,6 +85,12 @@ void memcpy32(void *d, const void *s, u32 n) { memcpy(d, s, n); }
 void memset32(void *d, u32 v, u32 n) { (void)d; (void)v; (void)n; }
 void memset8(void *d, u8 v, u32 n) { memset(d, v, n); }
 void findrom(void) {}
+/* The config record carries the software-RTC epoch (#49 item 5), so
+ * writeconfig/readconfig reach into rtc.c.  Nothing here exercises the clock;
+ * these only need to link.  rtc_get_epoch returns the boot epoch so the
+ * record this test builds looks like a real one. */
+u32 rtc_get_epoch(void) { return 10 * 3600; }
+void rtc_restore_epoch(u32 seconds) { (void)seconds; }
 void loadcart(int a, int b) { (void)a; (void)b; }
 u8 *make_instant_pages(u8 *b) { return b; }
 void make_ui_visible(void) {}
