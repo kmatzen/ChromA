@@ -75,13 +75,57 @@ def run_test(gba_path, frames, output_bmp, inputs=None, screenshots=None):
     return True
 
 
-def compare_images(img_a_path, img_b_path, threshold=0):
-    """Compare two images. Returns (match, diff_count, diff_image)."""
+# How many frames either side of a configured capture point are accepted as
+# the same screenshot (issue #37).
+#
+# A host frame number is not a property of the emulated machine.  Any change
+# that shifts emulation timing by a fraction of a frame -- a toolchain bump, a
+# few bytes of IWRAM, a cycle-accuracy fix -- slides a game's animation
+# relative to it, and a capture that lands on a blinking cursor, a cycling
+# sprite or a drifting cloud then differs from its baseline while the scene is
+# otherwise pixel-identical.  Issue #37 documents four tests failing that way
+# for months; #114 moved six more and #117 another four, each time needing the
+# diff images opened by hand to establish that nothing was actually
+# mis-rendered.
+#
+# So a capture matches if the baseline turns up anywhere in [N-W, N+W].  The
+# comparison stays *exact* -- no pixel tolerance, no masked regions -- because
+# a real rendering change alters every frame in the window, not just one.
+# What this deliberately gives up is sensitivity to a pure timing shift of
+# <= W frames, which is precisely the thing #37 says is not a regression.
+CAPTURE_WINDOW = 3
+
+
+def compare_images(img_a_path, img_b_path, threshold=0, ignore=None):
+    """Compare two images. Returns (match, diff_count, diff_image).
+
+    `ignore` is a list of [x0, y0, x1, y1] rectangles blanked in *both* images
+    before the comparison.  It exists for elements that blink on a period too
+    long for the capture window to find the matching phase -- a text-advance
+    arrow that is on for 16 frames and off for 16 cannot be recovered by
+    looking three frames either side, and its state carries no information
+    about whether rendering is correct.  Every rectangle in the config was
+    measured, not guessed: run the suite against a deliberately retimed build
+    and the differing pixels are exactly the blinking element.
+
+    Deliberately narrow.  A blanket pixel tolerance would have to be ~4% to
+    cover the cases seen here, which is well above the 1.3-2.2% real
+    regressions #37 lists -- it would mask the very thing it is meant to
+    catch.  A named 8x6 box does not.
+    """
     img_a = Image.open(img_a_path).convert("RGB")
     img_b = Image.open(img_b_path).convert("RGB")
 
     if img_a.size != img_b.size:
         return False, -1, None
+
+    if ignore:
+        img_a = img_a.copy()
+        img_b = img_b.copy()
+        da, db = ImageDraw.Draw(img_a), ImageDraw.Draw(img_b)
+        for x0, y0, x1, y1 in ignore:
+            da.rectangle([x0, y0, x1 - 1, y1 - 1], fill=(0, 0, 0))
+            db.rectangle([x0, y0, x1 - 1, y1 - 1], fill=(0, 0, 0))
 
     diff = ImageChops.difference(img_a, img_b)
     pixels = list(diff.getdata())
@@ -157,6 +201,8 @@ def discover_tests():
                 "screenshots": test_cfg.get("screenshots", []),
                 "description": test_cfg.get("description", ""),
                 "expected_fail": test_cfg.get("expected_fail", False),
+                "capture_window": test_cfg.get("capture_window", CAPTURE_WINDOW),
+                "ignore": test_cfg.get("ignore", {}),
             }
 
     return tests
@@ -192,10 +238,41 @@ def run_single_test(name, test_info, rebaseline=False, diff_dir=None, verbose=Fa
         output_bmp = tmpdir / f"{name}_final.bmp"
         screenshot_bmps = []
         screenshots_args = []
+        window = test_info.get("capture_window", CAPTURE_WINDOW)
+        total = test_info["frames"]
+        # Alternates for each capture: same screenshot, a few frames either
+        # side, so an animation that has slid under a timing change can still
+        # be recognised (#37).  Kept separate from the configured frame, which
+        # stays the one that gets baselined.
+        alt_bmps = {}
         for ss in test_info.get("screenshots", []):
+            ss_name = ss.get("name", f"frame_{ss['frame']}")
             ss_bmp = tmpdir / f"{name}_{ss['frame']}.bmp"
             screenshots_args.append(f"{ss['frame']}:{ss_bmp}")
-            screenshot_bmps.append((ss["frame"], ss_bmp, ss.get("name", f"frame_{ss['frame']}")))
+            screenshot_bmps.append((ss["frame"], ss_bmp, ss_name))
+            alts = []
+            for d in range(-window, window + 1):
+                if d == 0:
+                    continue
+                f = ss["frame"] + d
+                if f < 0 or f >= total:
+                    continue
+                alt = tmpdir / f"{name}_{ss['frame']}_alt{d}.bmp"
+                screenshots_args.append(f"{f}:{alt}")
+                alts.append(alt)
+            alt_bmps[ss_name] = alts
+
+        # The run's own final screenshot is taken after the last frame, so its
+        # alternates are the frames just before it.
+        final_alts = []
+        for d in range(1, window + 1):
+            f = total - 1 - d
+            if f < 0:
+                continue
+            alt = tmpdir / f"{name}_final_alt{d}.bmp"
+            screenshots_args.append(f"{f}:{alt}")
+            final_alts.append(alt)
+        alt_bmps["final"] = final_alts
 
         print(f"  Running {test_info['frames']} frames...")
         if not run_test(gba_path, test_info["frames"], output_bmp,
@@ -251,14 +328,36 @@ def run_single_test(name, test_info, rebaseline=False, diff_dir=None, verbose=Fa
                 results.append("MISSING")
                 continue
 
-            match, diff_count, diff_img = compare_images(baseline, png)
-            total = Image.open(png).size[0] * Image.open(png).size[1]
+            ignore = test_info.get("ignore", {}).get(ss_name)
+            match, diff_count, diff_img = compare_images(baseline, png, ignore=ignore)
+            total_px = Image.open(png).size[0] * Image.open(png).size[1]
+
+            # If the configured frame does not match, the baseline may simply
+            # have slid a frame or two under a timing change.  Accept it if it
+            # turns up anywhere in the window -- still an exact match, just not
+            # necessarily at the exact host frame (#37).
+            matched_offset = None
+            if not match:
+                for alt in alt_bmps.get(ss_name, []):
+                    if not alt.exists():
+                        continue
+                    alt_png = tmpdir / (alt.stem + ".png")
+                    Image.open(alt).save(alt_png)
+                    alt_match, _, _ = compare_images(baseline, alt_png, ignore=ignore)
+                    if alt_match:
+                        match = True
+                        matched_offset = alt.stem.split("alt")[-1]
+                        break
 
             if match:
-                print(f"  {ss_name}: PASS")
+                if matched_offset is None:
+                    print(f"  {ss_name}: PASS")
+                else:
+                    print(f"  {ss_name}: PASS (baseline found {matched_offset} "
+                          f"frames away -- animation phase, not a rendering change)")
                 results.append("PASS")
             else:
-                pct = diff_count / total * 100
+                pct = diff_count / total_px * 100
                 print(f"  {ss_name}: FAIL ({diff_count} pixels differ, {pct:.1f}%)")
                 results.append("FAIL")
 
