@@ -1094,9 +1094,12 @@ _76:@	HALT, wait for interrupt.
 	bne _noHalt
 	sub gb_pc,gb_pc,#1
 	and cycles,cycles,#CYC_MASK
-	@orr cycles,cycles,#CYC_HALT
+	orr cycles,cycles,#CYC_HALT
 	fetch 4
 _noHalt:
+	@Leaving the halt, by either path below: gb_pc is already past the
+	@HALT byte here, so the wake handling in irqGBZ80 must not also fire.
+	bic cycles,cycles,#CYC_HALT
 	@With IME set, the pending interrupt dispatches with the return
 	@address already past the HALT (hardware-correct).
 	tst cycles,#CYC_IE
