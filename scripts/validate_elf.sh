@@ -86,6 +86,42 @@ if [ $VRAM1_CODE -gt $VRAM1_LIMIT ]; then
     ERRORS=$((ERRORS + 1))
 fi
 
+# SaveSgb/LoadSgb (src/savestate.c) copy a fixed 12-byte window out of the SGB
+# globals block and then reach past the settings bytes for lineslow at +24.
+# Those offsets are source order in src/sgb.s and nothing in the compiler
+# checks them: reordering that block would silently make a savestate restore
+# autoborder over whatever the user has set now.  Pin the two boundaries --
+# the last saved byte (sgb_mask, +11) and the first excluded setting
+# (auto_border, +13).
+SYMS=$($OBJDUMP -t "$ELF") || { echo "ERROR: objdump -t failed on $ELF"; exit 1; }
+sym_off() {
+    local base=$1 name=$2 a b
+    a=$(echo "$SYMS" | awk -v n="$base" '$NF == n { print $1; exit }')
+    b=$(echo "$SYMS" | awk -v n="$name" '$NF == n { print $1; exit }')
+    if [ -z "$a" ] || [ -z "$b" ]; then
+        echo ""
+        return
+    fi
+    echo $(( 0x$b - 0x$a ))
+}
+
+check_sgb_off() {
+    local name=$1 want=$2 got
+    got=$(sym_off g_sgb_state "$name")
+    if [ -z "$got" ]; then
+        echo "ERROR: SGB layout: g_sgb_state or $name missing from the symbol table"
+        ERRORS=$((ERRORS + 1))
+    elif [ "$got" != "$want" ]; then
+        echo "ERROR: SGB layout: $name is at +${got} from g_sgb_state, expected +${want}"
+        echo "       src/sgb.s was reordered; SaveSgb/LoadSgb in src/savestate.c"
+        echo "       would save the wrong bytes.  Update both together."
+        ERRORS=$((ERRORS + 1))
+    fi
+}
+
+check_sgb_off g_sgb_mask 11
+check_sgb_off auto_border 13
+
 if [ $ERRORS -gt 0 ]; then
     echo "FAILED: ${ERRORS} constraint violation(s)"
     exit 1

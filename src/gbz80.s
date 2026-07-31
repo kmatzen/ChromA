@@ -43,6 +43,7 @@
 	global_func checkIRQ
 	global_func _00
 	.global gbc_mode
+	.global sgb_mode
 	
 	.global g_hackflags
 	.global doubletimer
