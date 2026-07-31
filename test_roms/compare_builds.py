@@ -63,11 +63,14 @@ def capture(emulator, rom, entry, outdir, tag):
     if r.returncode != 0:
         return None, f"compile failed: {r.stderr.strip()[:200]}"
 
-    shots = entry.get("screenshots") or [{"frame": entry.get("frames",
-                                                             DEFAULT_FRAMES),
+    frames = entry.get("frames", DEFAULT_FRAMES)
+    # A ROM with no configured screenshots gets one at the last frame it
+    # actually reaches.  Asking for frame == the run length is rejected by the
+    # runner ("it would never be captured"), which turned every such entry
+    # into an error rather than a comparison.
+    shots = entry.get("screenshots") or [{"frame": max(frames - 1, 0),
                                           "name": "final"}]
-    cmd = [str(RUNNER), str(gba), str(entry.get("frames", DEFAULT_FRAMES)),
-           "/dev/null"]
+    cmd = [str(RUNNER), str(gba), str(frames), "/dev/null"]
     for spec in entry.get("inputs", []):
         cmd += ["--input", spec]
     paths = {}
@@ -161,8 +164,8 @@ def main():
             print(f"  {name[:46]:48s} {status}")
 
     print()
-    print(f"{checked} captures compared across "
-          f"{checked and len({m[0] for m in moved}) or 0} moved ROMs")
+    print(f"{checked} captures compared; "
+          f"{len({m[0] for m in moved})} ROM(s) moved")
     if skipped:
         print(f"skipped (ROM not present): {len(skipped)}")
     for e in errors:
