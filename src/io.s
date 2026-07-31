@@ -1245,7 +1245,8 @@ _FF04W:@		DIV - Divider Register
 	@ ALWAYS zero.  Both the bit that clocks TIMA and the point this write
 	@ resets to live below that granularity, so fold in the cycles elapsed
 	@ so far this scanline first -- the same thing _FF04R does to read DIV.
-	ldr_ r1,cyclesperscanline
+	ldr r1,=line_cycles_base
+	ldr r1,[r1]
 	bic r2,cycles,#CYC_MASK
 	sub r1,r1,r2			@r1 = elapsed cycles this scanline
 	ldr_ r0,dividereg
@@ -1309,7 +1310,8 @@ _FF07W:@		TAC - Timer Control
 	@ dividereg only advances once per scanline and the bit that clocks
 	@ TIMA sits below that granularity, so fold in the elapsed cycles
 	@ first; and the bit is b+16 at this scaling, not b (see _FF04W).
-	ldr_ r1,cyclesperscanline
+	ldr r1,=line_cycles_base
+	ldr r1,[r1]
 	bic r2,cycles,#CYC_MASK
 	sub r1,r1,r2
 	ldr_ r2,dividereg
@@ -1436,7 +1438,8 @@ _FF04R:@		DIV - Divider Register (sub-scanline accurate)
 	@ Compute elapsed cycles this scanline and add to stored dividereg.
 	@ dividereg is incremented by cyclesperscanline<<12 each scanline.
 	@ Sub-scanline: dividereg + elapsed<<12, then read bits 31-24.
-	ldr_ r1,cyclesperscanline
+	ldr r1,=line_cycles_base
+	ldr r1,[r1]
 	bic r0,cycles,#CYC_MASK		@r0 = cycles without flag bits
 	sub r1,r1,r0			@r1 = elapsed cycles this scanline
 	ldr_ r0,dividereg
@@ -1450,7 +1453,8 @@ _FF05R:@		TIMA - Timer counter (sub-scanline accurate)
 	tst r1,#0x4
 	beq _FF05R_disabled		@timer disabled → return stored value
 	@ Compute sub-scanline TIMA: timercounter + elapsed<<shift
-	ldr_ r0,cyclesperscanline
+	ldr r0,=line_cycles_base
+	ldr r0,[r0]
 	bic r2,cycles,#CYC_MASK
 	sub r0,r0,r2			@r0 = elapsed cycles
 	ands r1,r1,#3			@frequency select
