@@ -2952,13 +2952,21 @@ display_sprites:
 @----------------------------------------------------------------------------
 OAMfinish:@		transfer OAM from GB to GBA
 @----------------------------------------------------------------------------
-	stmfd sp!,{r4-r11,lr}
-	bl OAMfinish_emit
 	@On DMG, overlapping sprites are ordered by X coordinate, not by OAM
 	@index -- the CGB rule.  ChromA used OAM order in both modes (#53 item 3).
+	@
+	@The CGB path must stay as cheap as it was, not merely produce the same
+	@OAM: this renderer runs against a real-time VCOUNT budget, and wrapping
+	@the whole routine in a save/restore was enough to move 70 pixels of a
+	@CGB game's frame -- identical sprite data, different timing.  So CGB
+	@branches straight into the emit loop and returns through its own bx lr,
+	@paying three instructions and no stack traffic.
 	ldrb_ r0,gbcmode
 	cmp r0,#0
-	bleq sort_sprites_by_x
+	bne OAMfinish_emit
+	stmfd sp!,{r4-r11,lr}
+	bl OAMfinish_emit
+	bl sort_sprites_by_x
 	ldmfd sp!,{r4-r11,pc}
 
 @----------------------------------------------------------------------------
