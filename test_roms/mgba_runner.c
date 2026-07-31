@@ -92,7 +92,9 @@ static int write_bmp(const char* path, const mColor* pixels, int width, int heig
 
 static void print_usage(const char* name) {
     fprintf(stderr, "Usage: %s <rom.gba> <frames> <output.bmp> [options]\n", name);
-    fprintf(stderr, "  --input frame:keys     Simulate button press (A B Select Start Right Left Up Down R L)\n");
+    fprintf(stderr, "  --input frame:keys[:hold]  Press keys at frame, release\n");
+    fprintf(stderr, "                         after `hold` frames (default 15).\n");
+    fprintf(stderr, "                         Keys: A B Select Start Right Left Up Down R L\n");
     fprintf(stderr, "  --screenshot frame:path  Capture screenshot at frame\n");
     fprintf(stderr, "  --memdump addr:len:file  Dump memory region after run\n");
     fprintf(stderr, "  --savefile path          Load/save .sav file (created if missing)\n");
@@ -204,6 +206,26 @@ int main(int argc, char** argv) {
             if (frame < 0) return 1;
             char* keystr = colon + 1;
 
+            /* Optional third field: how many frames to hold the keys down.
+               The fixed 15-frame auto-release below makes some settings
+               untestable -- A autofire re-triggers while the button is held,
+               so with a 15-frame press the screenshot 300 frames later looks
+               the same whether autofire fired once or five times (#91).
+               Split this off before strtok, which would otherwise run the key
+               list straight through the second colon. */
+            long hold = 15;
+            char* colon2 = strchr(keystr, ':');
+            if (colon2) {
+                *colon2 = 0;
+                hold = parse_uint(colon2 + 1, 10, "--input duration");
+                if (hold < 0) return 1;
+                if (hold == 0) {
+                    fprintf(stderr, "ERROR: --input '%s': duration must be at "
+                                    "least 1 frame\n", argv[i]);
+                    return 1;
+                }
+            }
+
             uint32_t keys = 0;
             char* tok = strtok(keystr, "+,");
             if (!tok) {
@@ -227,8 +249,9 @@ int main(int argc, char** argv) {
             inputs[num_inputs].keys = keys;
             inputs[num_inputs].press = 1;
             num_inputs++;
-            /* Auto-release after 15 frames (~250ms) */
-            inputs[num_inputs].frame = (int)frame + 15;
+            /* Release after the hold duration (15 frames, ~250ms, unless
+               the spec asked for something else) */
+            inputs[num_inputs].frame = (int)frame + (int)hold;
             inputs[num_inputs].keys = keys;
             inputs[num_inputs].press = 0;
             num_inputs++;

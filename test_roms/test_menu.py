@@ -29,6 +29,13 @@ KIRBY_DL2_ROM = SCRIPT_DIR / "Kirby's Dream Land 2 (USA, Europe) (SGB Enhanced).
 # Use 120-frame gaps between inputs to ensure each registers exactly once.
 MENU_GAP = 120
 
+# test_autofire_behavior: how long A is held in gameplay, which frames inside
+# that hold are sampled, and how much the autofire and control runs must differ
+# at each sample.  See the comments in that test for the measured numbers.
+AF_HOLD = 300
+AF_SAMPLES = (90, 290)
+AF_MIN_DIFF = 0.2
+
 # Emulator memory addresses, resolved from build/chroma.elf.map.  There are
 # deliberately no hardcoded fallbacks: an address that silently goes stale
 # makes every behavioural assertion below a statement about unrelated memory.
@@ -540,8 +547,8 @@ def test_a_autofire_behavior(tmpdir):
         return False
     dump_path = str(tmpdir / "joycfg_af.bin")
     control_dump = str(tmpdir / "joycfg_af_control.bin")
-    no_press_ss = str(tmpdir / "no_press.bmp")
-    autofire_ss = str(tmpdir / "autofire.bmp")
+    no_press_ss = [str(tmpdir / f"no_press_{o}.bmp") for o in AF_SAMPLES]
+    autofire_ss = [str(tmpdir / f"autofire_{o}.bmp") for o in AF_SAMPLES]
     menu_before_ss = str(tmpdir / "af_menu_before.bmp")
     menu_after_ss = str(tmpdir / "af_menu_after.bmp")
 
@@ -552,6 +559,14 @@ def test_a_autofire_behavior(tmpdir):
     # identically and both press A in gameplay at the same frame; only the
     # toggle differs, so the difference isolates autofire's effect on that
     # held A press.
+    #
+    # The A press is held for AF_HOLD frames via the runner's `frame:keys:hold`
+    # spec.  With the old fixed 15-frame auto-release the visual half measured
+    # exactly 0.0%: 15 frames is roughly one jump either way, and 300 frames
+    # later Mario has landed in the same place whether that was one sustained
+    # press or several autofired pulses.  Held for AF_HOLD instead, autofire
+    # turns one long jump into a string of short ones and the screens diverge
+    # for the rest of the hold.
     def autofire_run(toggle, gameplay_ss, dump, menu_shots=None):
         t = 2000
         inputs = ["600:Start", "900:Start", f"{t}:L+R"]
@@ -567,10 +582,11 @@ def test_a_autofire_behavior(tmpdir):
         t += 200
         inputs += [f"{t}:B"]  # close menu
         t += 300
-        # Press A in gameplay - with autofire this pulses causing jumps
-        inputs += [f"{t}:A"]
-        t += 300
-        shots = [f"{t}:{gameplay_ss}"]
+        # Hold A in gameplay - with autofire this pulses causing repeated jumps
+        inputs += [f"{t}:A:{AF_HOLD}"]
+        shots = [f"{t + off}:{path}"
+                 for off, path in zip(AF_SAMPLES, gameplay_ss)]
+        t += AF_HOLD
         if menu_shots:
             shots = [f"{menu_before_frame}:{menu_shots[0]}",
                      f"{menu_after_frame}:{menu_shots[1]}"] + shots
@@ -588,20 +604,24 @@ def test_a_autofire_behavior(tmpdir):
     # The menu screenshots were captured but never compared. The label does
     # change on toggle, so assert it (clock row masked -- see menu_diff_pct).
     menu_changed = menu_diff_pct(menu_before_ss, menu_after_ss) > 0.05
-    # No gameplay-visual assertion, deliberately.  Against a matched control
-    # this measured exactly 0.0%, and the scenario cannot do better:
-    # mgba_runner auto-releases a key after 15 frames, so "holding" A spans 15
-    # frames, and by the screenshot 300 frames later Mario has landed in the
-    # same place whether the press was one jump or several autofired ones.
-    # Demonstrating autofire needs a key held across a longer window than the
-    # runner currently supports; the old `diff > 2` passed only on unrelated
-    # animation between two differently-timed runs.
-    diff = pixel_diff_pct(no_press_ss, autofire_ss)
-    passed = a_bit_cleared and control_a_bit_set and menu_changed
+    # Gameplay effect.  The two runs are identical apart from the menu toggle,
+    # and the runner is deterministic -- running the control twice gives 0.00%
+    # at both sample points -- so any divergence here is autofire's doing.
+    # Measured: 2.71% at +90 and 2.75% at +290 against a 0.00% floor.  The
+    # threshold sits an order of magnitude below the signal and above a floor
+    # that is exactly zero, and both samples must show it, so a single frame of
+    # incidental animation cannot carry the assertion the way the old
+    # `diff > 2` between two differently-timed runs did.
+    diffs = [pixel_diff_pct(a, b) for a, b in zip(no_press_ss, autofire_ss)]
+    gameplay_changed = all(d > AF_MIN_DIFF for d in diffs)
+    passed = (a_bit_cleared and control_a_bit_set and menu_changed
+              and gameplay_changed)
     print(f"  joycfg=0x{joycfg:08X} (A bit cleared={a_bit_cleared}), "
           f"control=0x{control_joycfg:08X} (A bit set={control_a_bit_set})")
     print(f"  menu label changed={menu_changed}")
-    print(f"  [diagnostic, not asserted] autofire-vs-control diff={diff:.1f}%")
+    print("  autofire-vs-control gameplay diff: "
+          + ", ".join(f"+{o}f {d:.2f}%" for o, d in zip(AF_SAMPLES, diffs))
+          + f" (need >{AF_MIN_DIFF}% at both)")
     print(f"  {'PASS' if passed else 'FAIL'}")
     return passed
 
