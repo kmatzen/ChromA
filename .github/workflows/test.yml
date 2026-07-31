@@ -395,6 +395,13 @@ jobs:
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
 
+    # MBC1 multicarts wire BANK1 as 4 bits, and nothing in the header says so
+    # -- detection is by content (#50).
+    - name: Run MBC1 multicart test
+      run: python3 test_roms/test_mbc1m.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
   test-full:
     needs: build
     runs-on: ubuntu-latest
