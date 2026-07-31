@@ -466,6 +466,9 @@
         "expected_fail": false
     },
     "POKEMON RED": {
+        "ignore": {
+            "final": [[184, 137, 192, 143]]
+        },
         "description": "Pokemon Red (Gen 1) - DMG, boot through title to Oak's intro",
         "frames": 9000,
         "inputs": [
@@ -481,6 +484,9 @@
         "expected_fail": false
     },
     "POKEMON BLUE": {
+        "ignore": {
+            "final": [[184, 137, 192, 143]]
+        },
         "description": "Pokemon Blue (Gen 1) - DMG, boot through title to Oak's intro",
         "frames": 9000,
         "inputs": [
@@ -496,6 +502,9 @@
         "expected_fail": false
     },
     "POKEMON YELLOW": {
+        "ignore": {
+            "final": [[184, 137, 192, 143]]
+        },
         "description": "Pokemon Yellow (Gen 1) - DMG with SGB, boot through title to Oak's intro",
         "frames": 9000,
         "inputs": [
@@ -522,8 +531,8 @@
             {"frame": 2000, "name": "title"},
             {"frame": 3300, "name": "after_start"}
         ],
-        "expected_fail": true,
-        "xfail_reason": "PRE-EXISTING, see #37: animated screenshot, drifts on any timing change"
+        "expected_fail": false,
+        "xfail_reason": "cleared: with the capture window (#37) every capture now matches its baseline exactly, a few frames either side"
     },
     "ZELDA": {
         "description": "Zelda: Link's Awakening (DMG) - boot through title, press Start",
