@@ -1626,13 +1626,16 @@ _E8:@	ADD SP,dd
 @----------------------------------------------------------------------------
 _E9:@	JP HL
 @----------------------------------------------------------------------------
-	mov r1,gb_hl,lsr#28
-	adr_ r2,memmap_tbl
-	ldr r0,[r2,r1,lsl#2]
-	str_ r0,lastbank
-	add gb_pc,r0,gb_hl,lsr#16
-@	mov gb_pc,gb_hl,lsr#16
-@	encodePC
+	@This was a hand-inlined copy of encodePC with the echo range-check
+	@dropped, so `jp hl` into F000-FDFF resolved through memmap_tbl[15] --
+	@HRAM -- instead of echomap, and landed in unrelated memory.  #46 fixed
+	@that for the encodePC paths and the direct memmap consumers; this one
+	@was missed because it does not call encodePC at all.  mooneye's
+	@call_timing/ret_timing/add_sp_e_timing/ld_hl_sp_e_timing all reach
+	@their trampoline with `jp hl`, which is why they still rendered black
+	@after the 0xFDFF->0xFE00 straddle itself was fixed (#106).
+	mov gb_pc,gb_hl,lsr#16
+	encodePC
 	fetch 4
 @----------------------------------------------------------------------------
 _EA:@	LD (nnnn),A	write A to (nnnn)
