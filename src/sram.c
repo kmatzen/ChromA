@@ -1151,6 +1151,23 @@ void writeconfig()
 	j |= (gammavalue & 0x7)<<5;					//store current gamma setting
 	cfg->misc = j;
 	cfg->sram_checksum=sram_owner;
+
+	//Software-RTC epoch (#49 item 5).  Without this the MBC3 clock restarts
+	//at 10:00:00 on every power-on, so a game's in-game clock runs backwards
+	//across sessions.  There is no wall clock to recover on a cart with no
+	//RTC hardware, but the clock can at least carry on from where it stopped
+	//rather than jumping back.
+	//
+	//It rides in reserved4, which the config template only uses for the
+	//three-character "CFG" tag -- so the record keeps its size and layout
+	//and stays readable by the other Goomba-family forks that share this
+	//format.  The magic is checked on the way back in: a record written by
+	//one of those forks has zeroes here, not a stale clock.
+	{
+		u32 epoch = rtc_get_epoch();
+		memcpy(cfg->reserved4 + RTC_EPOCH_MAGIC_OFF, RTC_EPOCH_MAGIC, 4);
+		memcpy(cfg->reserved4 + RTC_EPOCH_OFF, &epoch, 4);
+	}
 	if(i<0) {	//create new config
 		if(!append_config_fast(cfg))
 			updatestates(0,0,CONFIGSAVE);
@@ -1194,6 +1211,16 @@ void readconfig() {
 		if(gammavalue > 4)
 			gammavalue = 0;
 		sram_owner=cfg->sram_checksum;
+
+		//Resume the software RTC where it left off (#49 item 5).  This runs
+		//before the boot loadcart(), and loadcart calls rtc_reset -- so hand
+		//the value over rather than writing the clock here, and let
+		//rtc_reset consume it once the cart is up.
+		if(!memcmp(cfg->reserved4 + RTC_EPOCH_MAGIC_OFF, RTC_EPOCH_MAGIC, 4)) {
+			u32 epoch;
+			memcpy(&epoch, cfg->reserved4 + RTC_EPOCH_OFF, 4);
+			rtc_restore_epoch(epoch);
+		}
 	}
 }
 

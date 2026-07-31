@@ -98,8 +98,38 @@ static u8 rtc_shadow[5];
  * the next game would start from the previous game's clock-set instead of the
  * boot epoch.
  */
+static u32 elapsed_seconds(void);
+static u32 rtc_now(void);
+
+/* The clock value carried over from the previous power-on, if the config
+ * record had one.  readconfig() runs before the boot loadcart(), so it cannot
+ * write rtc_offset directly -- rtc_reset would wipe it moments later.  It
+ * lands here instead and rtc_reset consumes it.
+ */
+static u32 rtc_restored;
+static u8 rtc_have_restored;
+
+/* The current clock, as a count of seconds since day 0 -- what writeconfig
+ * stores so the next power-on can resume from it instead of 10:00:00.
+ */
+u32 rtc_get_epoch(void) {
+    return rtc_now();
+}
+
+void rtc_restore_epoch(u32 seconds) {
+    rtc_restored = seconds;
+    rtc_have_restored = 1;
+}
+
 void rtc_reset(void) {
     rtc_offset = BASE_SECONDS;
+    if (rtc_have_restored) {
+        /* Resume where the clock stood when it was last persisted.  The
+         * offset is relative to the frame count, which does not reset with
+         * the cart, so subtract what has already elapsed this session.
+         */
+        rtc_offset = rtc_restored - elapsed_seconds();
+    }
     rtc_frozen = 0;
     rtc_halted = 0;
     rtc_carry = 0;

@@ -22,8 +22,20 @@ typedef struct {		//(modified stateheader)
 	char reserved3;
 	u32 sram_checksum;	//checksum of rom using SRAM e000-ffff	
 	u32 zero;	//=0
-	char reserved4[32];  //="CFG"
+	char reserved4[32];  //="CFG", then the software-RTC epoch (#49 item 5)
 } configdata;
+
+//Where the persisted software-RTC clock lives inside configdata.reserved4.
+//The template only ever fills the first four bytes ("CFG"), so this adds no
+//field and does not change the record's size -- other Goomba-family forks
+//that share this layout keep reading it unchanged, and the magic distinguishes
+//a clock we wrote from their zeroes.
+#define RTC_EPOCH_MAGIC     "RTC1"
+#define RTC_EPOCH_MAGIC_OFF 8
+#define RTC_EPOCH_OFF       12
+
+u32 rtc_get_epoch(void);          //rtc.c
+void rtc_restore_epoch(u32 seconds);
 
 void bytecopy(u8 *dst,u8 *src,int count);
 void flush_end_sram(void);

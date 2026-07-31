@@ -91,6 +91,10 @@
         "description": "MBC1 multicart 4-bit BANK1 banking - verified via .sav inspection in test_mbc1m.py, not a screenshot",
         "skip_visual": true
     },
+    "mbc3_rtc_persist_test": {
+        "description": "software-RTC epoch persistence across a power cycle - verified via .sav inspection in test_rtc_persist.py, not a screenshot",
+        "skip_visual": true
+    },
     "sram_owner_test_a": {
         "description": "cross-game SRAM ownership probe A - verified via .sav inspection in test_sram_ownership.py, not a screenshot",
         "skip_visual": true
