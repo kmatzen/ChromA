@@ -102,6 +102,17 @@ line0x:
 	strb_ r1,scanline		@reset scanline count
 @	bl newframe		@display update
 
+	@ Drop the window's latched WY coincidence, and re-arm it at once if WY
+	@ is 0 (#146).  tobuffer's crossing test is s0 < wy <= s1, which cannot
+	@ see wy == 0 because the frame's first batch starts at line 0 -- and
+	@ LY == WY does hold there, so a WY=0 window is latched from the start.
+	@ Missing that hid the window outright: Pokemon Pinball moved 78%.
+	ldrb_ r0,windowY
+	cmp r0,#0
+	moveq r0,#1
+	movne r0,#0
+	strb_ r0,window_latched
+
 	@ Initialize mid-frame palette tracking
 	mov r0,#0
 	strb_ r0,pal_dirty

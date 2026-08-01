@@ -1770,9 +1770,12 @@ newmode_impl:
 	addmi r0,r0,#1
 	cmp r0,#144
 	movge r0,#0
-	ldrb_ r1,windowY
-	cmp r0,r1
-	blt entermode0
+	@Latched WY coincidence, not `scanline >= windowY` (#146): once the line
+	@counter has reached WY the window stays on for the frame even if WY is
+	@raised, and a WY *lowered* past the current line does not turn it on.
+	ldrb_ r1,window_latched
+	cmp r1,#0
+	beq entermode0
 	
 	ldrb_ r1,windowX
 	cmp r1,#166
@@ -2040,6 +2043,22 @@ tobuffer:
 	bge 0f
 	cmp r2,addy
 	blt 0f
+	@The line counter has reached WY, so the window is latched on for the
+	@rest of the frame (#146).  Before the LCDC bit 5 gate below on purpose:
+	@hardware performs the LY == WY comparison whether or not the window is
+	@enabled, and only consults bit 5 when it comes to drawing.
+	@The line counter has reached WY, so the window is latched on for the
+	@rest of the frame (#146).  Before the LCDC bit 5 gate below on purpose:
+	@hardware performs the LY == WY comparison whether or not the window is
+	@enabled, and only consults bit 5 when it comes to drawing.
+	@
+	@r0 holds the batch's line count and is live on every path out of here,
+	@including the `beq 0f` below -- clobbering it to reach a literal-pool
+	@address corrupted the buffer fill and moved Pokemon Pinball 78%.  r1 is
+	@reloaded immediately below, so it is the only free register here, and
+	@a globalptr-relative store needs no second one.
+	mov r1,#1
+	strb_ r1,window_latched
 	@check if will reach a new mode, can only be in "no window" since window wasn't hit yet
 	ldrb_ r1,lcdctrl
 	tst r1,#0x20

@@ -486,7 +486,12 @@ RECENT_TILENUM_SIZE = 128
     _m_ dontstop_,1
 	 _m_ hackflags,1
 	 _m_ hackflags2,1
- _m_ ,1
+@The window's WY coincidence, latched for the rest of the frame (#146).  Put
+@in the map's existing padding byte rather than in EWRAM on purpose: tobuffer
+@sets it, and that path is hot enough that reaching a literal-pool address
+@there cost 27% of a Pokemon Yellow capture.  globalptr-relative makes it one
+@instruction with no scratch register and no stack.
+ _m_ window_latched,1
 			@lcd.s (wram_globals6)
  _m_ FF41_R_function,4
  _m_ FF41_R_vblank_function,4
