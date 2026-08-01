@@ -36,11 +36,22 @@ What this GB/GBC emulator implements, what it's missing, and why.
 
 ### Gaps
 
-**STOP speed-switch duration not modelled** — PARTIAL
-> The CGB speed switch is instantaneous where hardware stalls the CPU for
-> ~2050 M-cycles (#152).
+**STOP fully modelled** — FIXED (#152)
+> The CGB speed switch now stalls the CPU for 2050 M-cycles (8200 T-cycles),
+> as hardware does, instead of switching between one instruction and the
+> next.  The debt is simply charged to `cycles`; the timeout chain already
+> pays out a scanline at a time, so DIV, the timer and the PPU all advance
+> across the stall.
 >
-> Stop mode itself is now implemented: a STOP with no armed speed switch
+> mGBA's Game Boy core switches instantaneously, so DIV across the STOP no
+> longer agrees with it tick-for-tick (~34 versus ~0).  `test_stop_div.py`
+> was rewritten to assert what it actually means -- that DIV is not *reset*,
+> a bound on forward motion which a reset cannot satisfy because it moves DIV
+> the other way.  Its previous "agrees with mGBA to within a few ticks"
+> phrasing could not tell a spurious reset from correctly-modelled elapsed
+> time.  The DIV-*reset* claim in #56 item 4 remains disproved and unimplemented.
+>
+> Stop mode itself is also implemented: a STOP with no armed speed switch
 > parks the CPU until a joypad line selected in FF00 is driven low.  This
 > entry previously read "WON'T FIX -- blocking was attempted but hangs games
 > at boot (games use STOP during init without interrupts enabled)".  That

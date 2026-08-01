@@ -1985,6 +1985,13 @@ _10:@	STOP	stops the processor until an (joypad) interrupt.
 
 stop_speedswitch:
 	bl_long speedswitch
+	@Hardware stalls the CPU across the switch rather than changing speed
+	@between one instruction and the next (#152).  Charging it here just
+	@drives `cycles` well negative; the timeout chain already pays out a
+	@scanline at a time, so a multi-scanline debt unwinds by itself and
+	@DIV, the timer and the PPU all advance across the stall as they should.
+	ldr r0,=SPEED_SWITCH_CYCLES
+	sub cycles,cycles,r0
 	add gb_pc,gb_pc,#1		@skip the byte after STOP
 	fetch 4
 
