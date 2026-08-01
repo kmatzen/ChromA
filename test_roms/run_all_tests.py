@@ -93,6 +93,12 @@ def main():
     suite("SRAM Record Chain Unit Tests", "test_sram_chain_unit.py", TIMEOUT_UNIT)
     suite("ROM Bank Table Unit Tests", "test_rom_banks_unit.py", TIMEOUT_UNIT)
 
+    # 0a-3. CGB boot-palette licensee gate (issue #154).  Also invisible to the
+    # screenshot suites: every Nintendo title in the bundle keeps its palette,
+    # so the thing that changed -- third-party carts no longer colliding into
+    # the title-hash table -- moves no capture we have a ROM for.
+    suite("CGB Boot Palette Unit Tests", "test_gbc_palette_unit.py", TIMEOUT_UNIT)
+
     # 0b. mgba_runner argument validation (issue #58) -- no ROM or toolchain
     # needed, and it guards the harness's own ability to report a problem, so
     # run it before anything that depends on the runner behaving.
@@ -105,6 +111,13 @@ def main():
     # 0d. Accuracy suite config self-checks (issue #65) -- host-native, and
     # they guard the reference screens the suite below compares against.
     suite("Accuracy Suite Self-Checks", "test_accuracy_selfcheck.py", TIMEOUT_UNIT)
+
+    # 0d-2. Accuracy-ROM text decoder (issue #138) -- host-native, running
+    # against the committed reference screens.  A wrong glyph label is worse
+    # than no decoder: "A: 05" decoding as "A: 0S" reads as a plausible value
+    # and sends someone after the wrong bug.
+    suite("Accuracy Diagnostic Decoder", "test_diagnostics_selfcheck.py",
+          TIMEOUT_UNIT)
 
     # 0e. Hardware-accuracy test ROMs (Mooneye + Blargg), issue #65.
     #
@@ -162,6 +175,9 @@ def main():
     # probe twice -- once in ChromA, once in mGBA's own GB core -- so it needs
     # room for two short emulator runs.
     suite("Serial Transfer Test", "test_serial.py", TIMEOUT_SHORT_ROM * 2)
+    # 4a-2. LY after an LCD enable (issue #145).  Runs the probe twice -- once
+    # in ChromA, once in mGBA's own GB core -- so it needs two short runs.
+    suite("LCD-On LY Timing Test", "test_lcdon_ly.py", TIMEOUT_SHORT_ROM * 2)
 
     # 4b. LCDC writes must not clobber the guest F register (issue #95).  Runs
     # the probe twice -- once in ChromA, once in mGBA's own GB core as the

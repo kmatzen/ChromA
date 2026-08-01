@@ -2906,6 +2906,24 @@ FF46_W:@		sprite DMA transfer
 	bne 1f
 	@first burn 3*4 cycles, then burn 160*4 cycles
 	sub cycles,cycles,#CYCLE*163*4
+	@...but for the loop the game actually wrote, not always a 40-iteration
+	@one (#151).  The pattern match never looked at the counter byte, so
+	@every matching loop was charged the canonical 40 iterations -- right
+	@for the wait loop games copy out of the manual, wrong for anything that
+	@tunes the count.  mooneye's oam_dma_timing and oam_dma_restart both use
+	@this exact pattern with a count chosen to land inside the transfer, and
+	@collapsing it to 40 moved their OAM read past the end of the DMA.
+	@
+	@Each extra iteration is 4 machine cycles: 16 T-cycles, 256 of these.
+	@A count of 0 means 256 iterations, since `dec a` from 0 gives 0xFF.
+	@At the canonical 40 this subtracts nothing, so every game that uses the
+	@manual's loop is charged exactly what it was before -- compare_builds.py
+	@against a stock build reports 63 captures, 0 moved.
+	ldrb r0,[gb_pc,#1]
+	cmp r0,#0
+	moveq r0,#256
+	sub r0,r0,#40
+	sub cycles,cycles,r0,lsl#8
 	@return to RET instruction _C9
 	ldr lr,[r10,#0xC9*4]
 1:
@@ -3930,7 +3948,24 @@ FF40W_entry:
 	ldr r1,=ei_finish
 	cmp addy,r1
 #if EARLY_LINE_0
-	ldr r2,=toLineZero
+	@Enter at line0, not toLineZero (#145).  toLineZero is not "the start of
+	@a frame": it is the *tail of line 153*, the part where LY reads 0 for
+	@the rest of that line rather than 153.  Entering there on an LCD enable
+	@replayed that tail, so LY sat at 0 for it and then for the whole of
+	@line 0 -- two lines, and mooneye's lcdon_timing-GS saw LY=$00 at cycle
+	@$82 where it wants $01.
+	@
+	@Measured with test_roms/lcdon_ly_test.gb, which samples LY at every
+	@delay from 0 to 255 machine cycles after the enable:
+	@
+	@	mGBA    LY 0->1 at 109, 1->2 at 223
+	@	before  LY 0->1 at 223            (one step, a line late)
+	@
+	@ChromA's step landed exactly on mGBA's *second* one, which is the
+	@signature of a whole line being spent rather than of a mistimed one --
+	@and why #145's attempt at trimming line 0 by 200 cycles changed the
+	@diagnostic not at all.
+	ldr r2,=line0
 #else
 	ldr r2,=line145_to_end
 #endif
@@ -3947,6 +3982,16 @@ FF40W_entry:
 	strb_ r2,scanline
 
 	and cycles,cycles,#CYC_MASK
+#if EARLY_LINE_0
+	@...and start that line two machine cycles in (#145).  With the entry
+	@moved to line0 above, LY stepped at 111 and 225 machine cycles against
+	@mGBA's 109 and 223 -- the whole timeline a constant two cycles late,
+	@not a first line of the wrong length.  Pre-spending them lines both
+	@steps up.  Safe against the flag bits: they occupy the low CYC_SHIFT
+	@bits and this subtracts a multiple of CYCLE, which cannot borrow into
+	@them.
+	sub cycles,cycles,#LCDON_ENABLE_DELAY
+#endif
 0:
 	stmfd sp!,{r0,lr}
 	bl tobuffer
