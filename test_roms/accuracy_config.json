@@ -263,7 +263,8 @@
     "mooneye-test-suite/acceptance/timer/tima_reload": {
       "rom": "mooneye-test-suite/acceptance/timer/tima_reload.gb",
       "frames": 600,
-      "expected_fail": true
+      "expected_fail": false,
+      "note": "fixed by the 4-cycle TIMA reload window (#142)"
     },
     "mooneye-test-suite/acceptance/timer/tima_write_reloading": {
       "rom": "mooneye-test-suite/acceptance/timer/tima_write_reloading.gb",

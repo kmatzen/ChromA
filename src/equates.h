@@ -560,6 +560,11 @@ RECENT_TILENUM_SIZE = 128
 @				EQU 0x08
  CYC_MASK		= CYCLE-1	@Mask
 
+@ Hardware holds TIMA at 0 for 4 T-cycles after an overflow before loading
+@ TMA (#142).  Expressed in the emulator's own cycle unit, which is 16 per
+@ T-cycle -- timercyclesperscanline is 456<<4.
+ TIMA_RELOAD_WINDOW = 4*16
+
  SINGLE_SPEED = 456*CYCLE
  DOUBLE_SPEED = 912*CYCLE
 
