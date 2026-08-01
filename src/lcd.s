@@ -3925,6 +3925,39 @@ FF40W_entry:
 	@silently lost) and its stack push orphaned.  Update the saved copy
 	@instead.  Tested against ei_finish specifically rather than the shared
 	@sentinel, so this cannot misfire when some other hijack is live.
+	@Give back any borrow a sub-scanline event is holding first (#140).
+	@This path takes the nexttimeout slot unconditionally -- the ei_finish
+	@test below is a special case for one hijack, not a general one -- so a
+	@parked subline_dispatch would simply be lost, and its borrow never
+	@repaid.  That is not a transient: subline_owed stays non-zero forever
+	@after, which stops the mechanism arming again *and* leaves
+	@line_cycles_base permanently short, so every position derived from it
+	@by _FF04R/_FF05R is wrong for the rest of the run.  Measured before
+	@this: arming stopped dead at frame ~120 of Pokemon Red and never
+	@resumed.
+	@
+	@Restoring nexttimeout from the sub slot here also keeps the ei_finish
+	@test below meaningful -- it sees the real scanline handler rather than
+	@our hijack.  The cycle count is restored for the invariant's sake even
+	@though the `and cycles,cycles,#CYC_MASK` below discards it.
+	ldr r1,=subline_owed
+	ldr r2,[r1]
+	cmp r2,#0
+	beq 6f
+	mov addy,#0
+	str addy,[r1]
+	add cycles,cycles,r2
+	ldr r1,=line_cycles_base
+	ldr addy,[r1]
+	add addy,addy,r2
+	str addy,[r1]
+	ldr_ addy,scanline_oam_position
+	add addy,addy,r2
+	str_ addy,scanline_oam_position
+	ldr r1,=nexttimeout_sub
+	ldr r1,[r1]
+	str_ r1,nexttimeout
+6:
 	@addy (r12), not r3 -- see the note above: r3 is gb_flg.
 	ldr_ addy,nexttimeout
 	ldr r1,=ei_finish

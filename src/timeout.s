@@ -709,6 +709,13 @@ subline_arm:
 	str r0,[r1]			@line_cycles_base -= owed, so the
 					@position derived by _FF04R/_FF05R and
 					@friends is untouched (#127)
+	@newmode and tobuffer do not subtract from a base -- they compare
+	@`cycles` straight against scanline_oam_position to decide whether they
+	@are past the OAM scan.  Shifting cycles under them flips that test, so
+	@shift the threshold by the same amount.
+	ldr_ r0,scanline_oam_position
+	sub r0,r0,r2
+	str_ r0,scanline_oam_position
 	sub cycles,cycles,r2
 
 	ldr_ r0,nexttimeout
@@ -728,6 +735,9 @@ subline_dispatch:
 	ldr r2,[r0]
 	add r2,r2,r1
 	str r2,[r0]
+	ldr_ r2,scanline_oam_position
+	add r2,r2,r1
+	str_ r2,scanline_oam_position
 	ldr r0,=nexttimeout_sub
 	ldr r0,[r0]
 	str_ r0,nexttimeout
