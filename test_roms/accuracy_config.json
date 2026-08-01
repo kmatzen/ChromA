@@ -223,7 +223,7 @@
     "mooneye-test-suite/acceptance/timer/tim00": {
       "rom": "mooneye-test-suite/acceptance/timer/tim00.gb",
       "frames": 600,
-      "expected_fail": true
+      "expected_fail": false
     },
     "mooneye-test-suite/acceptance/timer/tim00_div_trigger": {
       "rom": "mooneye-test-suite/acceptance/timer/tim00_div_trigger.gb",
@@ -248,17 +248,17 @@
     "mooneye-test-suite/acceptance/timer/tim10_div_trigger": {
       "rom": "mooneye-test-suite/acceptance/timer/tim10_div_trigger.gb",
       "frames": 600,
-      "expected_fail": true
+      "expected_fail": false
     },
     "mooneye-test-suite/acceptance/timer/tim11": {
       "rom": "mooneye-test-suite/acceptance/timer/tim11.gb",
       "frames": 600,
-      "expected_fail": true
+      "expected_fail": false
     },
     "mooneye-test-suite/acceptance/timer/tim11_div_trigger": {
       "rom": "mooneye-test-suite/acceptance/timer/tim11_div_trigger.gb",
       "frames": 600,
-      "expected_fail": true
+      "expected_fail": false
     },
     "mooneye-test-suite/acceptance/timer/tima_reload": {
       "rom": "mooneye-test-suite/acceptance/timer/tima_reload.gb",
