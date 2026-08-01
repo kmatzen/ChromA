@@ -1284,6 +1284,33 @@ _FF04W:@		DIV - Divider Register
 	rsb r0,r1,#0
 	mov r0,r0,lsl#12
 	str_ r0,dividereg
+
+	@ TIMA is clocked from a bit of this same prescaler, so resetting DIV
+	@ restarts TIMA's phase as well (#44 item 4).  timercounter carries TIMA
+	@ in bits 31-24 and the sub-tick fraction below, and nothing was rebasing
+	@ that fraction -- so a game that reset DIV kept whatever phase had
+	@ accumulated.  Measured with a 256-point TIMA-vs-elapsed sweep: mGBA
+	@ stepped every ~51 iterations at TAC=00, ChromA stepped every 1-2.
+	@
+	@ Keep the TIMA byte and rebase the fraction to -(elapsed<<shift), the
+	@ same trick used for dividereg above, so the projection reads exactly
+	@ zero elapsed at this instant.
+	ldrb_ r2,timerctrl
+	ands r2,r2,#3
+	moveq r2,#4
+	mov r0,#18
+	sub r2,r0,r2,lsl#1		@r2 = shift for the selected frequency
+	@ The projection is timercounter + elapsed<<shift, so to make it read
+	@ exactly TIMA with no fraction at this instant, store TIMA<<24 minus
+	@ that term -- borrow and all.  Masking the fraction instead loses the
+	@ borrow out of bit 23 and leaves the counter a whole tick high, which
+	@ showed up as the sweep stepping again two iterations after the first
+	@ correct step.
+	mov r0,r1,lsl r2		@elapsed<<shift
+	ldr_ r2,timercounter
+	and r2,r2,#0xFF000000		@keep TIMA itself
+	sub r0,r2,r0
+	str_ r0,timercounter
 	mov pc,lr
 @----------------------------------------------------------------------------
 _FF05W:@		TIMA - Timer counter
