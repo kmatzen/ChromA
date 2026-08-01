@@ -95,6 +95,14 @@ jobs:
     - name: Check documentation against source
       run: python3 scripts/check_docs.py
 
+    # The game compatibility table in README.md and on the demo page is
+    # generated from the regression suite's own config (#138 item 5), so it
+    # cannot claim a game works unless CI is checking that it does.  This
+    # fails if the suite gained or lost a game and the table was not
+    # regenerated.  Host-native: reads JSON, writes nothing.
+    - name: Check generated compatibility table
+      run: python3 scripts/gen_compat_table.py --check
+
     - name: Download GBA binary
       uses: actions/download-artifact@v4
       with:
