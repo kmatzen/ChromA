@@ -36,10 +36,29 @@ What this GB/GBC emulator implements, what it's missing, and why.
 
 ### Gaps
 
-**STOP instruction simplified** — WON'T FIX
-> Only handles double-speed toggle, doesn't block for joypad. Blocking was
-> attempted but hangs games at boot (games use STOP during init without
-> interrupts enabled). No known game depends on exact STOP wait behavior.
+**STOP speed-switch duration not modelled** — PARTIAL
+> The CGB speed switch is instantaneous where hardware stalls the CPU for
+> ~2050 M-cycles (#152).
+>
+> Stop mode itself is now implemented: a STOP with no armed speed switch
+> parks the CPU until a joypad line selected in FF00 is driven low.  This
+> entry previously read "WON'T FIX -- blocking was attempted but hangs games
+> at boot (games use STOP during init without interrupts enabled)".  That
+> diagnosis identified the symptom but not the cause: the wake was being
+> driven off interrupts, and a game that STOPs with interrupts disabled can
+> never satisfy that condition.  Hardware does not consult IE, IF or IME at
+> all -- it leaves STOP on the joypad lines themselves -- so waking off
+> `joy0state` directly is both correct and unable to produce that hang.
+>
+> Verified by `test_roms/test_stop_mode.py`, which asserts the split that
+> distinguishes a correct build: the probe must *not* finish with no input
+> held, and must finish with a button held.  A build that ignores STOP
+> finishes both arms and a build that parks forever finishes neither.
+> `compare_builds.py` reports 0 of 65 captures moved against a stock build.
+>
+> Note mGBA's own Game Boy core runs straight through a plain STOP, so it
+> cannot serve as the reference here; the assertion is against hardware
+> behaviour directly.
 
 **Blargg instr_timing fails on RST 38h** — NOT AN RST BUG
 > A custom test ROM confirms all 8 RST variants have identical timing

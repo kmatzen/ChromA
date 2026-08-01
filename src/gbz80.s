@@ -1956,7 +1956,35 @@ _10:@	STOP	stops the processor until an (joypad) interrupt.
 @----------------------------------------------------------------------------
 	ldrb_ r0,doublespeed
 	tst r0,#1
-	blne_long speedswitch
+	bne stop_speedswitch
+
+	@No armed speed switch, so this is a real STOP: the CPU parks until a
+	@joypad line goes low (#152).  This used to be a NOP that skipped a byte.
+	@
+	@Parked exactly the way HALT parks -- rewind gb_pc onto the opcode and
+	@zero the cycle budget, so the next fetch falls straight into the
+	@timeout chain and the scanline machine keeps advancing.  STOP then
+	@re-executes each time round and re-tests the joypad.  That matters
+	@because joy0state is only rebuilt once a frame by refreshNESjoypads,
+	@so the wake has to be polled from a path that lets frames complete.
+	@
+	@Unlike HALT the wake is NOT interrupt-driven: hardware leaves STOP on
+	@the joypad lines themselves, with no dependence on IE, IF or IME.
+	@joy0state carries a set bit per pressed button, so any non-zero value
+	@is a line held low at FF00 and resumes the CPU.
+	ldrb_ r0,joy0state
+	movs r0,r0
+	bne 1f				@already held down: STOP does not park at all
+	sub gb_pc,gb_pc,#1		@re-execute the STOP opcode
+	and cycles,cycles,#CYC_MASK
+	orr cycles,cycles,#CYC_STOP
+	fetch 4
+1:	bic cycles,cycles,#CYC_STOP
+	add gb_pc,gb_pc,#1		@skip the byte after STOP
+	fetch 4
+
+stop_speedswitch:
+	bl_long speedswitch
 	add gb_pc,gb_pc,#1		@skip the byte after STOP
 	fetch 4
 

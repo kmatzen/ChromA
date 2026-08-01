@@ -554,6 +554,7 @@ RECENT_TILENUM_SIZE = 128
  CYC_IE			= 0x01 @interrupts are enabled
  CYC_LCD_ENABLED = 0x02  @LCD controller is enabled
  CYC_HALT		= 0x04  @CPU is halted (#41 item 2)
+ CYC_STOP		= 0x08  @CPU is in STOP mode, waiting on the joypad (#152)
 @ CYC_LYC 		= 0x08  @LY matches LYC
 @ BRANCH			= 0x02 @branch instruction encountered
 @				EQU 0x04

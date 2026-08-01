@@ -395,6 +395,15 @@ jobs:
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
 
+    # The other half of STOP (#152): with no speed switch armed the CPU parks
+    # until a joypad line goes low.  Needs both arms -- no input must not
+    # finish, a held button must -- because either one alone passes on a
+    # build that is broken in the opposite direction.
+    - name: Run STOP mode test
+      run: python3 test_roms/test_stop_mode.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
     # MBC1 multicarts wire BANK1 as 4 bits, and nothing in the header says so
     # -- detection is by content (#50).
     - name: Run MBC1 multicart test
