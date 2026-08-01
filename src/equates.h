@@ -560,6 +560,11 @@ RECENT_TILENUM_SIZE = 128
 @				EQU 0x08
  CYC_MASK		= CYCLE-1	@Mask
 
+@ A serial transfer is 8 bits at the 8192Hz shift clock -- 4096 T-cycles --
+@ or 32x faster on the CGB's optional clock (#153).
+ SERIAL_CYCLES_NORMAL = 4096*CYCLE
+ SERIAL_CYCLES_FAST = 128*CYCLE
+
  SINGLE_SPEED = 456*CYCLE
  DOUBLE_SPEED = 912*CYCLE
 

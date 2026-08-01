@@ -3147,6 +3147,27 @@ pal_before:	.skip 128	@ full palette (BG+OBJ) at frame start
 pal_after:	.skip 64	@ BG palette after mid-frame change
 pal_after_gba:	.skip 64	@ gamma-corrected pal_after for VCount handler
 
+ @ Serial transfer state (#153).
+ @
+ @ SB was write-only and read back a flat 0xFF, and an internal-clock
+ @ transfer completed at the next scanline boundary -- at most 456 T-cycles
+ @ against the 4096 a DMG transfer actually takes.
+ @
+ @ serial_data holds the byte the game wrote.  Making SB read that back was
+ @ tried once during the #110 work and had to be reverted, because Pokemon's
+ @ link-cable detection writes a byte, starts a transfer and reads SB back:
+ @ if it sees its own byte it concludes a cable is attached.  The missing
+ @ half was the transfer: with no cable, the other end holds the line high,
+ @ so a completed transfer shifts in 0xFF and SB reads 0xFF.  Completion
+ @ therefore writes 0xFF here, which leaves every post-transfer read exactly
+ @ what it was before this change; only reads *before* the transfer finishes
+ @ see the written byte, which is what hardware does.
+ .global serial_data
+ .global serial_countdown
+serial_data:	.byte 0
+	.align 2
+serial_countdown:	.word 0
+
  .global pal_split_lines
  .global pal_split_palettes
  .global pal_split_count
