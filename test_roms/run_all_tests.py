@@ -112,6 +112,13 @@ def main():
     # they guard the reference screens the suite below compares against.
     suite("Accuracy Suite Self-Checks", "test_accuracy_selfcheck.py", TIMEOUT_UNIT)
 
+    # 0d-2. Accuracy-ROM text decoder (issue #138) -- host-native, running
+    # against the committed reference screens.  A wrong glyph label is worse
+    # than no decoder: "A: 05" decoding as "A: 0S" reads as a plausible value
+    # and sends someone after the wrong bug.
+    suite("Accuracy Diagnostic Decoder", "test_diagnostics_selfcheck.py",
+          TIMEOUT_UNIT)
+
     # 0e. Hardware-accuracy test ROMs (Mooneye + Blargg), issue #65.
     #
     # Skipped rather than failed when the pack has not been fetched: these are
