@@ -565,6 +565,11 @@ RECENT_TILENUM_SIZE = 128
  SERIAL_CYCLES_NORMAL = 4096*CYCLE
  SERIAL_CYCLES_FAST = 128*CYCLE
 
+@ Hardware holds TIMA at 0 for 4 T-cycles after an overflow before loading
+@ TMA (#142).  Expressed in the emulator's own cycle unit, which is 16 per
+@ T-cycle -- timercyclesperscanline is 456<<4.
+ TIMA_RELOAD_WINDOW = 4*16
+
 @ Machine cycles between an FF40 write enabling the LCD and the first line
 @ starting, measured against mGBA with test_roms/lcdon_ly_test.gb (#145).
  LCDON_ENABLE_DELAY = 1*4*CYCLE

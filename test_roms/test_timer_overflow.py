@@ -104,12 +104,29 @@ def main():
     bad = []
 
     # A: once TIMA has overflowed it reloads from TMA, so it can never again
-    # be below TMA.  No timing assumption -- this is a hardware invariant.
-    if res[R_MIN] < TMA:
-        bad.append(f"TIMA read {res[R_MIN]:#04x}, below TMA={TMA:#04x} -- it "
-                   f"reloads from TMA on overflow, so this value is "
-                   f"unreachable on hardware.  The scanline wrap drops the "
-                   f"extra periods and the sub-period remainder")
+    # be below TMA -- with exactly one exception, which this test originally
+    # claimed did not exist ("no timing assumption -- this is a hardware
+    # invariant").  Hardware holds TIMA at 0 for 4 T-cycles after the overflow
+    # before loading TMA, so 0x00 is reachable, and only 0x00 (#142).
+    #
+    # Allowing 0x00 does not blunt what this check was written for: the bug it
+    # caught (#44 item 1) dropped the extra periods and the sub-period
+    # remainder and produced values like 0xd9 and 0xf5 -- below TMA but not
+    # zero -- which still fail here.
+    #
+    # Worth knowing that mGBA does *not* produce 0x00 on this ROM even though
+    # it implements the window (it passes timer/tima_reload): its sampling loop
+    # steps over the 4 T-cycles, and ChromA's read lands 1-2 T-cycles past the
+    # overflow instead.  That offset is the open read-projection phase error in
+    # #143, which the reload window makes visible here rather than causing --
+    # before it, a read in the window returned TMA and was indistinguishable
+    # from a read after it.
+    if res[R_MIN] < TMA and res[R_MIN] != 0x00:
+        bad.append(f"TIMA read {res[R_MIN]:#04x}, below TMA={TMA:#04x} and not "
+                   f"the 0x00 of the reload window -- it reloads from TMA on "
+                   f"overflow, so this value is unreachable on hardware.  The "
+                   f"scanline wrap drops the extra periods and the sub-period "
+                   f"remainder")
     if res[R_MAX] != 0xFF:
         bad.append(f"TIMA never reached 0xFF (max {res[R_MAX]:#04x}) -- it is "
                    f"not counting up to the overflow at all")
