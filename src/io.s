@@ -1488,6 +1488,9 @@ _FF05R:@		TIMA - Timer counter (sub-scanline accurate)
 	moveq r1,#4
 	mov r2,#18
 	sub r1,r2,r1,lsl#1		@shift amount (same as timeout.s)
+	mov addy,r1			@keep the shift: r1 is about to hold TMA.
+					@r3 is gb_flg here, so addy is the only
+					@fourth scratch an IO handler may touch.
 	ldr_ r2,timercounter
 	adds r0,r2,r0,lsl r1		@timercounter + elapsed<<shift
 	bcc 2f
@@ -1503,7 +1506,21 @@ _FF05R:@		TIMA - Timer counter (sub-scanline accurate)
 0:	cmp r0,r2
 	subcs r0,r0,r2
 	bcs 0b
-3:	add r0,r0,r1,lsl#24
+3:	@ r0 is now the distance past the most recent overflow, at the same
+	@ fixed-point scale as the counter.  Hardware does not reload TMA at
+	@ that instant: TIMA holds 0 for 4 T-cycles first, and only then takes
+	@ TMA (#142).  Nothing modelled that, so the reload read as instant and
+	@ mooneye's timer/tima_reload saw TMA where it asserts 00.
+	@
+	@ One T-cycle is 16 of these cycles -- timercyclesperscanline is 456<<4
+	@ -- so the window is 64, scaled by the same shift the projection uses.
+	@ That holds in double speed too: SINGLE/DOUBLE_SPEED are 456 and 912
+	@ times the same CYCLE, so the per-T-cycle scaling does not change.
+	mov r2,#TIMA_RELOAD_WINDOW
+	cmp r0,r2,lsl addy
+	movlo r0,#0			@inside the window: TIMA reads 0
+	movlo pc,lr
+	add r0,r0,r1,lsl#24
 2:	mov r0,r0,lsr#24		@extract TIMA byte (bits 31-24)
 	mov pc,lr
 _FF05R_disabled:
