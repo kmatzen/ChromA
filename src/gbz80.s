@@ -3154,6 +3154,19 @@ CANARY2:	.skip 4
  .global cgb_undoc_regs
 io_dma_shadow:	.byte 0		@FF46 DMA: reads back the last source page written
 cgb_undoc_regs:	.skip 4		@FF6C (OPRI), FF72, FF73, FF74 -- CGB only
+ .global window_latched
+@Set once the window's WY coincidence has been seen this frame, cleared by
+@newframeinit (#146).  Hardware latches the window on when LY reaches WY and
+@keeps it on for the rest of the frame, so raising WY mid-frame does not
+@retract a window that is already showing -- which `scanline >= windowY`,
+@recomputed on every register write, got wrong in both directions.
+@
+@Kept in EWRAM rather than the globalptr block deliberately: adding a byte
+@there shifts every later offset and the savestate layout with it.  This is
+@per-frame scratch that newframeinit rebuilds, so it does not need saving.
+window_latched:	.byte 0
+	.align 2
+
  .global line_cycles_base
 	.align 2
 @The value `cycles` holds at the start of the current scanline.  Position

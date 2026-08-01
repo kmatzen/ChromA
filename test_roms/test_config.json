@@ -99,6 +99,10 @@
         "description": "what STOP does to DIV and KEY1 across a CGB speed switch - verified via .sav inspection in test_stop_div.py, not a screenshot",
         "skip_visual": true
     },
+    "wy_latch_test": {
+        "description": "the window's WY coincidence latches for the rest of the frame (issue #146) - verified by band-relative screen inspection in test_wy_latch.py, not against a stored baseline",
+        "skip_visual": true
+    },
     "stop_mode_test": {
         "description": "STOP with no armed speed switch parks the CPU until a joypad line goes low (issue #152) - verified via .sav inspection in test_stop_mode.py across a no-input and a button-held run, not a screenshot",
         "skip_visual": true
