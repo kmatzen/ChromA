@@ -102,7 +102,7 @@ CI runs on every PR (custom ROM tests) and on every push to main (full suite wit
 
 Each ROM is rendered twice: once natively on mGBA's own Game Boy core (the reference, committed under `test_roms/baselines/accuracy/`) and once wrapped in `chroma.gba`, then compared pixel-for-pixel over the 160x144 LCD area. Because the reference never comes from ChromA, `--rebaseline` cannot turn current broken output into the new truth.
 
-Current state: **16 pass, 33 expected-fail, 7 not covered**. The expected failures are the open accuracy bugs (#41, #44, #52, #53, #56, #106); they report XFAIL and do not fail the build, but a fix flips one to XPASS, which does — so progress has to be recorded in `accuracy_config.json` rather than going unnoticed. The 7 uncovered ROMs are ones mGBA itself does not pass, so it cannot supply a correct reference; they are listed with reasons under `unusable` and reported on every run.
+Current state: **20 pass, 29 expected-fail, 7 not covered**. The expected failures are the open accuracy bugs (#41, #44, #52, #53, #56, #106); they report XFAIL and do not fail the build, but a fix flips one to XPASS, which does — so progress has to be recorded in `accuracy_config.json` rather than going unnoticed. The 7 uncovered ROMs are ones mGBA itself does not pass, so it cannot supply a correct reference; they are listed with reasons under `unusable` and reported on every run.
 
 ## Test baselines
 
