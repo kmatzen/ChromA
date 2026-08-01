@@ -388,10 +388,43 @@ PAL03:     @Set SGB Palette 0,3 Data
 	mov r0,#16+2
 	b 2b
 
+@The four area-designation commands decode into the same 20x18 attribute map
+@ATTR_SET fills from a stored ATF (#136).  All four used to return here
+@immediately, so a game that colourised with them kept whatever the last
+@ATTR_SET had left.  The rules are in src/sgb_attr.c, which is checkable on
+@the host; this just hands over the packet and the map.
+@
+@r3 is gb_flg and r12 is addy, both caller-saved across the C call, and the
+@dispatch enters these with nothing stacked -- hence saving r3 alongside lr,
+@the same thing PAL_SET below does.
 ATTR_BLK:  @"Block" Area Designation Mode
+	stmfd sp!,{r3,lr}
+	mov r0,addy
+	ldr r1,=SGB_ATTRIBUTES
+	blx_long sgb_attr_blk
+	ldmfd sp!,{r3,lr}
+	bx lr
 ATTR_LIN:  @"Line" Area Designation Mode
+	stmfd sp!,{r3,lr}
+	mov r0,addy
+	ldr r1,=SGB_ATTRIBUTES
+	blx_long sgb_attr_lin
+	ldmfd sp!,{r3,lr}
+	bx lr
 ATTR_DIV:  @"Divide" Area Designation Mode
+	stmfd sp!,{r3,lr}
+	mov r0,addy
+	ldr r1,=SGB_ATTRIBUTES
+	blx_long sgb_attr_div
+	ldmfd sp!,{r3,lr}
+	bx lr
 ATTR_CHR:  @"1CHR" Area Designation Mode
+	stmfd sp!,{r3,lr}
+	mov r0,addy
+	ldr r1,=SGB_ATTRIBUTES
+	blx_long sgb_attr_chr
+	ldmfd sp!,{r3,lr}
+	bx lr
 SOUND:     @Sound On/Off
 SOU_TRN:   @Transfer Sound PRG/DATA
 	bx lr
