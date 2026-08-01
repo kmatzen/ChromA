@@ -27,6 +27,10 @@
         "description": "TIMA reload-period and DIV-write glitch probe - verified via .sav inspection in test_timer_overflow.py, not a screenshot",
         "skip_visual": true
     },
+    "serial_test": {
+        "description": "serial SB/SC read-back and transfer duration (issue #153) - verified via .sav inspection in test_serial.py, not a screenshot (it never draws anything)",
+        "skip_visual": true
+    },
     "timer_phase_test": {
         "description": "timer phase coherence across scanlines (issue #44 item 1) - verified via .sav inspection in test_timer_phase.py, not a screenshot (it never draws anything)",
         "skip_visual": true

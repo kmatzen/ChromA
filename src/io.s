@@ -1223,11 +1223,24 @@ IO_reset:
 @----------------------------------------------------------------------------
 _FF01W:@		SB - Serial Transfer Data
 @----------------------------------------------------------------------------
+	ldr r1,=serial_data
+	strb r0,[r1]
 	mov pc,lr
 @----------------------------------------------------------------------------
 _FF02W:@		SC - Serial Transfer Ctrl
 @----------------------------------------------------------------------------
 	strb_ r0,stctrl
+	@Starting a transfer on the internal clock arms its duration (#153).
+	@8 bits at the 8192Hz shift clock is 4096 T-cycles; the CGB's fast clock
+	@is 32x that rate, so 128.  One T-cycle is CYCLE of these.
+	and r1,r0,#0x81
+	cmp r1,#0x81
+	movne pc,lr
+	tst r0,#0x02			@CGB fast clock?
+	ldrne r1,=SERIAL_CYCLES_FAST
+	ldreq r1,=SERIAL_CYCLES_NORMAL
+	ldr r0,=serial_countdown
+	str r1,[r0]
 	mov pc,lr
 @----------------------------------------------------------------------------
 _FF56W:@		RP - Infrared Port
@@ -1382,12 +1395,23 @@ _FF50W:@		Undocumented BIOS banking
 @----------------------------------------------------------------------------
 _FF01R:@		SB - Serial Transfer Data
 @----------------------------------------------------------------------------
-	mov r0,#0xff		@When no GB attached
+	@The byte the game wrote, until a transfer completes and shifts in 0xFF
+	@from the idle line (#153).  See the note on serial_data in gbz80.s for
+	@why this cannot simply return 0xFF, and why it cannot simply return the
+	@written byte either.
+	ldr r0,=serial_data
+	ldrb r0,[r0]
 	mov pc,lr
 @----------------------------------------------------------------------------
 _FF02R:@		SC - Serial Transfer Ctrl
 @----------------------------------------------------------------------------
 	ldrb_ r0,stctrl
+	@Unused bits read 1 (#153).  Bit 1 is the CGB clock-speed select and is
+	@a real bit there; on DMG it is unused like the rest.
+	ldrb_ r1,gbcmode
+	cmp r1,#0
+	orrne r0,r0,#0x7C
+	orreq r0,r0,#0x7E
 @	mov r0,#0x00		;0x80 when transfering, 0x00 when finnished.
 	mov pc,lr		@Rc Pro Am ,wants 0x80, Cosmo Tank wants 0x00.
 @----------------------------------------------------------------------------
