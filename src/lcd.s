@@ -3360,7 +3360,7 @@ pal_hdma_wrapper:
 	ldr r1,=pal_vcount_index
 	mov r3,#0
 	strb r3,[r1]
-	ldr r3,=pal_split_lines
+	ldr r3,=pal_split_lines_screen	@ display side (issue #150)
 	ldrb r0,[r3]
 	add r0,r0,#SCREEN_Y_START
 	ldr r1,=pal_vcount_handler
@@ -3395,8 +3395,8 @@ pal_vcount_handler:
 	@ Get current split index and load palette pointer
 	ldr r5,=pal_vcount_index
 	ldrb r5,[r5]
-	ldr r0,=pal_split_palettes
-	add r0,r0,r5,lsl#6		@ r0 = &pal_split_palettes[index * 64]
+	ldr r0,=pal_split_palettes_screen	@ display side (issue #150)
+	add r0,r0,r5,lsl#6		@ r0 = &pal_split_palettes_screen[index * 64]
 	ldr r1,=PALETTE_BASE+256	@ GBA BG palette 8 base
 	mov r2,#8			@ 8 BG palettes
 pal_vcount_loop:
@@ -3414,7 +3414,7 @@ pal_vcount_loop:
 	cmp r5,r6
 	bge pal_vcount_done
 	@ More splits: reprogram VCount for next split scanline
-	ldr r2,=pal_split_lines
+	ldr r2,=pal_split_lines_screen	@ display side (issue #150)
 	ldrb r0,[r2,r5]
 	add r0,r0,#SCREEN_Y_START
 	mov r2,#REG_BASE
@@ -3602,6 +3602,30 @@ newframe_vblank:	@called at line 144	(??? safe to use)
 	movle r2,r0
 	ldr r1,=pal_split_count_screen
 	strb r2,[r1]
+	@ Double-buffer the split data arrays too (issue #150).  Only the entries
+	@ the display will actually replay are copied, and count is zero for the
+	@ overwhelming majority of games, so the common case is this compare and
+	@ nothing else -- no stack traffic, which on this per-frame path is worth
+	@ being careful about (an added stmfd/ldmfd pair moved 70 pixels in #129).
+	cmp r2,#0
+	beq pal_splits_copied
+	stmfd sp!,{r10}			@ globalptr, needed by the ldr_ below
+	ldr r0,=pal_split_lines
+	ldr r1,=pal_split_lines_screen
+	ldmia r0,{r3,r4}		@ all 8 line bytes as 2 words
+	stmia r1,{r3,r4}
+	ldr r0,=pal_split_palettes
+	ldr r1,=pal_split_palettes_screen
+	mov r12,r2			@ splits left to copy
+pal_split_copy_loop:
+	ldmia r0!,{r4-r11}		@ 32 bytes
+	stmia r1!,{r4-r11}
+	ldmia r0!,{r4-r11}		@ 64 bytes = one split's BG palette
+	stmia r1!,{r4-r11}
+	subs r12,r12,#1
+	bne pal_split_copy_loop
+	ldmfd sp!,{r10}
+pal_splits_copied:
 	@ pal_scanline_active is a simple flag: set by ff69_w_tail during
 	@ visible scanlines, cleared by pal_hdma_wrapper at VBlank.
 	@ No persistence needed — the flag naturally reflects each frame.
