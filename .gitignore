@@ -13,4 +13,12 @@ test_roms/unit/test_rle
 # reference screens under test_roms/baselines/accuracy/ are committed instead.
 test_roms/accuracy_roms/
 test_roms/game-boy-test-roms-*.zip
+# The commercial-cart bundle that test.yml's test-full job downloads from
+# kmatzen/test-roms-private and unzips into test_roms/. The unpacked ROMs are
+# already covered by *.gb/*.gbc above, but the archive itself was not, and it
+# reached the public history once. Saves and savestates are derived from those
+# carts, so they stay untracked too.
+test_roms/game-roms.zip
+*.sav
+*.ss0
 !docs/chroma.gba
