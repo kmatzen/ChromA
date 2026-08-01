@@ -27,6 +27,10 @@
         "description": "TIMA reload-period and DIV-write glitch probe - verified via .sav inspection in test_timer_overflow.py, not a screenshot",
         "skip_visual": true
     },
+    "serial_test": {
+        "description": "serial SB/SC read-back and transfer duration (issue #153) - verified via .sav inspection in test_serial.py, not a screenshot (it never draws anything)",
+        "skip_visual": true
+    },
     "lcdon_ly_test": {
         "description": "LY against time since the LCD was enabled (issue #145) - verified via .sav inspection in test_lcdon_ly.py, not a screenshot (it never draws anything)",
         "skip_visual": true

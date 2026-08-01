@@ -617,14 +617,37 @@ noTimer:
 	ldrb_ r1,stctrl
 	and r1,r1,#0x81
 	cmp r1,#0x81		@Are going to transfer on internal clock?
+	bne noSerial
 
-	ldreqb_ r1,gb_if		@IRQ flags
-	orreq r1,r1,#8		@8=Serial
-	streqb_ r1,gb_if
+	@ Retire a scanline's worth of the transfer rather than completing it
+	@ here (#153).  This used to fire on the first scanline boundary after
+	@ the FF02 write, so a transfer took at most 456 T-cycles against the
+	@ 4096 a DMG one really takes.  _FF02W arms the countdown.
+	ldr_ r2,timercyclesperscanline
+	ldr r1,=serial_countdown
+	ldr r0,[r1]
+	subs r0,r0,r2
+	strgt r0,[r1]
+	bgt noSerial
+	mov r0,#0
+	str r0,[r1]
 
-	ldreqb_ r0,stctrl
-	andeq r0,r0,#0x7F		@Clear Serial Transfer flag.
-	streqb_ r0,stctrl
+	ldrb_ r1,gb_if		@IRQ flags
+	orr r1,r1,#8		@8=Serial
+	strb_ r1,gb_if
+
+	ldrb_ r0,stctrl
+	and r0,r0,#0x7F		@Clear Serial Transfer flag.
+	strb_ r0,stctrl
+
+	@ Nothing is driving the other end of the cable, so the line reads high
+	@ and the transfer shifts in 0xFF.  This is what keeps SB's post-transfer
+	@ value identical to the old flat-0xFF behaviour, which is what Pokemon's
+	@ link detection depends on.
+	mov r0,#0xFF
+	ldr r1,=serial_data
+	strb r0,[r1]
+noSerial:
 checkMasterIRQDelayed:
 	tst cycles,#CYC_IE
 	beq _GO

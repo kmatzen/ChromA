@@ -178,6 +178,10 @@ def main():
     suite("STAT/LY Register Accuracy Test", "test_stat_ly.py",
           TIMEOUT_SHORT_ROM * 4)
 
+    # 4a-3. Serial read-back and transfer duration (issue #153).  Runs the
+    # probe twice -- once in ChromA, once in mGBA's own GB core -- so it needs
+    # room for two short emulator runs.
+    suite("Serial Transfer Test", "test_serial.py", TIMEOUT_SHORT_ROM * 2)
     # 4a-2. LY after an LCD enable (issue #145).  Runs the probe twice -- once
     # in ChromA, once in mGBA's own GB core -- so it needs two short runs.
     suite("LCD-On LY Timing Test", "test_lcdon_ly.py", TIMEOUT_SHORT_ROM * 2)
