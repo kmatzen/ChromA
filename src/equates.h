@@ -560,6 +560,13 @@ RECENT_TILENUM_SIZE = 128
 @				EQU 0x08
  CYC_MASK		= CYCLE-1	@Mask
 
+@ Where in the scanline a sub-scanline event fires, as an offset from the
+@ line start in the emulator's own cycles (#140).  456 T-cycles to a line and
+@ CYCLE of these per T-cycle; 252 is HBlank entry, which is where the mode-0
+@ STAT interrupt belongs (#144) and so the position the mechanism is shaped
+@ for.  No consumer is wired up yet -- the event is a no-op.
+ SUBLINE_EVENT_POS = 252*CYCLE
+
  SINGLE_SPEED = 456*CYCLE
  DOUBLE_SPEED = 912*CYCLE
 

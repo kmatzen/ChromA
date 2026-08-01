@@ -3137,6 +3137,23 @@ cgb_undoc_regs:	.skip 4		@FF6C (OPRI), FF72, FF73, FF74 -- CGB only
 @cyclesperscanline, so the split is a no-op by construction.
 line_cycles_base: .word 0
 
+@Sub-scanline event dispatch (#140).
+@
+@The mechanism every mid-line event needs: shorten `cycles` so `nexttimeout`
+@fires part-way through the line, run the event, then pay the borrowed cycles
+@back.  nexttimeout_sub is this hijack's own slot, so it chains with the EI
+@deferral (nexttimeout_alt) and the IRQ deferral (checkMasterIRQ_minus12)
+@rather than colliding with them, and subline_owed is what has to be returned.
+@
+@Zero owed means nothing is armed.  Both are paid back in full by
+@subline_dispatch, or by subline_cancel if something else has to take the
+@nexttimeout slot before the event fires.
+ .global nexttimeout_sub
+ .global subline_owed
+	.align 2
+nexttimeout_sub: .word 0
+subline_owed:	.word 0
+
  .global pc_straddle_buf
 	.align 2
 pc_straddle_buf: .skip PC_STRADDLE_PRE + PC_STRADDLE_POST + 4

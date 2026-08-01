@@ -626,13 +626,13 @@ noTimer:
 	streqb_ r0,stctrl
 checkMasterIRQDelayed:
 	tst cycles,#CYC_IE
-	beq _GO
+	beq subline_arm
 checkIRQDelayed:
 	ldrb_ r0,gb_ie
 	ldrb_ r1,gb_if
 	and r0,r0,r1
 	ands r0,r0,#0x1f	@only 5 interrupts exist; see checkIRQ
-	beq _GO
+	beq subline_arm
 	
 	@Halted-ness is a state, not a byte.  Inferring it from [gb_pc]==0x76
 	@meant an interrupt dispatched at the boundary immediately *before* a
@@ -658,6 +658,86 @@ checkIRQDelayed:
 	str_ r0,nexttimeout
 	b _GO
 
+@----------------------------------------------------------
+@Sub-scanline event dispatch (#140).
+@
+@Armed here and nowhere earlier.  checkIRQDelayed just above tests
+@`cycles >= cyclesperscanline - 8` to decide whether to defer an interrupt to
+@the next line; shortening `cycles` before that test silently suppresses the
+@deferral, which is what cost 3 accuracy entries the last time this was tried
+@from inside checkTimerIRQ.  checkMasterIRQDelayed and checkIRQDelayed have no
+@other callers -- they are reached only by fallthrough from the timer commit --
+@so their _GO exits are the scanline chain's, and by here nexttimeout already
+@holds the handler for the *next* line.
+@
+@No call frame: this is a jump-through chain, so lr is not free and only
+@r0-r2 and addy may be touched.
+subline_arm:
+	@Nothing to do if a hijack is already parked in nexttimeout: the IRQ
+	@deferral below and the EI deferral both own that slot, and chaining a
+	@third on top of an unfired one would strand what it borrowed.
+	ldr r0,=subline_owed
+	ldr r1,[r0]
+	cmp r1,#0
+	bne _GO				@already armed and pending
+	ldr_ r1,nexttimeout
+	ldr r2,=checkMasterIRQ_minus12
+	cmp r1,r2
+	beq _GO
+	ldr r2,=ei_finish
+	cmp r1,r2
+	beq _GO
+
+	@owed = line_cycles_base - SUBLINE_EVENT_POS.  The natural firing point
+	@is position == base (the line's end), so bringing it forward to
+	@position P costs exactly base - P, whatever the current position is.
+	ldr r1,=line_cycles_base
+	ldr r2,[r1]
+	sub r2,r2,#SUBLINE_EVENT_POS
+	@Arm only if that leaves real budget: the position must still be ahead
+	@of us, with room to spare.  bic drops the flag bits so the comparison
+	@is on the cycle count alone.
+	bic addy,cycles,#CYC_MASK
+	subs addy,addy,r2
+	ble _GO
+	cmp addy,#16*CYCLE
+	ble _GO
+
+	str r2,[r0]			@subline_owed = owed
+	ldr r0,[r1]
+	sub r0,r0,r2
+	str r0,[r1]			@line_cycles_base -= owed, so the
+					@position derived by _FF04R/_FF05R and
+					@friends is untouched (#127)
+	sub cycles,cycles,r2
+
+	ldr_ r0,nexttimeout
+	ldr r1,=nexttimeout_sub
+	str r0,[r1]
+	ldr r0,=subline_dispatch
+	str_ r0,nexttimeout
+	b _GO
+
+subline_dispatch:
+	ldr r0,=subline_owed
+	ldr r1,[r0]
+	mov r2,#0
+	str r2,[r0]
+	add cycles,cycles,r1
+	ldr r0,=line_cycles_base
+	ldr r2,[r0]
+	add r2,r2,r1
+	str r2,[r0]
+	ldr r0,=nexttimeout_sub
+	ldr r0,[r0]
+	str_ r0,nexttimeout
+
+	@ --- the mid-line event would run here.  Nothing consumes it yet, so
+	@ --- this is deliberately a no-op: the mechanism has to be shown inert
+	@ --- before #144's mode-0 STAT IRQ or #141's timer IRQs hang off it.
+	b _GO
+
+@----------------------------------------------------------
 checkMasterIRQ_minus12:
 	ldrb r0,lcdstat
 	bic r0,r0,#2
