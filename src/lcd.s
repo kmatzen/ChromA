@@ -2906,6 +2906,24 @@ FF46_W:@		sprite DMA transfer
 	bne 1f
 	@first burn 3*4 cycles, then burn 160*4 cycles
 	sub cycles,cycles,#CYCLE*163*4
+	@...but for the loop the game actually wrote, not always a 40-iteration
+	@one (#151).  The pattern match never looked at the counter byte, so
+	@every matching loop was charged the canonical 40 iterations -- right
+	@for the wait loop games copy out of the manual, wrong for anything that
+	@tunes the count.  mooneye's oam_dma_timing and oam_dma_restart both use
+	@this exact pattern with a count chosen to land inside the transfer, and
+	@collapsing it to 40 moved their OAM read past the end of the DMA.
+	@
+	@Each extra iteration is 4 machine cycles: 16 T-cycles, 256 of these.
+	@A count of 0 means 256 iterations, since `dec a` from 0 gives 0xFF.
+	@At the canonical 40 this subtracts nothing, so every game that uses the
+	@manual's loop is charged exactly what it was before -- compare_builds.py
+	@against a stock build reports 63 captures, 0 moved.
+	ldrb r0,[gb_pc,#1]
+	cmp r0,#0
+	moveq r0,#256
+	sub r0,r0,#40
+	sub cycles,cycles,r0,lsl#8
 	@return to RET instruction _C9
 	ldr lr,[r10,#0xC9*4]
 1:
