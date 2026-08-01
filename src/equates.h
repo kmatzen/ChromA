@@ -560,6 +560,17 @@ RECENT_TILENUM_SIZE = 128
 @				EQU 0x08
  CYC_MASK		= CYCLE-1	@Mask
 
+@ OAM DMA holds the bus for the length of the transfer, so a read of OAM while
+@ it runs returns 0xFF (#151).  160 machine cycles of transfer plus the three
+@ this emulator's instruction-boundary accounting puts between the FF46 write
+@ and the handler running -- the same three the wait-loop charge in FF46_W is
+@ calibrated with, which is why that constant is also 163.
+@
+@ Not a fitted number: mooneye's oam_dma_timing and oam_dma_restart check both
+@ edges (OAM must read 0xFF just inside the transfer and the real value just
+@ after), and both pass at 163 and fail at 162 and at 164.
+ OAM_DMA_CYCLES = 163*4*16
+
  SINGLE_SPEED = 456*CYCLE
  DOUBLE_SPEED = 912*CYCLE
 

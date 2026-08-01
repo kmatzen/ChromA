@@ -102,6 +102,11 @@ line0x:
 	strb_ r1,scanline		@reset scanline count
 @	bl newframe		@display update
 
+	@ No OAM DMA is in flight across a frame boundary (#151).
+	mvn r0,#0
+	ldr r1,=oam_dma_state
+	str r0,[r1]
+
 	@ Initialize mid-frame palette tracking
 	mov r0,#0
 	strb_ r0,pal_dirty
@@ -563,7 +568,7 @@ pal_fill_dma_scanline:
 @------------------
 checkTimerIRQ:
 	ldr_ r2,timercyclesperscanline
-	
+
 	ldr_ r0,dividereg
 	add r0,r0,r2,lsl#12		@256th cycles.
 	str_ r0,dividereg

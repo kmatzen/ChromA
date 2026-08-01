@@ -141,12 +141,14 @@
     "mooneye-test-suite/acceptance/oam_dma_restart": {
       "rom": "mooneye-test-suite/acceptance/oam_dma_restart.gb",
       "frames": 600,
-      "expected_fail": true
+      "expected_fail": false,
+      "note": "fixed by the OAM DMA bus restriction (#151)"
     },
     "mooneye-test-suite/acceptance/oam_dma_timing": {
       "rom": "mooneye-test-suite/acceptance/oam_dma_timing.gb",
       "frames": 600,
-      "expected_fail": true
+      "expected_fail": false,
+      "note": "fixed by the OAM DMA bus restriction (#151)"
     },
     "mooneye-test-suite/acceptance/pop_timing": {
       "rom": "mooneye-test-suite/acceptance/pop_timing.gb",

@@ -3147,6 +3147,30 @@ pal_before:	.skip 128	@ full palette (BG+OBJ) at frame start
 pal_after:	.skip 64	@ BG palette after mid-frame change
 pal_after_gba:	.skip 64	@ gamma-corrected pal_after for VCount handler
 
+ @ OAM DMA leaves the bus restricted for the duration of the transfer, so a
+ @ read of OAM while it is running returns 0xFF rather than the data (#151).
+ @ ChromA's copy is instantaneous, so all that has to persist is *when* the
+ @ transfer started, and OAM_R measures forward from there.
+ @
+ @ Packed into one word so arming it is a single store on a path that runs
+ @ every frame in most games:
+ @
+ @	bits 31-16   scanline at the FF46 write (0xFFFF = nothing in flight)
+ @	bits 15-0    cycles elapsed into that scanline at the write
+ @
+ @ The position fits: a scanline is 456<<4 cycles, 912<<4 in double speed,
+ @ both under 65536.
+ @
+ @ Two things this deliberately avoids, both found with compare_builds.py and
+ @ invisible to every ROM-level test here (Pokemon never reads OAM at all):
+ @ retiring a countdown at the top of checkTimerIRQ cost r0/r1, which are not
+ @ free there, and moved Pokemon Red/Blue/Yellow by up to 32%; and an
+ @ stmfd/ldmfd pair around the arming code moved three more captures by up to
+ @ 1.7%, this renderer running against a real-time VCOUNT budget.
+ .global oam_dma_state
+	.align 2
+oam_dma_state:	.word -1
+
  .global pal_split_lines
  .global pal_split_palettes
  .global pal_split_count

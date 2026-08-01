@@ -2891,6 +2891,29 @@ FF46_W:@		sprite DMA transfer
 	@oam_dma/reg_read failed on it (#56).
 	ldr r1,=io_dma_shadow
 	strb r0,[r1]
+
+	@Arm the bus restriction (#151).  The transfer runs for 160 machine
+	@cycles -- 640 T-cycles, and one T-cycle is 16 of these -- from this
+	@instant, so store that biased by the current line position: OAM_R then
+	@reads the remaining time as countdown - elapsed, and the scanline hook
+	@takes a whole scanline off it each line.
+	@
+	@Deliberately before the 163*4 charge the canonical HRAM wait loop gets
+	@below.  That charge is the loop's own time, which the special case
+	@skips emulating; taking the position from before it means the window
+	@starts at the write, and the charge then moves elapsed forward so the
+	@remaining time falls by exactly what was skipped.
+	@r0 still holds the written page and is needed below; r1 and addy are
+	@free here, so this costs no stack traffic.
+	ldr r1,=line_cycles_base
+	ldr r1,[r1]
+	bic addy,cycles,#CYC_MASK
+	sub r1,r1,addy			@r1 = elapsed cycles this scanline
+	ldrb_ addy,scanline
+	orr r1,r1,addy,lsl#16
+	ldr addy,=oam_dma_state
+	str r1,[addy]
+
 	and r1,r0,#0xF0
 	adr_ r2,memmap_tbl
 	ldr r1,[r2,r1,lsr#2]	@in: addy,r1=addy&0xE000 (for rom_R)
@@ -2906,6 +2929,24 @@ FF46_W:@		sprite DMA transfer
 	bne 1f
 	@first burn 3*4 cycles, then burn 160*4 cycles
 	sub cycles,cycles,#CYCLE*163*4
+	@...but for the loop the game actually wrote, not always a 40-iteration
+	@one (#151).  The pattern match never looked at the counter byte, so
+	@every matching loop was charged the canonical 40 iterations.  That is
+	@right for the wait loop games copy out of the manual and wrong for
+	@anything that tunes the count -- mooneye's oam_dma_timing and
+	@oam_dma_restart both use this exact pattern with a count chosen to land
+	@just inside the transfer, and collapsing it to 163 always put their OAM
+	@read after the DMA had finished.
+	@
+	@Each extra iteration is 4 machine cycles, 16 T-cycles, 256 of these.
+	@A count of 0 wraps to 256 iterations, as `dec a` from 0 gives 0xFF.
+	@At the canonical 40 this subtracts nothing, so those games are charged
+	@exactly what they were before.
+	ldrb r0,[gb_pc,#1]
+	cmp r0,#0
+	moveq r0,#256
+	sub r0,r0,#40
+	sub cycles,cycles,r0,lsl#8
 	@return to RET instruction _C9
 	ldr lr,[r10,#0xC9*4]
 1:
@@ -5355,6 +5396,16 @@ copyoam:
 OAM_R:
 	cmp addy,#0xFE00
 	bmi echo_R
+	@During an OAM DMA the bus is restricted and a read of OAM returns 0xFF
+	@rather than the data (#151).  ChromA's copy is instantaneous, so only
+	@the duration has to be remembered; oam_dma_countdown is zero whenever
+	@no transfer is in flight, which is almost all of every frame, so the
+	@common path pays this compare and nothing else.
+	ldr r1,=oam_dma_state
+	ldr r1,[r1]
+	cmp r1,#0
+	bge oam_r_dma
+oam_r_normal:
 	ldr_ r1,gb_oam_buffer_writing
 	@FEA0-FEFF is not OAM.  OAM_W below already refuses to write past
 	@0xA0, but the read had no bound and walked off the end of the
@@ -5364,6 +5415,33 @@ OAM_R:
 	ldrltb r0,[r1,r2]
 	movge r0,#0
 	mov pc,lr
+oam_r_dma:
+	@Time since the FF46 write, in this emulator's cycles:
+	@  (scanline - oam_dma_line) * cyclesperscanline
+	@	+ (elapsed_now - oam_dma_pos)
+	@r2 holds the OAM offset and has to survive; addy is free once the
+	@0xFE00 test above is done, and r3 is gb_flg and must not be touched.
+	@Cycles since the FF46 write:
+	@  (scanline - stored scanline) * cyclesperscanline
+	@	+ (elapsed now - stored position)
+	@r2 holds the OAM offset and has to survive; addy is free once the
+	@0xFE00 test above is done, and r3 is gb_flg and must not be touched.
+	ldrb_ r0,scanline
+	sub r0,r0,r1,lsr#16		@whole scanlines since the write
+	ldr_ addy,cyclesperscanline
+	mul r0,addy,r0
+	mov r1,r1,lsl#16
+	mov r1,r1,lsr#16		@keep the stored position only
+	sub r0,r0,r1
+	ldr r1,=line_cycles_base
+	ldr r1,[r1]
+	bic addy,cycles,#CYC_MASK
+	sub r1,r1,addy			@elapsed cycles this scanline
+	add r0,r0,r1			@= cycles since the FF46 write
+	cmp r0,#OAM_DMA_CYCLES
+	movlo r0,#0xFF			@still transferring: bus restricted
+	movlo pc,lr
+	b oam_r_normal
 OAM_W:
 	cmp addy,#0xFE00
 	bmi echo_W
