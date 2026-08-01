@@ -171,6 +171,10 @@ def main():
     suite("STAT/LY Register Accuracy Test", "test_stat_ly.py",
           TIMEOUT_SHORT_ROM * 4)
 
+    # 4a-2. LY after an LCD enable (issue #145).  Runs the probe twice -- once
+    # in ChromA, once in mGBA's own GB core -- so it needs two short runs.
+    suite("LCD-On LY Timing Test", "test_lcdon_ly.py", TIMEOUT_SHORT_ROM * 2)
+
     # 4b. LCDC writes must not clobber the guest F register (issue #95).  Runs
     # the probe twice -- once in ChromA, once in mGBA's own GB core as the
     # reference -- so it needs room for two short emulator runs.
