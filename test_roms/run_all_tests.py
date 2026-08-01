@@ -93,6 +93,13 @@ def main():
     suite("SRAM Record Chain Unit Tests", "test_sram_chain_unit.py", TIMEOUT_UNIT)
     suite("ROM Bank Table Unit Tests", "test_rom_banks_unit.py", TIMEOUT_UNIT)
 
+    # 0a-3. SGB attribute command decoders (issue #136 item 1).  No renderer
+    # consumes the attribute map yet, so there is nothing on screen to check
+    # these against -- this suite is the only thing standing between the
+    # documented command layouts and a silent misreading of them.
+    suite("SGB Attribute Command Unit Tests", "test_sgb_attr_unit.py",
+          TIMEOUT_UNIT)
+
     # 0b. mgba_runner argument validation (issue #58) -- no ROM or toolchain
     # needed, and it guards the harness's own ability to report a problem, so
     # run it before anything that depends on the runner behaving.
