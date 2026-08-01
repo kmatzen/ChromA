@@ -3179,8 +3179,33 @@ pal_split_count_screen:	.skip 1		@ double-buffered split count for display
 pal_last_split_line:	.skip 1		@ scanline of most recent split (0xFF = none)
 pal_vcount_index:	.skip 1		@ current split index during VCount chain
  .skip 1				@ padding for alignment
+	.align 2
 pal_split_lines:	.skip 8		@ scanline number for each split (up to 8)
+	.align 2
 pal_split_palettes:	.skip 64*8	@ BG palette snapshot for each split (64 bytes × 8)
+
+@ Display-side copies of the two arrays above (issue #150).
+@
+@ pal_split_count was double-buffered into pal_split_count_screen at the frame
+@ swap but the data it indexes was not, so the next frame's emulation
+@ overwrote pal_split_lines/pal_split_palettes from index 0 while the VCount
+@ chain was still replaying them -- split positions came out a frame skewed or
+@ torn.  newframe_vblank now copies the entries the display will actually use
+@ into these, and the VCount chain reads only these.
+@
+@ The .align 2 directives above are not cosmetic.  pal_split_palettes landed
+@ at 0x02000251, and both the producer (ff69_w_tail) and the VCount handler
+@ reach it with ldmia/stmia, whose base ARM7TDMI silently truncates to a word
+@ boundary -- so every access was really landing at 0x02000250, one byte low,
+@ putting split 0's palette snapshot on top of pal_split_lines[7].  Producer
+@ and consumer truncated alike so the data round-tripped, which is why this
+@ was invisible; the collision only bites a frame that records all 8 splits.
+ .global pal_split_lines_screen
+ .global pal_split_palettes_screen
+	.align 2
+pal_split_lines_screen:		.skip 8
+	.align 2
+pal_split_palettes_screen:	.skip 64*8
 
  .global pal_scanline_active
  .global pal_dma_buffer
