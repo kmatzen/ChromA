@@ -93,6 +93,12 @@ def main():
     suite("SRAM Record Chain Unit Tests", "test_sram_chain_unit.py", TIMEOUT_UNIT)
     suite("ROM Bank Table Unit Tests", "test_rom_banks_unit.py", TIMEOUT_UNIT)
 
+    # 0a-3. CGB boot-palette licensee gate (issue #154).  Also invisible to the
+    # screenshot suites: every Nintendo title in the bundle keeps its palette,
+    # so the thing that changed -- third-party carts no longer colliding into
+    # the title-hash table -- moves no capture we have a ROM for.
+    suite("CGB Boot Palette Unit Tests", "test_gbc_palette_unit.py", TIMEOUT_UNIT)
+
     # 0b. mgba_runner argument validation (issue #58) -- no ROM or toolchain
     # needed, and it guards the harness's own ability to report a problem, so
     # run it before anything that depends on the runner behaving.

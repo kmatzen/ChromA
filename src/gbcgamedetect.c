@@ -184,10 +184,60 @@ int IsMbc1Multicart(const u8 *rom)
 	return 1;
 }
 
+/* The CGB boot ROM only colorises Nintendo-licensed carts (issue #154).
+ *
+ * The title-hash table below is keyed on a one-byte checksum of the title, so
+ * collisions with third-party titles are inevitable -- and hardware never hits
+ * them, because the boot ROM gates the whole lookup on the licensee first.
+ * From the boot ROM (ISSOtm/gb-bootroms, src/cgb.asm):
+ *
+ *	ld hl, HeaderOldLicensee	; $014B
+ *	ld a, [hl]
+ *	cp $33
+ *	jr nz, .usingOldLicensee
+ *	ld l, LOW(HeaderNewLicensee)	; $0144
+ *	ld e, "0"
+ *	ld a, [hli]
+ *	cp e
+ *	jr nz, .useDefaultIndex
+ *	inc e				; "1"
+ *	jr .checkMadeByNintendo
+ *	.usingOldLicensee
+ *	ld l, LOW(HeaderOldLicensee)
+ *	ld e, 1
+ *	.checkMadeByNintendo
+ *	ld a, [hli]
+ *	cp e
+ *	jr nz, .useDefaultIndex
+ *
+ * So: old licensee $33 defers to the new licensee, which must be ASCII "01";
+ * any other old licensee must itself be $01.  Failing the check takes the
+ * .useDefaultIndex path, which is palette 0 -- the same value this function
+ * already returns for a title that misses the table.
+ *
+ * Measured over test_roms/: every Nintendo title in the bundle passes the gate
+ * and keeps its palette, and Mega Man - Dr. Wily's Revenge (old licensee $08,
+ * Capcom) stops receiving palette 88 by title-hash collision.
+ */
+static int IsNintendoLicensed(const u8 *rom)
+{
+	if (rom[0x014B] == 0x33)
+	{
+		return rom[0x0144] == '0' && rom[0x0145] == '1';
+	}
+	return rom[0x014B] == 0x01;
+}
+
 int GetGbcPaletteNumber(u8 *rom)
 {
 	int entryCount = ARRSIZE(gameHashTable);
 	int nameSum = 0;
+
+	if (!IsNintendoLicensed(rom))
+	{
+		return 0;
+	}
+
 	for (int i = 0; i < 16; i++)
 	{
 		nameSum += rom[0x0134 + i];
