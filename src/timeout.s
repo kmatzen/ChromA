@@ -704,6 +704,21 @@ checkIRQDelayed:
 	ldmfd sp!,{r1}
 	subs r12,cycles,r12
 	bmi irqGBZ80_nothalt
+	@This hijack borrows from `cycles` too, and has never told
+	@line_cycles_base about it -- it got away with that because it only ran
+	@for 8 cycles at a line boundary, where no position reader was looking.
+	@Once a mid-line event can be armed across it those 8 cycles land in the
+	@middle of a line, and every `line_cycles_base - cycles` reader is then
+	@wrong by most of a scanline -- which is what made the window vanish
+	@while the interrupt counts stayed perfect.  Applying the same delta to
+	@both keeps their difference invariant, which is all any reader wants.
+	stmfd sp!,{r0,r1,r2}
+	sub r2,r12,cycles		@delta, negative
+	ldr r0,=line_cycles_base
+	ldr r1,[r0]
+	add r1,r1,r2
+	str r1,[r0]
+	ldmfd sp!,{r0,r1,r2}
 	mov cycles,r12
 
 	ldrb r0,lcdstat
@@ -731,12 +746,16 @@ checkMasterIRQ_minus12:
 
 	ldr_ r0,cyclesperscanline
 	add r0,#8*CYCLE
-	add cycles,cycles,r0
 	@Give the borrow back its due: this restores a whole line of budget, but
 	@an armed line only ever had a line minus the borrow (#140).
-	ldr r0,=midline_owed
-	ldr r0,[r0]
-	sub cycles,cycles,r0
+	ldr r1,=midline_owed
+	ldr r1,[r1]
+	sub r0,r0,r1			@the delta being restored
+	add cycles,cycles,r0
+	ldr r1,=line_cycles_base	@...and line_cycles_base with it
+	ldr r2,[r1]
+	add r2,r2,r0
+	str r2,[r1]
 	ldr_ r0,nexttimeout_alt
 	str_ r0,nexttimeout
 	@proceed to checkMasterIRQ
