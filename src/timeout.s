@@ -715,6 +715,14 @@ checkIRQDelayed:
 	adr r0,checkMasterIRQ_minus12
 	str_ r0,nexttimeout
 	b _GO
+	@Pin the literal pool here.  The compensation above is the first literal
+	@load in this section, and left to itself the assembler drops the pool
+	@wherever the section happens to end -- which in this file is not safe,
+	@because several apparent boundaries are fall-throughs whose intervening
+	@code sits in a `.pushsection` and relocates away (the trap #140 and #143
+	@both warn about).  A pool landing on one of those is executed as data.
+	@Here nothing falls through: the branch above is unconditional.
+	.ltorg
 
 checkMasterIRQ_minus12:
 	ldrb r0,lcdstat
