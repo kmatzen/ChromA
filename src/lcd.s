@@ -1735,6 +1735,14 @@ newframeinit:
 	@latch decided before those writes would be stale by line 0.
 	ldr r1,=window_latched
 	strb r0,[r1]
+	@EWRAM is deliberately not cleared by this crt0, so anything read before
+	@its first write holds power-on garbage.  midline_owed is read by the
+	@position thresholds in newmode and tobuffer on every frame, and by the
+	@IRQ-delay budget test, so it has to start at a real 0 rather than at
+	@whatever was in RAM -- an uninitialised one subtracts noise from those
+	@thresholds and the window stops being drawn at all (#140).
+	ldr r1,=midline_owed
+	str r0,[r1]
 
 	ldr_ r0,bigbufferbase@2
 	str_ r0,bigbuffer
@@ -1770,6 +1778,14 @@ newmode_impl:
 	tst r0,#0x20
 	beq entermode0
 	ldr_ r0,scanline_oam_position  @if cycles >=scanline_oam_position, inside hblank
+	@Shifted by the mid-line borrow, which is exactly this threshold while
+	@an event is armed (#140).  Without it `cycles` is short by the borrow
+	@and this reads as HBlank for the whole armed window -- measured as the
+	@window vanishing entirely from wy_latch_test.  midline_owed is 0 when
+	@nothing is armed, so this is inert otherwise.
+	ldr r1,=midline_owed
+	ldr r1,[r1]
+	sub r0,r0,r1
 	cmp cycles,r0
 	ldrb_ r0,scanline
 	addmi r0,r0,#1
@@ -2042,6 +2058,14 @@ tobuffer:
 	
 	@fixme: make it not add 1 for the pre-scanline
 	ldr_ r0,scanline_oam_position  @if cycles >=scanline_oam_position, inside hblank
+	@Shifted by the mid-line borrow, which is exactly this threshold while
+	@an event is armed (#140).  Without it `cycles` is short by the borrow
+	@and this reads as HBlank for the whole armed window -- measured as the
+	@window vanishing entirely from wy_latch_test.  midline_owed is 0 when
+	@nothing is armed, so this is inert otherwise.
+	ldr r1,=midline_owed
+	ldr r1,[r1]
+	sub r0,r0,r1
 	cmp cycles,r0
 	bpl 1f
 	@want to know if we are in vblank but scanline 0
