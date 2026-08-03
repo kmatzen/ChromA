@@ -22,6 +22,38 @@ The drift-prone figures in these documents (cycle constants, thresholds, mapper
 lists, test counts) are checked against the source by
 `python3 scripts/check_docs.py`, which runs in CI.
 
+## Game compatibility
+
+<!-- BEGIN GENERATED COMPATIBILITY TABLE -->
+
+21 commercial titles run by CI on every push; 17 have their captures pinned pixel-for-pixel against a stored baseline. Generated from `test_roms/test_config.json` by `scripts/gen_compat_table.py` — do not edit by hand.
+
+| Game | Status | Notes |
+|------|--------|-------|
+| Cannon Fodder (USA) (En,Fr,De,Es,It) | Verified | Cannon Fodder GBC (upstream #28) - menu graphics distortion |
+| Crystalis (USA) | Verified | Crystalis (upstream #10) - tile rendering and scrolling in gameplay |
+| Hercules (USA, Europe) (SGB Enhanced) | Verified | Hercules SGB - verifies FF44 scanline fix, press Start to reach menu |
+| Hercules - The Legendary Journeys (U) (M6) [C][!] | Verified | Hercules GBC (issue #10) - per-scanline palette title screen (flickers), gameplay works |
+| Kirby Dream Land 2 DX | Verified | Kirby's Dream Land 2 DX romhack - GBC colorization with SGB border (issue #38) |
+| Kirby's Dream Land 2 (USA, Europe) (SGB Enhanced) | Runs, capture unpinned | SGB border and gameplay (issue #38) — capture not pinned: animated screenshot, drifts on any timing change |
+| Legend of Zelda, The - Link's Awakening DX (USA, Europe) (Rev 2) (SGB Enhanced) (GB Compatible) | Verified | Zelda DX - dual-mode ROM (CGB 0x80 + SGB), verifies GBC detection with autoborder |
+| Legend of Zelda, The - Oracle of Ages (USA, Australia) | Runs, capture unpinned | Zelda: Oracle of Ages (GBC) - boot through title, press Start — capture not pinned: animated screenshot, drifts on any timing change |
+| Legend of Zelda, The - Oracle of Seasons (USA, Australia) | Verified | Zelda: Oracle of Seasons (GBC) - boot through title, press Start |
+| Lufia - The Legend Returns (USA) | Verified | Lufia (upstream #10) - overworld tile rendering |
+| Mega Man - Dr. Wily's Revenge (USA) | Verified | Mega Man 1 GB (upstream #31) - status bar flicker during gameplay |
+| Metal Gear - Ghost Babel (Japan) | Verified | Metal Gear Solid Ghost Babel (issue #10) - HALT interrupt fix prevents elevator crash |
+| Pokemon - Crystal Version (USA, Europe) (Rev 1) | Verified | Pokemon Crystal - full intro through save, verifies SRAM write-through and menu close |
+| POKEMON BLUE | Verified | Pokemon Blue (Gen 1) - DMG, boot through title to Oak's intro |
+| POKEMON RED | Verified | Pokemon Red (Gen 1) - DMG, boot through title to Oak's intro |
+| POKEMON YELLOW | Verified | Pokemon Yellow (Gen 1) - DMG with SGB, boot through title to Oak's intro |
+| POKEMON_GLDAAUJ | Runs, capture unpinned | Pokemon Gold (Gen 2) - GBC with MBC3 RTC, boot through title — capture not pinned: the capture window fixes gamefreak, title and final, but after_start samples the scrolling cloud band and sparkles on the Ho-Oh title screen -- continuously moving scenery, where no nearby frame matches and an ignore region would have to blind a 160x24 band |
+| POKEPINBALLVPHJ | Verified | Pokemon Pinball (DMG) - boot through title into pinball gameplay |
+| Shantae (USA) | Runs, capture unpinned | Shantae (upstream #3) - HDMA sprite rendering during gameplay — capture not pinned: animated screenshot, drifts on any timing change |
+| Super Mario Land 2 - 6 Golden Coins (USA, Europe) (Rev 2) | Verified | Super Mario Land 2 (upstream #33) - savestate regression, gameplay check |
+| ZELDA | Verified | Zelda: Link's Awakening (DMG) - boot through title, press Start |
+
+<!-- END GENERATED COMPATIBILITY TABLE -->
+
 ## FAQ
 
 **My in-game saves disappear when I reload the browser demo.**

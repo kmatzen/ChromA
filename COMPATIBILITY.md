@@ -36,10 +36,40 @@ What this GB/GBC emulator implements, what it's missing, and why.
 
 ### Gaps
 
-**STOP instruction simplified** — WON'T FIX
-> Only handles double-speed toggle, doesn't block for joypad. Blocking was
-> attempted but hangs games at boot (games use STOP during init without
-> interrupts enabled). No known game depends on exact STOP wait behavior.
+**STOP fully modelled** — FIXED (#152)
+> The CGB speed switch now stalls the CPU for 2050 M-cycles (8200 T-cycles),
+> as hardware does, instead of switching between one instruction and the
+> next.  The debt is simply charged to `cycles`; the timeout chain already
+> pays out a scanline at a time, so DIV, the timer and the PPU all advance
+> across the stall.
+>
+> mGBA's Game Boy core switches instantaneously, so DIV across the STOP no
+> longer agrees with it tick-for-tick (~34 versus ~0).  `test_stop_div.py`
+> was rewritten to assert what it actually means -- that DIV is not *reset*,
+> a bound on forward motion which a reset cannot satisfy because it moves DIV
+> the other way.  Its previous "agrees with mGBA to within a few ticks"
+> phrasing could not tell a spurious reset from correctly-modelled elapsed
+> time.  The DIV-*reset* claim in #56 item 4 remains disproved and unimplemented.
+>
+> Stop mode itself is also implemented: a STOP with no armed speed switch
+> parks the CPU until a joypad line selected in FF00 is driven low.  This
+> entry previously read "WON'T FIX -- blocking was attempted but hangs games
+> at boot (games use STOP during init without interrupts enabled)".  That
+> diagnosis identified the symptom but not the cause: the wake was being
+> driven off interrupts, and a game that STOPs with interrupts disabled can
+> never satisfy that condition.  Hardware does not consult IE, IF or IME at
+> all -- it leaves STOP on the joypad lines themselves -- so waking off
+> `joy0state` directly is both correct and unable to produce that hang.
+>
+> Verified by `test_roms/test_stop_mode.py`, which asserts the split that
+> distinguishes a correct build: the probe must *not* finish with no input
+> held, and must finish with a button held.  A build that ignores STOP
+> finishes both arms and a build that parks forever finishes neither.
+> `compare_builds.py` reports 0 of 65 captures moved against a stock build.
+>
+> Note mGBA's own Game Boy core runs straight through a plain STOP, so it
+> cannot serve as the reference here; the assertion is against hardware
+> behaviour directly.
 
 **Blargg instr_timing fails on RST 38h** — NOT AN RST BUG
 > A custom test ROM confirms all 8 RST variants have identical timing

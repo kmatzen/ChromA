@@ -7,7 +7,7 @@ reference does**, and this test exists so nobody implements the reset on the
 strength of the issue text and quietly moves ChromA away from it:
 
     mGBA native GB core   DIV 119 -> 119   (unchanged)
-    ChromA                DIV  76 ->  78   (unchanged, +2 ticks of elapsed time)
+    ChromA                DIV  76 -> 110   (+34 ticks of elapsed time)
 
 Both emulators carry DIV straight across the STOP.  The starting values differ
 because the two run the preceding spin loop at different absolute times; what
@@ -15,8 +15,17 @@ matters is that neither snaps DIV back to 0, which is what a reset would look
 like -- the probe deliberately leaves DIV in the middle of its range first, so
 a reset would show up as a drop of ~100, not a couple of counts.
 
-The assertion is therefore "DIV is not reset, and it agrees with mGBA to
-within a few ticks", plus "the speed switch actually happened" (KEY1 bit 7).
+ChromA's DIV now moves forward by ~34 rather than ~2 because it models the
+~2050 M-cycle stall hardware takes across the speed switch (#152), and DIV
+keeps counting through it.  mGBA's Game Boy core switches instantaneously, so
+the two no longer agree tick-for-tick here and are not meant to.
+
+The assertion is therefore "DIV is not reset" -- a bound on *forward* motion,
+which a reset can never satisfy because it moves DIV the other way -- plus
+"the speed switch actually happened" (KEY1 bit 7).  It is deliberately not
+"agrees with mGBA to within a few ticks": that phrasing could not tell a
+spurious reset apart from correctly-modelled elapsed time, and would have made
+the stall unlandable for the wrong reason.
 If someone later establishes from hardware that STOP really does reset DIV,
 this test should be updated together with the emulator and mGBA re-checked --
 not deleted, because the reference disagreeing is the whole finding.
@@ -45,9 +54,19 @@ GAME_SRAM_SIZE = 0x2000
 
 R_BEFORE, R_AFTER, R_KEY1, R_DONE = 0x00, 0x01, 0x02, 0x0F
 
-# A reset would drop DIV by roughly its pre-STOP value; the two emulators
-# differ only by how many ticks elapse across the instruction itself.
-MAX_DELTA = 8
+# ChromA models the ~2050 M-cycle stall hardware takes across the switch
+# (#152), and DIV keeps counting through it: 8200 T-cycles / 256 = 32 ticks.
+# mGBA's Game Boy core switches instantaneously and so shows ~0.  That
+# divergence is expected and is *not* what this test is guarding.
+STALL_TICKS = 8200 // 256
+
+# What it guards is that DIV is not RESET.  Those are opposite directions --
+# a reset drops DIV by roughly its whole pre-STOP value, elapsed time moves it
+# forward by a bounded amount -- so the bound is on forward motion only.  The
+# probe deliberately parks DIV mid-range first precisely so the two cannot be
+# confused: a reset from ~76 reads back as a forward delta of ~212 here, far
+# outside this bound, while the stall reads ~34.
+MAX_DELTA = STALL_TICKS + 8
 
 
 def run(wrap):
@@ -116,7 +135,8 @@ def main():
         if delta > MAX_DELTA:
             bad.append(
                 f"ChromA's DIV moved by {delta} across the STOP, mGBA's by "
-                f"{ref_delta} (tolerance {MAX_DELTA}).  If this is a newly "
+                f"{ref_delta} (tolerance {MAX_DELTA} = {STALL_TICKS} ticks of "
+                f"modelled speed-switch stall plus slop).  If this is a newly "
                 f"added DIV reset: issue #56 item 4 asks for one, but mGBA's "
                 f"Game Boy core does not do it, so the change moves ChromA "
                 f"away from the reference rather than toward hardware")
@@ -128,8 +148,9 @@ def main():
         sys.exit(1)
 
     print()
-    print("PASS: STOP performs the speed switch and leaves DIV running, "
-          "matching mGBA's Game Boy core")
+    print("PASS: STOP performs the speed switch and leaves DIV running "
+          "(not reset); the forward motion is the modelled stall, which "
+          "mGBA's Game Boy core does not have")
 
 
 if __name__ == "__main__":

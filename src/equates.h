@@ -554,11 +554,16 @@ RECENT_TILENUM_SIZE = 128
  CYC_IE			= 0x01 @interrupts are enabled
  CYC_LCD_ENABLED = 0x02  @LCD controller is enabled
  CYC_HALT		= 0x04  @CPU is halted (#41 item 2)
+ CYC_STOP		= 0x08  @CPU is in STOP mode, waiting on the joypad (#152)
 @ CYC_LYC 		= 0x08  @LY matches LYC
 @ BRANCH			= 0x02 @branch instruction encountered
 @				EQU 0x04
 @				EQU 0x08
  CYC_MASK		= CYCLE-1	@Mask
+
+@ The CGB speed switch stalls the CPU for 2050 M-cycles -- 8200 T-cycles --
+@ between the STOP and the first instruction at the new speed (#152).
+ SPEED_SWITCH_CYCLES = 8200*CYCLE
 
 @ A serial transfer is 8 bits at the 8192Hz shift clock -- 4096 T-cycles --
 @ or 32x faster on the CGB's optional clock (#153).

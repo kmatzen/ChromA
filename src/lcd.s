@@ -1730,6 +1730,11 @@ force_ui_at_top:
 newframeinit:
 	mov r0,#0
 	strb_ r0,buffer_lastscanline
+	@The WY coincidence is per-frame state (#146).  Cleared here rather than
+	@at VBlank entry because games routinely write WY *during* VBlank, and a
+	@latch decided before those writes would be stale by line 0.
+	ldr r1,=window_latched
+	strb r0,[r1]
 
 	ldr_ r0,bigbufferbase@2
 	str_ r0,bigbuffer
@@ -1770,10 +1775,33 @@ newmode_impl:
 	addmi r0,r0,#1
 	cmp r0,#144
 	movge r0,#0
+	@Once LY has reached WY the window is latched on for the rest of the
+	@frame, so a mid-frame raise of WY must not retract it (#146).  The latch
+	@is maintained in tobuffer, which every caller of newmode flushes through
+	@first, so it is current by the time this runs.
+	@
+	@Deliberately an OR with the old `scanline >= windowY` test rather than a
+	@replacement for it.  Replacing it outright is the shape that has now
+	@failed twice: it also suppresses the window on any line the latch has not
+	@observed, and the renderer reaches window modes by routes that do not all
+	@go through the coincidence -- measured here as Pokemon Red's Oak intro
+	@losing its text box *and* its background entirely.  ORing can only ever
+	@add window visibility relative to the old behaviour, never remove it, so
+	@it cannot produce that class of regression.
+	@
+	@What it does not fix is the converse case, lowering WY mid-frame onto a
+	@line LY has already passed: hardware never latched that and draws no
+	@window, this still draws one.  That half needs the replacement form and
+	@so stays open on #146.
+	ldr r1,=window_latched
+	ldrb r1,[r1]
+	cmp r1,#0
+	bne 9f
 	ldrb_ r1,windowY
 	cmp r0,r1
 	blt entermode0
-	
+9:
+
 	ldrb_ r1,windowX
 	cmp r1,#166
 	bgt entermode0
@@ -2034,6 +2062,35 @@ tobuffer:
 	
 	@check if will reach wy
 	ldrb_ addy,windowY
+	@Latch the WY coincidence for the rest of the frame (#146).  This is
+	@deliberately a separate test from the mode-entry one below rather than a
+	@reuse of it, for three reasons:
+	@
+	@  * it is `s0 <= wy`, not `s0 < wy`.  buffer_lastscanline starts each
+	@    frame at 0, so WY=0 -- a perfectly ordinary full-screen window --
+	@    never satisfies the strict form and would never latch at all.
+	@  * it must not depend on LCDC bit 5 or on WX, which the mode-entry test
+	@    below checks.  Hardware records the coincidence whether or not the
+	@    window is currently being drawn, so a window disabled across its own
+	@    WY line and re-enabled later still comes back on this frame.
+	@  * it must not disturb the existing control flow, which decides whether
+	@    to split the batch at the WY boundary.
+	@
+	@Testing the interval rather than `scanline == windowY` is what makes this
+	@survive batching: whole runs of scanlines are flushed at once here, so a
+	@per-line equality check simply never sees most lines.
+	cmp r1,addy
+	bgt 1f
+	cmp r2,addy
+	blt 1f
+	@Rarely taken -- at most once a frame, since s0 > wy skips it thereafter
+	@-- so the register save costs nothing measurable.
+	stmfd sp!,{r0,addy}
+	ldr addy,=window_latched
+	mov r0,#1
+	strb r0,[addy]
+	ldmfd sp!,{r0,addy}
+1:
 	@it will reach if:
 	@s0<wy && s1>=wy
 	cmp r1,addy

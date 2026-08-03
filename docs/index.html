@@ -146,6 +146,22 @@
     position: absolute; width: 1px; height: 1px; overflow: hidden;
     clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
   }
+
+/* Generated game compatibility table (#138 item 5) */
+.compat { max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+.compat h2 { margin-bottom: .25rem; }
+.compat p { opacity: .8; font-size: .9rem; margin-top: 0; }
+.compat-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.compat-table th, .compat-table td {
+  text-align: left; padding: .35rem .5rem;
+  border-bottom: 1px solid rgba(128,128,128,.3); vertical-align: top;
+}
+.compat-table td.ok { color: #2e7d32; white-space: nowrap; }
+.compat-table td.warn { color: #a06000; white-space: nowrap; }
+@media (prefers-color-scheme: dark) {
+  .compat-table td.ok { color: #7fdb8a; }
+  .compat-table td.warn { color: #e0b357; }
+}
 </style>
 </head>
 <body>
@@ -496,5 +512,37 @@ window.addEventListener('drop', e => {
 
 init();
 </script>
+<!-- BEGIN GENERATED COMPATIBILITY TABLE -->
+<section class="compat">
+  <h2>Game compatibility</h2>
+  <p>21 commercial titles run by CI on every push; 17 have their captures pinned pixel-for-pixel against a stored baseline. Generated from the regression suite&rsquo;s own config.</p>
+  <table class="compat-table">
+    <thead><tr><th>Game</th><th>Status</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Cannon Fodder (USA) (En,Fr,De,Es,It)</td><td class="ok">Verified</td><td>Cannon Fodder GBC (upstream #28) - menu graphics distortion</td></tr>
+      <tr><td>Crystalis (USA)</td><td class="ok">Verified</td><td>Crystalis (upstream #10) - tile rendering and scrolling in gameplay</td></tr>
+      <tr><td>Hercules (USA, Europe) (SGB Enhanced)</td><td class="ok">Verified</td><td>Hercules SGB - verifies FF44 scanline fix, press Start to reach menu</td></tr>
+      <tr><td>Hercules - The Legendary Journeys (U) (M6) [C][!]</td><td class="ok">Verified</td><td>Hercules GBC (issue #10) - per-scanline palette title screen (flickers), gameplay works</td></tr>
+      <tr><td>Kirby Dream Land 2 DX</td><td class="ok">Verified</td><td>Kirby's Dream Land 2 DX romhack - GBC colorization with SGB border (issue #38)</td></tr>
+      <tr><td>Kirby's Dream Land 2 (USA, Europe) (SGB Enhanced)</td><td class="warn">Runs, capture unpinned</td><td>SGB border and gameplay (issue #38) — capture not pinned: animated screenshot, drifts on any timing change</td></tr>
+      <tr><td>Legend of Zelda, The - Link's Awakening DX (USA, Europe) (Rev 2) (SGB Enhanced) (GB Compatible)</td><td class="ok">Verified</td><td>Zelda DX - dual-mode ROM (CGB 0x80 + SGB), verifies GBC detection with autoborder</td></tr>
+      <tr><td>Legend of Zelda, The - Oracle of Ages (USA, Australia)</td><td class="warn">Runs, capture unpinned</td><td>Zelda: Oracle of Ages (GBC) - boot through title, press Start — capture not pinned: animated screenshot, drifts on any timing change</td></tr>
+      <tr><td>Legend of Zelda, The - Oracle of Seasons (USA, Australia)</td><td class="ok">Verified</td><td>Zelda: Oracle of Seasons (GBC) - boot through title, press Start</td></tr>
+      <tr><td>Lufia - The Legend Returns (USA)</td><td class="ok">Verified</td><td>Lufia (upstream #10) - overworld tile rendering</td></tr>
+      <tr><td>Mega Man - Dr. Wily's Revenge (USA)</td><td class="ok">Verified</td><td>Mega Man 1 GB (upstream #31) - status bar flicker during gameplay</td></tr>
+      <tr><td>Metal Gear - Ghost Babel (Japan)</td><td class="ok">Verified</td><td>Metal Gear Solid Ghost Babel (issue #10) - HALT interrupt fix prevents elevator crash</td></tr>
+      <tr><td>Pokemon - Crystal Version (USA, Europe) (Rev 1)</td><td class="ok">Verified</td><td>Pokemon Crystal - full intro through save, verifies SRAM write-through and menu close</td></tr>
+      <tr><td>POKEMON BLUE</td><td class="ok">Verified</td><td>Pokemon Blue (Gen 1) - DMG, boot through title to Oak's intro</td></tr>
+      <tr><td>POKEMON RED</td><td class="ok">Verified</td><td>Pokemon Red (Gen 1) - DMG, boot through title to Oak's intro</td></tr>
+      <tr><td>POKEMON YELLOW</td><td class="ok">Verified</td><td>Pokemon Yellow (Gen 1) - DMG with SGB, boot through title to Oak's intro</td></tr>
+      <tr><td>POKEMON_GLDAAUJ</td><td class="warn">Runs, capture unpinned</td><td>Pokemon Gold (Gen 2) - GBC with MBC3 RTC, boot through title — capture not pinned: the capture window fixes gamefreak, title and final, but after_start samples the scrolling cloud band and sparkles on the Ho-Oh title screen -- continuously moving scenery, where no nearby frame matches and an ignore region would have to blind a 160x24 band</td></tr>
+      <tr><td>POKEPINBALLVPHJ</td><td class="ok">Verified</td><td>Pokemon Pinball (DMG) - boot through title into pinball gameplay</td></tr>
+      <tr><td>Shantae (USA)</td><td class="warn">Runs, capture unpinned</td><td>Shantae (upstream #3) - HDMA sprite rendering during gameplay — capture not pinned: animated screenshot, drifts on any timing change</td></tr>
+      <tr><td>Super Mario Land 2 - 6 Golden Coins (USA, Europe) (Rev 2)</td><td class="ok">Verified</td><td>Super Mario Land 2 (upstream #33) - savestate regression, gameplay check</td></tr>
+      <tr><td>ZELDA</td><td class="ok">Verified</td><td>Zelda: Link's Awakening (DMG) - boot through title, press Start</td></tr>
+    </tbody>
+  </table>
+</section>
+<!-- END GENERATED COMPATIBILITY TABLE -->
 </body>
 </html>
