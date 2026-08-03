@@ -2624,23 +2624,6 @@ FF41_modifydata:
 	@are never applied -- leaving the stored STAT byte, whose mode field is 0.
 	cmp cycles,#0x00FF0000		@+48
 
-	@Mode compares for while a mid-line event is armed (#140).  Arming
-	@borrows `scanline_oam_position` cycles so nexttimeout fires early, which
-	@leaves `cycles` short by exactly that much for the length of the window.
-	@line_cycles_base (#127) covers the four readers that derive position as
-	@a difference from it, but FF41_R is a fifth reader and does not: it
-	@compares `cycles` against these constants directly.  So the constants
-	@move instead, by the same amount that was borrowed, and the read path
-	@stays byte-for-byte as fast as before.
-	@
-	@204 - 204 = 0 and 376 - 204 = 172; doubled, 408 - 408 = 0 and
-	@752 - 408 = 344.  All four are encodable ARM immediates, which is what
-	@makes patching viable at all.
-	cmp cycles,#0			@+52 armed, single speed (was 204*CYCLE)
-	cmp cycles,#172*CYCLE		@+56 armed, single speed (was 376*CYCLE)
-	cmp cycles,#0			@+60 armed, double speed (was 204*CYCLE*2)
-	cmp cycles,#344*CYCLE		@+64 armed, double speed (was 376*CYCLE*2)
-
  .if PROFILE
 fetch_profile:
 	bl profile_it
@@ -3171,17 +3154,6 @@ CANARY2:	.skip 4
  .global cgb_undoc_regs
 io_dma_shadow:	.byte 0		@FF46 DMA: reads back the last source page written
 cgb_undoc_regs:	.skip 4		@FF6C (OPRI), FF72, FF73, FF74 -- CGB only
- .global midline_owed
- .global midline_saved_next
-	.align 2
-@Mid-line event dispatch state (#140).  midline_owed is the number of cycles
-@borrowed to make nexttimeout fire part-way through the scanline, and is 0
-@whenever no event is armed; midline_saved_next parks the real nexttimeout for
-@the duration, so the hijack chains rather than colliding with nexttimeout_alt
-@(the EI deferral) or nexttimeout_alt2 (immediate_check_irq_2).
-midline_owed:		.word 0
-midline_saved_next:	.word 0
-
  .global window_latched
 @Set once the window's WY coincidence has been seen this frame, cleared by
 @newframeinit (#146).  Hardware latches the window on when LY reaches WY and

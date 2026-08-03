@@ -99,10 +99,6 @@
         "description": "what STOP does to DIV and KEY1 across a CGB speed switch - verified via .sav inspection in test_stop_div.py, not a screenshot",
         "skip_visual": true
     },
-    "stat_mode0_timing_test": {
-        "description": "where the PPU is when the mode-0 STAT handler runs (issue #144) - verified via .sav inspection in test_stat_mode0_timing.py against mGBA's own GB core, not a screenshot",
-        "skip_visual": true
-    },
     "wy_latch_test": {
         "description": "the window's WY coincidence latches for the rest of the frame (issue #146) - verified by band-relative screen inspection in test_wy_latch.py, not against a stored baseline",
         "skip_visual": true

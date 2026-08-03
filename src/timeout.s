@@ -442,23 +442,6 @@ no_more_irq_hack:
 default_scanlinehook:
 checkScanlineIRQ:
 default_scanlinehook_nohblank:
-	@Arm the mid-line event here, at the head of the chain, so that every
-	@path through it arms -- including the ones that go on to dispatch an
-	@interrupt (#140).
-	@
-	@Arming at the chain's *tail* instead, past checkIRQDelayed, looks safer
-	@and is not: raising an interrupt from the mid-line event leaves IF set
-	@at the next line boundary, that line takes the interrupt path rather
-	@than the tail, and so never arms.  The consumer suppresses its own next
-	@arm and the two alternate, which measured as exactly half the mode-0
-	@interrupts going missing (#144).
-	@
-	@What made the tail look necessary was checkIRQDelayed's full-line
-	@budget test; that is compensated at the test itself now, which is where
-	@the knowledge belongs.
-	stmfd sp!,{lr}
-	bl_long midline_arm
-	ldmfd sp!,{lr}
     ldrb_ r1,dma_blocks_total
     cmp r1,#0
     beq _checkScanlineIRQ  @ If not mid-hdma, continue normal execution.
@@ -537,15 +520,8 @@ _checkScanlineIRQ:
 	@in vblank?  no Hblank or Mode 2 IRQ
 	tst r2,#0x01
 	bne noScanlineIRQ
-	@Mode 2 IRQ enabled?
-	@
-	@Mode 0 (bit 3) used to be tested here too, which is what made the HBlank
-	@STAT interrupt arrive a line late (#144): this runs at the line boundary
-	@with `scanline` already incremented, so the IRQ for line N's HBlank was
-	@raised at the start of line N+1 -- about 204 cycles after HBlank entry.
-	@Mode 2 is an OAM-scan interrupt and does belong at the boundary, so only
-	@mode 0 moves; it is raised from midline_fire instead.
-	tst r2,#0x20
+	@Hblank IRQ or Mode 2 IRQ enabled?
+	tst r2,#0x28
 	beq noScanlineIRQ
 
 	@ STAT IRQ blocking: if LYC=LY is active on this scanline (coincidence
@@ -681,7 +657,7 @@ checkIRQDelayed:
 	and r0,r0,r1
 	ands r0,r0,#0x1f	@only 5 interrupts exist; see checkIRQ
 	beq _GO
-
+	
 	@Halted-ness is a state, not a byte.  Inferring it from [gb_pc]==0x76
 	@meant an interrupt dispatched at the boundary immediately *before* a
 	@not-yet-executed HALT looked identical to waking from one: the handler
@@ -692,16 +668,6 @@ checkIRQDelayed:
 
 	ldr_ r12,cyclesperscanline
 	sub r12,r12,#8*CYCLE
-	@This threshold asks "is there a full line of budget left", so it has to
-	@be told about the mid-line borrow (#140).  midline_owed is 0 whenever
-	@nothing is armed, so this is inert until something is.  Without it an
-	@armed line always fails the test and falls to immediate dispatch,
-	@silently suppressing the IRQ-delay hijack.
-	stmfd sp!,{r1}
-	ldr r1,=midline_owed
-	ldr r1,[r1]
-	sub r12,r12,r1
-	ldmfd sp!,{r1}
 	subs r12,cycles,r12
 	bmi irqGBZ80_nothalt
 	mov cycles,r12
@@ -724,168 +690,10 @@ checkMasterIRQ_minus12:
 	ldr_ r0,cyclesperscanline
 	add r0,#8*CYCLE
 	add cycles,cycles,r0
-	@Give the borrow back its due: this restores a whole line of budget, but
-	@an armed line only ever had a line minus the borrow (#140).
-	ldr r0,=midline_owed
-	ldr r0,[r0]
-	sub cycles,cycles,r0
 	ldr_ r0,nexttimeout_alt
 	str_ r0,nexttimeout
 	@proceed to checkMasterIRQ
 	
-	.pushsection .text
-@----------------------------------------------------------
-midline_arm:
-@	Arm an event part-way through this scanline, then resume the CPU (#140).
-@
-@	The only trigger the core has is `cycles` going negative, so firing early
-@	means borrowing: take `scanline_oam_position` off `cycles` and nexttimeout
-@	fires at HBlank entry instead of the line boundary.  midline_fire pays the
-@	borrow back, so no time is created or lost.
-@
-@	Everything that derives a position from `cycles` has to be kept whole
-@	across the window.  line_cycles_base (#127) covers _FF04R, _FF05R, _FF04W
-@	and _FF07W by taking the same amount off the base, so their
-@	`base - cycles` difference is unchanged.  FF41_R is the fifth reader and
-@	is not covered by that -- it compares `cycles` against self-modified
-@	constants -- so those constants are moved by the borrow instead.  Getting
-@	this wrong is not subtle in hindsight but is silent at the time: a *no-op*
-@	mid-line event cost 3 accuracy entries before #127, purely from the
-@	displaced clock.
-@
-@	Armed here, at the scanline chain's resume point, rather than inside
-@	checkTimerIRQ: arming there shortens `cycles` before checkIRQDelayed
-@	tests it against `cyclesperscanline - 8`, which silently suppresses the
-@	IRQ-delay hijack.  Reached only from the two exits where no interrupt is
-@	dispatching, so it can never collide with that hijack's own use of
-@	nexttimeout_alt.
-@
-@	Skipped with the LCD off, which keeps the FF41 patching clear of the
-@	never-taken compare FF40_W installs there.
-@----------------------------------------------------------
-	tst cycles,#CYC_LCD_ENABLED
-	beq 9f
-	ldr_ r2,scanline_oam_position		@how early to fire
-	bic r0,cycles,#CYC_MASK
-	sub r0,r0,r2
-	cmp r0,#16*CYCLE			@enough line left to be worth it?
-	blt 9f
-
-	sub cycles,cycles,r2
-	ldr r1,=line_cycles_base
-	ldr r0,[r1]
-	sub r0,r0,r2
-	str r0,[r1]
-	ldr r1,=midline_owed
-	str r2,[r1]
-
-	ldr_ r0,nexttimeout
-	ldr r1,=midline_saved_next
-	str r0,[r1]
-	ldr r0,=midline_fire
-	str_ r0,nexttimeout
-
-	ldr r1,=FF41_modifydata
-	ldr_ r0,cyclesperscanline
-	cmp r0,#DOUBLE_SPEED
-	ldreq r0,[r1,#60]
-	ldrne r0,[r1,#52]
-	ldr r2,=FF41_modify1
-	str r0,[r2]
-	ldr_ r0,cyclesperscanline
-	cmp r0,#DOUBLE_SPEED
-	ldreq r0,[r1,#64]
-	ldrne r0,[r1,#56]
-	ldr r2,=FF41_modify2
-	str r0,[r2]
-9:	bx lr
-
-@----------------------------------------------------------
-midline_fire:
-@	The mid-line event: undo the borrow, then carry on with the rest of the
-@	scanline as if nothing had happened (#140).
-@
-@	No consumer is wired up yet.  #140 asks for the mechanism to be proved
-@	inert against the accuracy suite before anything hangs off it, so this
-@	deliberately does nothing but restore state; the mode-0 STAT IRQ (#144)
-@	and multi-overflow timer IRQs (#141) attach at the marked point.
-@----------------------------------------------------------
-	ldr r1,=midline_owed
-	ldr r0,[r1]
-	mov r2,#0
-	str r2,[r1]				@disarmed
-	add cycles,cycles,r0
-	ldr r1,=line_cycles_base
-	ldr r2,[r1]
-	add r2,r2,r0
-	str r2,[r1]
-	ldr r1,=midline_saved_next
-	ldr r0,[r1]
-	str_ r0,nexttimeout
-
-	@Restore FF41_R's mode compare by re-deriving it rather than by putting
-	@back what was saved: the guest runs during the window and may have
-	@switched the LCD off in it, in which case FF40_W has already installed
-	@the never-taken compare and replaying the old word would undo that.
-	@modify2 is not LCD-dependent, so it comes straight from the table.
-	stmfd sp!,{r0,lr}
-	bl_long FF41_repoint_mode_source
-	ldmfd sp!,{r0,lr}
-	ldr r1,=FF41_modifydata
-	ldr_ r0,cyclesperscanline
-	cmp r0,#DOUBLE_SPEED
-	ldreq r0,[r1,#12]
-	ldrne r0,[r1,#4]
-	ldr r2,=FF41_modify2
-	str r0,[r2]
-
-	@The mode-0 STAT interrupt, raised at HBlank entry of the current line
-	@rather than at the next line boundary (#144).  This is the whole point
-	@of arming at scanline_oam_position: that is HBlank entry, so simply
-	@being here is the correct instant.
-	@
-	@`scanline` has not been incremented yet, so LY is the line whose HBlank
-	@this is -- which is what a raster handler reads.  The LCD is on by
-	@construction, since midline_arm refuses to arm otherwise.
-	@
-	@Blocking follows the boundary path exactly: nothing during VBlank, and
-	@nothing while LYC IE plus an active coincidence already hold the STAT
-	@line high, because a mode transition cannot then be a rising edge.
-	ldr r1,=lcdstat
-	ldrb r2,[r1]
-	tst r2,#0x01			@VBlank: no mode-0 interrupt
-	bne 8f
-	tst r2,#0x08			@mode 0 IRQ enabled?
-	beq 8f
-	@Blocked while LYC IE plus an active coincidence already hold the STAT
-	@line high: a mode transition cannot then be a rising edge.  The same
-	@rule the boundary path applies, and it belongs here too -- but only once
-	@this event actually dispatches.  Measured both ways against mGBA's 576
-	@interrupts over 4 frames: while the event merely raised IF and left
-	@delivery to the next boundary, applying the block lost one interrupt a
-	@frame (572); once it dispatches, omitting the block gains one a frame
-	@(580), because the coincidence line would otherwise deliver a mode-0
-	@interrupt of its own on top of the LYC one.
-	tst r2,#0x40			@LYC interrupt enabled?
-	tstne r2,#0x04			@AND coincidence flag set?
-	bne 8f				@blocked: LYC holds the line high
-	ldrb_ r0,gb_if
-	orr r0,r0,#0x02			@2=LCD STAT
-	strb_ r0,gb_if
-8:
-	@Dispatch here rather than returning to the fetch loop.  Raising IF alone
-	@moves nothing observable: ChromA checks interrupts from the scanline
-	@chain, so a flag set at HBlank entry still waits for the next line
-	@boundary to be noticed, and the handler still runs a line late with the
-	@wrong LY.  Measured with stat_mode0_timing_test.gb -- flag-only was
-	@byte-for-byte identical to no change at all.
-	@
-	@checkMasterIRQ re-tests IME and the IE/IF mask itself and falls through
-	@to _GO when nothing is pending, so this is the same no-op it was on any
-	@line that raised nothing.
-	b_long checkMasterIRQ
-	.popsection
-
 @----------------------------------------------------------
 checkMasterIRQ:
 @----------------------------------------------------------
