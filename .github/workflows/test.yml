@@ -424,6 +424,15 @@ jobs:
     # samples.  This pins that number so the fault cannot quietly get worse,
     # and passes if it gets better -- the issue quoted the measurement but
     # nothing ran it.
+    # #144: a late STAT interrupt is still exactly one interrupt, so the
+    # counting test above cannot see it.  This reads FF41 and LY from inside
+    # the handler, which is what actually distinguishes HBlank entry from the
+    # next line boundary.
+    - name: Run mode-0 STAT timing test
+      run: python3 test_roms/test_stat_mode0_timing.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
     - name: Run TIMA sweep comparison
       run: python3 test_roms/test_tima_sweep.py
       env:

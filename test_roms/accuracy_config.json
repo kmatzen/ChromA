@@ -161,7 +161,8 @@
     "mooneye-test-suite/acceptance/ppu/intr_2_0_timing": {
       "rom": "mooneye-test-suite/acceptance/ppu/intr_2_0_timing.gb",
       "frames": 600,
-      "expected_fail": true
+      "expected_fail": false,
+      "note": "fixed by delivering the mode-0 STAT interrupt at HBlank entry (#144)"
     },
     "mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing": {
       "rom": "mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing.gb",
