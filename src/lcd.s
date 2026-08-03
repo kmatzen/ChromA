@@ -5127,7 +5127,68 @@ FF47_W_:
 	
 	ldr r2,=gbc_palette+4*2
 	ldr addy,=SGB_PALETTE+16
-	b_long dopalette
+	str lr,[sp,#-4]!
+	bl_long dopalette
+	ldr lr,[sp],#4
+	@Mid-frame BGP raster on DMG (#148).  gbc_palette has just changed, which
+	@on the CGB side is exactly the point where ff69_w_tail records a split;
+	@FF47 had no split machinery at all, so DMG fades and HUD splits rendered
+	@at frame granularity.  ChromA colourises DMG through the same GBC palette
+	@registers, so the existing per-scanline machinery needs no new plumbing
+	@-- only a caller.
+	str lr,[sp,#-4]!
+	bl_long pal_record_split_bg
+	ldr lr,[sp],#4
+	bx lr
+	.popsection
+
+	.pushsection .text
+	.align 2
+@----------------------------------------------------------------------------
+pal_record_split_bg:
+@	Snapshot the BG half of gbc_palette against the current scanline, so the
+@	display side can replay it per line (#148).
+@
+@	Deliberately a copy of ff69_w_tail's split block rather than a shared
+@	routine that both call.  The CGB path runs this on every 64th FF69 write
+@	and is measured against a real-time VCOUNT budget; turning its inline
+@	block into a call would put a branch and a frame on that path to save
+@	twenty instructions of ROM.  If the two ever need to diverge -- and OBJ
+@	splits for FF6B would diverge -- they are already separate.
+@
+@	Bounded the same way: nothing during VBlank, at most one split per
+@	scanline, at most 8 per frame.
+@----------------------------------------------------------------------------
+	stmfd sp!,{r0-r9,lr}
+	ldrb_ r2,scanline
+	cmp r2,#144
+	bge 9f				@VBlank: nothing on screen to split
+	ldr r0,=pal_last_split_line
+	ldrb r1,[r0]
+	cmp r1,r2
+	beq 9f				@already split on this line
+	strb r2,[r0]
+	ldr r0,=pal_split_count
+	ldrb r1,[r0]
+	cmp r1,#8
+	bge 9f				@split table full for this frame
+	ldr r3,=pal_split_lines
+	strb r2,[r3,r1]			@split_lines[count] = scanline
+	ldr r3,=pal_split_palettes
+	add r3,r3,r1,lsl#6		@&split_palettes[count * 64]
+	ldr r4,=gbc_palette
+	ldmia r4!,{r5-r9,r2}
+	stmia r3!,{r5-r9,r2}
+	ldmia r4!,{r5-r9,r2}
+	stmia r3!,{r5-r9,r2}
+	ldmia r4!,{r5-r9}
+	stmia r3!,{r5-r9}		@6+6+4 words = 64 bytes
+	ldr r0,=pal_split_count
+	ldrb r1,[r0]
+	add r1,r1,#1
+	strb r1,[r0]
+9:	ldmfd sp!,{r0-r9,lr}
+	bx lr
 	.popsection
 	.pushsection .text
 	.align 2
