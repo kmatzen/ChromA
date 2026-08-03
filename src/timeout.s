@@ -520,8 +520,15 @@ _checkScanlineIRQ:
 	@in vblank?  no Hblank or Mode 2 IRQ
 	tst r2,#0x01
 	bne noScanlineIRQ
-	@Hblank IRQ or Mode 2 IRQ enabled?
-	tst r2,#0x28
+	@Mode 2 IRQ enabled?
+	@
+	@Mode 0 (bit 3) used to be tested here too, which is what made the HBlank
+	@STAT interrupt arrive a line late (#144): this runs at the line boundary
+	@with `scanline` already incremented, so the IRQ for line N's HBlank was
+	@raised at the start of line N+1 -- about 204 cycles after HBlank entry.
+	@Mode 2 is an OAM-scan interrupt and does belong at the boundary, so only
+	@mode 0 moves; it is raised from midline_fire instead.
+	tst r2,#0x20
 	beq noScanlineIRQ
 
 	@ STAT IRQ blocking: if LYC=LY is active on this scanline (coincidence
@@ -800,8 +807,31 @@ midline_fire:
 	ldr r2,=FF41_modify2
 	str r0,[r2]
 
-	@ <<< mid-line consumers attach here (#144, #141) >>>
-
+	@The mode-0 STAT interrupt, raised at HBlank entry of the current line
+	@rather than at the next line boundary (#144).  This is the whole point
+	@of arming at scanline_oam_position: that is HBlank entry, so simply
+	@being here is the correct instant.
+	@
+	@`scanline` has not been incremented yet, so LY is the line whose HBlank
+	@this is -- which is what a raster handler reads.  The LCD is on by
+	@construction, since midline_arm refuses to arm otherwise.
+	@
+	@Blocking follows the boundary path exactly: nothing during VBlank, and
+	@nothing while LYC IE plus an active coincidence already hold the STAT
+	@line high, because a mode transition cannot then be a rising edge.
+	ldr r1,=lcdstat
+	ldrb r2,[r1]
+	tst r2,#0x01			@VBlank: no mode-0 interrupt
+	bne 8f
+	tst r2,#0x08			@mode 0 IRQ enabled?
+	beq 8f
+	tst r2,#0x40			@LYC interrupt enabled?
+	tstne r2,#0x04			@AND coincidence flag set?
+	bne 8f				@blocked: LYC holds the line high
+	ldrb_ r0,gb_if
+	orr r0,r0,#0x02			@2=LCD STAT
+	strb_ r0,gb_if
+8:
 	b_long _GO
 	.popsection
 
