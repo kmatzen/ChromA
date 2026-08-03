@@ -442,6 +442,23 @@ no_more_irq_hack:
 default_scanlinehook:
 checkScanlineIRQ:
 default_scanlinehook_nohblank:
+	@Arm the mid-line event here, at the head of the chain, so that every
+	@path through it arms -- including the ones that go on to dispatch an
+	@interrupt (#140).
+	@
+	@Arming at the chain's *tail* instead, past checkIRQDelayed, looks safer
+	@and is not: raising an interrupt from the mid-line event leaves IF set
+	@at the next line boundary, that line takes the interrupt path rather
+	@than the tail, and so never arms.  The consumer suppresses its own next
+	@arm and the two alternate, which measured as exactly half the mode-0
+	@interrupts going missing (#144).
+	@
+	@What made the tail look necessary was checkIRQDelayed's full-line
+	@budget test; that is compensated at the test itself now, which is where
+	@the knowledge belongs.
+	stmfd sp!,{lr}
+	bl_long midline_arm
+	ldmfd sp!,{lr}
     ldrb_ r1,dma_blocks_total
     cmp r1,#0
     beq _checkScanlineIRQ  @ If not mid-hdma, continue normal execution.
@@ -657,13 +674,13 @@ noTimer:
 noSerial:
 checkMasterIRQDelayed:
 	tst cycles,#CYC_IE
-	beq_long midline_arm
+	beq _GO
 checkIRQDelayed:
 	ldrb_ r0,gb_ie
 	ldrb_ r1,gb_if
 	and r0,r0,r1
 	ands r0,r0,#0x1f	@only 5 interrupts exist; see checkIRQ
-	beq_long midline_arm
+	beq _GO
 
 	@Halted-ness is a state, not a byte.  Inferring it from [gb_pc]==0x76
 	@meant an interrupt dispatched at the boundary immediately *before* a
@@ -675,6 +692,16 @@ checkIRQDelayed:
 
 	ldr_ r12,cyclesperscanline
 	sub r12,r12,#8*CYCLE
+	@This threshold asks "is there a full line of budget left", so it has to
+	@be told about the mid-line borrow (#140).  midline_owed is 0 whenever
+	@nothing is armed, so this is inert until something is.  Without it an
+	@armed line always fails the test and falls to immediate dispatch,
+	@silently suppressing the IRQ-delay hijack.
+	stmfd sp!,{r1}
+	ldr r1,=midline_owed
+	ldr r1,[r1]
+	sub r12,r12,r1
+	ldmfd sp!,{r1}
 	subs r12,cycles,r12
 	bmi irqGBZ80_nothalt
 	mov cycles,r12
@@ -697,6 +724,11 @@ checkMasterIRQ_minus12:
 	ldr_ r0,cyclesperscanline
 	add r0,#8*CYCLE
 	add cycles,cycles,r0
+	@Give the borrow back its due: this restores a whole line of budget, but
+	@an armed line only ever had a line minus the borrow (#140).
+	ldr r0,=midline_owed
+	ldr r0,[r0]
+	sub cycles,cycles,r0
 	ldr_ r0,nexttimeout_alt
 	str_ r0,nexttimeout
 	@proceed to checkMasterIRQ
@@ -766,7 +798,7 @@ midline_arm:
 	ldrne r0,[r1,#56]
 	ldr r2,=FF41_modify2
 	str r0,[r2]
-9:	b_long _GO
+9:	bx lr
 
 @----------------------------------------------------------
 midline_fire:
@@ -825,6 +857,15 @@ midline_fire:
 	bne 8f
 	tst r2,#0x08			@mode 0 IRQ enabled?
 	beq 8f
+	@Blocked while LYC IE plus an active coincidence already hold the STAT
+	@line high: a mode transition cannot then be a rising edge.  The same
+	@rule the boundary path applies, and it belongs here too -- but only once
+	@this event actually dispatches.  Measured both ways against mGBA's 576
+	@interrupts over 4 frames: while the event merely raised IF and left
+	@delivery to the next boundary, applying the block lost one interrupt a
+	@frame (572); once it dispatches, omitting the block gains one a frame
+	@(580), because the coincidence line would otherwise deliver a mode-0
+	@interrupt of its own on top of the LYC one.
 	tst r2,#0x40			@LYC interrupt enabled?
 	tstne r2,#0x04			@AND coincidence flag set?
 	bne 8f				@blocked: LYC holds the line high
@@ -832,7 +873,17 @@ midline_fire:
 	orr r0,r0,#0x02			@2=LCD STAT
 	strb_ r0,gb_if
 8:
-	b_long _GO
+	@Dispatch here rather than returning to the fetch loop.  Raising IF alone
+	@moves nothing observable: ChromA checks interrupts from the scanline
+	@chain, so a flag set at HBlank entry still waits for the next line
+	@boundary to be noticed, and the handler still runs a line late with the
+	@wrong LY.  Measured with stat_mode0_timing_test.gb -- flag-only was
+	@byte-for-byte identical to no change at all.
+	@
+	@checkMasterIRQ re-tests IME and the IE/IF mask itself and falls through
+	@to _GO when nothing is pending, so this is the same no-op it was on any
+	@line that raised nothing.
+	b_long checkMasterIRQ
 	.popsection
 
 @----------------------------------------------------------
