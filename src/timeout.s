@@ -733,6 +733,114 @@ checkMasterIRQ_minus12:
 	str_ r0,nexttimeout
 	@proceed to checkMasterIRQ
 	
+
+@----------------------------------------------------------
+checkMasterIRQ:
+@----------------------------------------------------------
+	tst cycles,#CYC_IE
+	@ldrb_ r2,gb_ime
+	@tst r2,#1
+	beq _GO
+@----------------------------------------------------------
+checkIRQ:
+@----------------------------------------------------------
+	ldrb_ r0,gb_ie
+	ldrb_ r1,gb_if
+	and r0,r0,r1
+	@Only 5 interrupts exist.  IE is a full 8-bit R/W register on hardware,
+	@so a game may legitimately leave bits 5-7 set in it; without this mask
+	@those phantom bits match anything stale in IF, no tst below claims the
+	@IRQ, and the priority chain falls out of _irqGBZ80_ into its unknown-
+	@IRQ tail, dispatching a spurious interrupt to vector 0x40.
+	ands r0,r0,#0x1f
+	beq _GO
+@----------------------------------------------------------
+irqGBZ80:
+@----------------------------------------------------------
+	tst cycles,#CYC_HALT
+irqGBZ80_ifhalt:
+@	cmpne r2,#0x10                  ;or STOP
+	addne gb_pc,gb_pc,#1	@get out of HALT
+	subne cycles,cycles,#4*CYCLE	@waking from HALT costs 24, not 20
+	bicne cycles,cycles,#CYC_HALT
+irqGBZ80_nothalt:
+	bic cycles,cycles,#CYC_IE
+@	mov r2,#0				@disable IRQ
+@	strb_ r2,gb_ime
+
+	tst r0,#0x01			@VBlank
+	movne r2,#0x40
+	bicne r1,r1,#0x01		@clear the IRQ flag
+	bne doIRQ
+
+	tst r0,#0x02			@LCD Stat
+	movne r2,#0x48
+	bicne r1,r1,#0x02		@clear the  IRQ flag
+	bne doIRQ
+
+	tst r0,#0x04			@Timer
+	movne r2,#0x50
+	bicne r1,r1,#0x04		@clear the  IRQ flag
+@	bne doIRQ
+	beq_long _irqGBZ80_
+	@10 instructions moved to .text section
+@	tst r0,#0x08			@Serial
+@	movne r2,#0x58
+@	bicne r1,r1,#0x08		@clear the  IRQ flag
+@	bne doIRQ
+@
+@	tst r0,#0x10			@Joypad
+@	movne r2,#0x60
+@	bicne r1,r1,#0x10		@clear the  IRQ flag
+@	bne doIRQ
+@
+@	and r1,r1,#0x1f			@unknown IRQ?
+@	mov r2,#0x40
+
+doIRQ:
+	strb_ r1,gb_if
+	ldr_ r0,lastbank
+	sub r0,gb_pc,r0
+	mov gb_pc,r2			@get IRQ vector
+
+	push16_novram					@save PC
+	encodePC_afterpush16
+
+	@Interrupt dispatch is 20 T-cycles from the run state.  24 is the cost
+	@when the CPU was in HALT: waking from it adds one extra machine cycle
+	@on top.  A flat 24 made every interrupt in a running program 4 cycles
+	@too expensive (#41 item 3); irqGBZ80_ifhalt adds the 4 back on the
+	@path that actually earns it.
+	fetch 20
+
+.pushsection .text
+_irqGBZ80_:
+	tst r0,#0x08			@Serial
+	movne r2,#0x58
+	bicne r1,r1,#0x08		@clear the  IRQ flag
+	bne_long doIRQ
+
+	tst r0,#0x10			@Joypad
+	movne r2,#0x60
+	bicne r1,r1,#0x10		@clear the  IRQ flag
+	bne_long doIRQ
+
+	and r1,r1,#0x1f			@unknown IRQ?
+	mov r2,#0x40
+	b_long doIRQ
+.popsection
+
+
+ .section .iwram.end.105, "ax", %progbits
+@----------------------------------------------------------------------------
+fiveminutes: .word 5*60*60 @fiveminutes_
+sleeptime: .word 5*60*60 @sleeptime_
+dontstop: .byte 0 @dontstop_
+g_hackflags: .byte 0 @hackflags
+g_hackflags2: .byte 0 @hackflags2
+ .byte 0
+@----------------------------------------------------------------------------
+
 	.pushsection .text
 @----------------------------------------------------------
 midline_arm:
@@ -885,110 +993,3 @@ midline_fire:
 	@line that raised nothing.
 	b_long checkMasterIRQ
 	.popsection
-
-@----------------------------------------------------------
-checkMasterIRQ:
-@----------------------------------------------------------
-	tst cycles,#CYC_IE
-	@ldrb_ r2,gb_ime
-	@tst r2,#1
-	beq _GO
-@----------------------------------------------------------
-checkIRQ:
-@----------------------------------------------------------
-	ldrb_ r0,gb_ie
-	ldrb_ r1,gb_if
-	and r0,r0,r1
-	@Only 5 interrupts exist.  IE is a full 8-bit R/W register on hardware,
-	@so a game may legitimately leave bits 5-7 set in it; without this mask
-	@those phantom bits match anything stale in IF, no tst below claims the
-	@IRQ, and the priority chain falls out of _irqGBZ80_ into its unknown-
-	@IRQ tail, dispatching a spurious interrupt to vector 0x40.
-	ands r0,r0,#0x1f
-	beq _GO
-@----------------------------------------------------------
-irqGBZ80:
-@----------------------------------------------------------
-	tst cycles,#CYC_HALT
-irqGBZ80_ifhalt:
-@	cmpne r2,#0x10                  ;or STOP
-	addne gb_pc,gb_pc,#1	@get out of HALT
-	subne cycles,cycles,#4*CYCLE	@waking from HALT costs 24, not 20
-	bicne cycles,cycles,#CYC_HALT
-irqGBZ80_nothalt:
-	bic cycles,cycles,#CYC_IE
-@	mov r2,#0				@disable IRQ
-@	strb_ r2,gb_ime
-
-	tst r0,#0x01			@VBlank
-	movne r2,#0x40
-	bicne r1,r1,#0x01		@clear the IRQ flag
-	bne doIRQ
-
-	tst r0,#0x02			@LCD Stat
-	movne r2,#0x48
-	bicne r1,r1,#0x02		@clear the  IRQ flag
-	bne doIRQ
-
-	tst r0,#0x04			@Timer
-	movne r2,#0x50
-	bicne r1,r1,#0x04		@clear the  IRQ flag
-@	bne doIRQ
-	beq_long _irqGBZ80_
-	@10 instructions moved to .text section
-@	tst r0,#0x08			@Serial
-@	movne r2,#0x58
-@	bicne r1,r1,#0x08		@clear the  IRQ flag
-@	bne doIRQ
-@
-@	tst r0,#0x10			@Joypad
-@	movne r2,#0x60
-@	bicne r1,r1,#0x10		@clear the  IRQ flag
-@	bne doIRQ
-@
-@	and r1,r1,#0x1f			@unknown IRQ?
-@	mov r2,#0x40
-
-doIRQ:
-	strb_ r1,gb_if
-	ldr_ r0,lastbank
-	sub r0,gb_pc,r0
-	mov gb_pc,r2			@get IRQ vector
-
-	push16_novram					@save PC
-	encodePC_afterpush16
-
-	@Interrupt dispatch is 20 T-cycles from the run state.  24 is the cost
-	@when the CPU was in HALT: waking from it adds one extra machine cycle
-	@on top.  A flat 24 made every interrupt in a running program 4 cycles
-	@too expensive (#41 item 3); irqGBZ80_ifhalt adds the 4 back on the
-	@path that actually earns it.
-	fetch 20
-
-.pushsection .text
-_irqGBZ80_:
-	tst r0,#0x08			@Serial
-	movne r2,#0x58
-	bicne r1,r1,#0x08		@clear the  IRQ flag
-	bne_long doIRQ
-
-	tst r0,#0x10			@Joypad
-	movne r2,#0x60
-	bicne r1,r1,#0x10		@clear the  IRQ flag
-	bne_long doIRQ
-
-	and r1,r1,#0x1f			@unknown IRQ?
-	mov r2,#0x40
-	b_long doIRQ
-.popsection
-
-
- .section .iwram.end.105, "ax", %progbits
-@----------------------------------------------------------------------------
-fiveminutes: .word 5*60*60 @fiveminutes_
-sleeptime: .word 5*60*60 @sleeptime_
-dontstop: .byte 0 @dontstop_
-g_hackflags: .byte 0 @hackflags
-g_hackflags2: .byte 0 @hackflags2
- .byte 0
-@----------------------------------------------------------------------------
