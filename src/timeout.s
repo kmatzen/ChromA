@@ -650,14 +650,14 @@ noTimer:
 noSerial:
 checkMasterIRQDelayed:
 	tst cycles,#CYC_IE
-	beq _GO
+	beq_long midline_arm
 checkIRQDelayed:
 	ldrb_ r0,gb_ie
 	ldrb_ r1,gb_if
 	and r0,r0,r1
 	ands r0,r0,#0x1f	@only 5 interrupts exist; see checkIRQ
-	beq _GO
-	
+	beq_long midline_arm
+
 	@Halted-ness is a state, not a byte.  Inferring it from [gb_pc]==0x76
 	@meant an interrupt dispatched at the boundary immediately *before* a
 	@not-yet-executed HALT looked identical to waking from one: the handler
@@ -694,6 +694,117 @@ checkMasterIRQ_minus12:
 	str_ r0,nexttimeout
 	@proceed to checkMasterIRQ
 	
+	.pushsection .text
+@----------------------------------------------------------
+midline_arm:
+@	Arm an event part-way through this scanline, then resume the CPU (#140).
+@
+@	The only trigger the core has is `cycles` going negative, so firing early
+@	means borrowing: take `scanline_oam_position` off `cycles` and nexttimeout
+@	fires at HBlank entry instead of the line boundary.  midline_fire pays the
+@	borrow back, so no time is created or lost.
+@
+@	Everything that derives a position from `cycles` has to be kept whole
+@	across the window.  line_cycles_base (#127) covers _FF04R, _FF05R, _FF04W
+@	and _FF07W by taking the same amount off the base, so their
+@	`base - cycles` difference is unchanged.  FF41_R is the fifth reader and
+@	is not covered by that -- it compares `cycles` against self-modified
+@	constants -- so those constants are moved by the borrow instead.  Getting
+@	this wrong is not subtle in hindsight but is silent at the time: a *no-op*
+@	mid-line event cost 3 accuracy entries before #127, purely from the
+@	displaced clock.
+@
+@	Armed here, at the scanline chain's resume point, rather than inside
+@	checkTimerIRQ: arming there shortens `cycles` before checkIRQDelayed
+@	tests it against `cyclesperscanline - 8`, which silently suppresses the
+@	IRQ-delay hijack.  Reached only from the two exits where no interrupt is
+@	dispatching, so it can never collide with that hijack's own use of
+@	nexttimeout_alt.
+@
+@	Skipped with the LCD off, which keeps the FF41 patching clear of the
+@	never-taken compare FF40_W installs there.
+@----------------------------------------------------------
+	tst cycles,#CYC_LCD_ENABLED
+	beq 9f
+	ldr_ r2,scanline_oam_position		@how early to fire
+	bic r0,cycles,#CYC_MASK
+	sub r0,r0,r2
+	cmp r0,#16*CYCLE			@enough line left to be worth it?
+	blt 9f
+
+	sub cycles,cycles,r2
+	ldr r1,=line_cycles_base
+	ldr r0,[r1]
+	sub r0,r0,r2
+	str r0,[r1]
+	ldr r1,=midline_owed
+	str r2,[r1]
+
+	ldr_ r0,nexttimeout
+	ldr r1,=midline_saved_next
+	str r0,[r1]
+	ldr r0,=midline_fire
+	str_ r0,nexttimeout
+
+	ldr r1,=FF41_modifydata
+	ldr_ r0,cyclesperscanline
+	cmp r0,#DOUBLE_SPEED
+	ldreq r0,[r1,#60]
+	ldrne r0,[r1,#52]
+	ldr r2,=FF41_modify1
+	str r0,[r2]
+	ldr_ r0,cyclesperscanline
+	cmp r0,#DOUBLE_SPEED
+	ldreq r0,[r1,#64]
+	ldrne r0,[r1,#56]
+	ldr r2,=FF41_modify2
+	str r0,[r2]
+9:	b_long _GO
+
+@----------------------------------------------------------
+midline_fire:
+@	The mid-line event: undo the borrow, then carry on with the rest of the
+@	scanline as if nothing had happened (#140).
+@
+@	No consumer is wired up yet.  #140 asks for the mechanism to be proved
+@	inert against the accuracy suite before anything hangs off it, so this
+@	deliberately does nothing but restore state; the mode-0 STAT IRQ (#144)
+@	and multi-overflow timer IRQs (#141) attach at the marked point.
+@----------------------------------------------------------
+	ldr r1,=midline_owed
+	ldr r0,[r1]
+	mov r2,#0
+	str r2,[r1]				@disarmed
+	add cycles,cycles,r0
+	ldr r1,=line_cycles_base
+	ldr r2,[r1]
+	add r2,r2,r0
+	str r2,[r1]
+	ldr r1,=midline_saved_next
+	ldr r0,[r1]
+	str_ r0,nexttimeout
+
+	@Restore FF41_R's mode compare by re-deriving it rather than by putting
+	@back what was saved: the guest runs during the window and may have
+	@switched the LCD off in it, in which case FF40_W has already installed
+	@the never-taken compare and replaying the old word would undo that.
+	@modify2 is not LCD-dependent, so it comes straight from the table.
+	stmfd sp!,{r0,lr}
+	bl_long FF41_repoint_mode_source
+	ldmfd sp!,{r0,lr}
+	ldr r1,=FF41_modifydata
+	ldr_ r0,cyclesperscanline
+	cmp r0,#DOUBLE_SPEED
+	ldreq r0,[r1,#12]
+	ldrne r0,[r1,#4]
+	ldr r2,=FF41_modify2
+	str r0,[r2]
+
+	@ <<< mid-line consumers attach here (#144, #141) >>>
+
+	b_long _GO
+	.popsection
+
 @----------------------------------------------------------
 checkMasterIRQ:
 @----------------------------------------------------------
