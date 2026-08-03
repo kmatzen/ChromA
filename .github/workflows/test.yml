@@ -420,6 +420,15 @@ jobs:
       env:
         LD_LIBRARY_PATH: /tmp/mgba-build/build
 
+    # #143 is open: the TIMA read projection diverges from mGBA at 9 of 256
+    # samples.  This pins that number so the fault cannot quietly get worse,
+    # and passes if it gets better -- the issue quoted the measurement but
+    # nothing ran it.
+    - name: Run TIMA sweep comparison
+      run: python3 test_roms/test_tima_sweep.py
+      env:
+        LD_LIBRARY_PATH: /tmp/mgba-build/build
+
     # MBC1 multicarts wire BANK1 as 4 bits, and nothing in the header says so
     # -- detection is by content (#50).
     - name: Run MBC1 multicart test

@@ -92,7 +92,7 @@
         "skip_visual": true
     },
     "tima_sweep_test": {
-        "description": "TIMA-vs-elapsed staircase from a known origin - verified by diffing against mGBA's readings in the #44 investigation, not a screenshot",
+        "description": "TIMA-vs-elapsed staircase from a known origin - verified by diffing against mGBA's readings in test_tima_sweep.py, which pins the 9 divergent samples of the open issue #143, not a screenshot",
         "skip_visual": true
     },
     "stop_div_test": {
